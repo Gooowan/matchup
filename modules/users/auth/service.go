@@ -14,6 +14,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/Gooowan/matchup/modules/core/types"
+	"github.com/Gooowan/matchup/modules/core/utils"
 	"github.com/Gooowan/matchup/modules/email"
 	core "github.com/Gooowan/matchup/modules/users"
 	coregen "github.com/Gooowan/matchup/modules/users/gen"
@@ -46,7 +47,7 @@ type RegistrationRequest struct {
 	Email    string `json:"email"`
 	Password string `json:"password"`
 
-	ReferralID int64 `json:"referral_id"`
+	InviterID string `json:"inviter_id"`
 
 	ProfileData types.JSONB `json:"profile_data"`
 	Metadata    types.JSONB `json:"metadata,omitempty"`
@@ -111,8 +112,13 @@ func (s *AuthService) CheckEmailAvailability(ctx context.Context, email string) 
 func (s *AuthService) Register(ctx context.Context, req *RegistrationRequest) (*coregen.User, error) {
 	var err error
 
-	if req.ReferralID <= 0 {
-		return nil, fmt.Errorf("referral_id is required")
+	if req.InviterID == "" {
+		return nil, fmt.Errorf("inviter_id is required")
+	}
+
+	inviterUUID, err := utils.StringToUUID(req.InviterID)
+	if err != nil {
+		return nil, fmt.Errorf("invalid inviter_id format")
 	}
 
 	tx, err := s.core.DB.Begin(ctx)
@@ -127,6 +133,12 @@ func (s *AuthService) Register(ctx context.Context, req *RegistrationRequest) (*
 		if err := hook.ValidateRegistration(qtx, ctx, req); err != nil {
 			return nil, fmt.Errorf("registration validation failed: %w", err)
 		}
+	}
+
+	// Validate inviter exists
+	_, err = s.core.Queries.GetUser(ctx, inviterUUID)
+	if err != nil {
+		return nil, fmt.Errorf("inviter not found")
 	}
 
 	var emailVerificationToken pgtype.Text
@@ -150,16 +162,10 @@ func (s *AuthService) Register(ctx context.Context, req *RegistrationRequest) (*
 		Email:                  email,
 		EmailVerificationToken: emailVerificationToken,
 		Password:               pgtype.Text{String: hashedPassword, Valid: true},
-
-		ProfileData: req.ProfileData,
-		Metadata:    req.Metadata,
+		InviterID:              inviterUUID,
+		ProfileData:            req.ProfileData,
+		Metadata:               req.Metadata,
 	}
-
-	inviter, err := s.core.Queries.GetUserByReferralId(ctx, req.ReferralID)
-	if err != nil {
-		return nil, fmt.Errorf("inviter not found")
-	}
-	params.InviterID = inviter.ID
 
 	user, err := s.core.Queries.CreateUser(ctx, params)
 	if err != nil {

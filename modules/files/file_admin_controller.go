@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/Gooowan/matchup/modules/core/types"
 	"github.com/Gooowan/matchup/modules/core/utils"
@@ -56,7 +57,7 @@ func (c *FileAdminController) UploadMaterial(ctx *gin.Context) {
 
 	// Create database record first to get PostgreSQL-generated UUID
 	material, err := c.fileService.Queries.CreateMaterial(ctx.Request.Context(), filesgen.CreateMaterialParams{
-		Name:        name,
+		Name:        pgtype.Text{String: name, Valid: true},
 		FileKey:     "pending", // Temporary, will update after upload
 		FileSize:    header.Size,
 		ContentType: GetContentType(header.Filename),
@@ -93,9 +94,9 @@ func (c *FileAdminController) UploadMaterial(ctx *gin.Context) {
 	}
 
 	// Update the file key in the database
-	if err := c.fileService.Queries.UpdateMaterialName(ctx.Request.Context(), filesgen.UpdateMaterialNameParams{
-		ID:   material.ID,
-		Name: name,
+	if err := c.fileService.Queries.UpdateMaterialFileKey(ctx.Request.Context(), filesgen.UpdateMaterialFileKeyParams{
+		ID:      material.ID,
+		FileKey: fileKey,
 	}); err != nil {
 		// Cleanup both S3 and DB on update failure
 		go func() {
@@ -105,15 +106,6 @@ func (c *FileAdminController) UploadMaterial(ctx *gin.Context) {
 		utils.DebugPrint("Failed to update material file key: %v", err)
 		ctx.JSON(http.StatusInternalServerError, types.Resp{Error: "Failed to finalize material"})
 		return
-	}
-
-	// Update file_key separately since we don't have a dedicated query for it
-	_, err = c.fileService.DB.Exec(ctx.Request.Context(),
-		"UPDATE marketing_materials SET file_key = $1 WHERE id = $2",
-		fileKey, material.ID)
-	if err != nil {
-		utils.DebugPrint("Failed to update file key: %v", err)
-		// Continue anyway since the material is already uploaded
 	}
 
 	ctx.JSON(http.StatusOK, types.Resp{
@@ -179,7 +171,7 @@ func (c *FileAdminController) UpdateMaterialName(ctx *gin.Context) {
 
 	if err := c.fileService.Queries.UpdateMaterialName(ctx.Request.Context(), filesgen.UpdateMaterialNameParams{
 		ID:   materialID,
-		Name: req.Name,
+		Name: pgtype.Text{String: req.Name, Valid: true},
 	}); err != nil {
 		utils.DebugPrint("Failed to update material name: %v", err)
 		ctx.JSON(http.StatusInternalServerError, types.Resp{Error: "Failed to update material name"})

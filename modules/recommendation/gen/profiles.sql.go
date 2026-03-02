@@ -13,57 +13,38 @@ import (
 )
 
 const createProfile = `-- name: CreateProfile :one
-INSERT INTO profiles(user_id, dance_styles, dance_role, dance_level, height_cm, bio, birth_date, gender, city, latitude, longitude, visible)
-    VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-RETURNING id, user_id, dance_styles, dance_role, dance_level, height_cm, bio, birth_date, gender, city, latitude, longitude, visible, media_urls, created_at, updated_at
+INSERT INTO profiles(user_id, dance_styles, latitude, longitude, visible, data)
+    VALUES ($1, $2, $3, $4, $5, $6)
+RETURNING id, user_id, dance_styles, latitude, longitude, visible, data, created_at, updated_at
 `
 
 type CreateProfileParams struct {
 	UserID      pgtype.UUID   `db:"user_id" json:"user_id"`
 	DanceStyles []string      `db:"dance_styles" json:"dance_styles"`
-	DanceRole   pgtype.Text   `db:"dance_role" json:"dance_role"`
-	DanceLevel  pgtype.Text   `db:"dance_level" json:"dance_level"`
-	HeightCm    pgtype.Int4   `db:"height_cm" json:"height_cm"`
-	Bio         pgtype.Text   `db:"bio" json:"bio"`
-	BirthDate   pgtype.Date   `db:"birth_date" json:"birth_date"`
-	Gender      pgtype.Text   `db:"gender" json:"gender"`
-	City        pgtype.Text   `db:"city" json:"city"`
 	Latitude    pgtype.Float8 `db:"latitude" json:"latitude"`
 	Longitude   pgtype.Float8 `db:"longitude" json:"longitude"`
 	Visible     bool          `db:"visible" json:"visible"`
+	Data        types.JSONB   `db:"data" json:"data"`
 }
 
 func (q *Queries) CreateProfile(ctx context.Context, arg CreateProfileParams) (Profile, error) {
 	row := q.db.QueryRow(ctx, createProfile,
 		arg.UserID,
 		arg.DanceStyles,
-		arg.DanceRole,
-		arg.DanceLevel,
-		arg.HeightCm,
-		arg.Bio,
-		arg.BirthDate,
-		arg.Gender,
-		arg.City,
 		arg.Latitude,
 		arg.Longitude,
 		arg.Visible,
+		arg.Data,
 	)
 	var i Profile
 	err := row.Scan(
 		&i.ID,
 		&i.UserID,
 		&i.DanceStyles,
-		&i.DanceRole,
-		&i.DanceLevel,
-		&i.HeightCm,
-		&i.Bio,
-		&i.BirthDate,
-		&i.Gender,
-		&i.City,
 		&i.Latitude,
 		&i.Longitude,
 		&i.Visible,
-		&i.MediaUrls,
+		&i.Data,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -81,9 +62,8 @@ func (q *Queries) DeleteProfile(ctx context.Context, userID pgtype.UUID) error {
 
 const findNearbyVisibleProfiles = `-- name: FindNearbyVisibleProfiles :many
 SELECT
-    p.id, p.user_id, p.dance_styles, p.dance_role, p.dance_level,
-    p.height_cm, p.bio, p.birth_date, p.gender, p.city,
-    p.latitude, p.longitude, p.media_urls,
+    p.id, p.user_id, p.dance_styles, p.data,
+    p.latitude, p.longitude,
     u.profile_data,
     (6371 * acos(
         cos(radians($1::double precision)) *
@@ -115,16 +95,9 @@ type FindNearbyVisibleProfilesRow struct {
 	ID          pgtype.UUID   `db:"id" json:"id"`
 	UserID      pgtype.UUID   `db:"user_id" json:"user_id"`
 	DanceStyles []string      `db:"dance_styles" json:"dance_styles"`
-	DanceRole   pgtype.Text   `db:"dance_role" json:"dance_role"`
-	DanceLevel  pgtype.Text   `db:"dance_level" json:"dance_level"`
-	HeightCm    pgtype.Int4   `db:"height_cm" json:"height_cm"`
-	Bio         pgtype.Text   `db:"bio" json:"bio"`
-	BirthDate   pgtype.Date   `db:"birth_date" json:"birth_date"`
-	Gender      pgtype.Text   `db:"gender" json:"gender"`
-	City        pgtype.Text   `db:"city" json:"city"`
+	Data        types.JSONB   `db:"data" json:"data"`
 	Latitude    pgtype.Float8 `db:"latitude" json:"latitude"`
 	Longitude   pgtype.Float8 `db:"longitude" json:"longitude"`
-	MediaUrls   []string      `db:"media_urls" json:"media_urls"`
 	ProfileData types.JSONB   `db:"profile_data" json:"profile_data"`
 	DistanceKm  float64       `db:"distance_km" json:"distance_km"`
 }
@@ -148,16 +121,9 @@ func (q *Queries) FindNearbyVisibleProfiles(ctx context.Context, arg FindNearbyV
 			&i.ID,
 			&i.UserID,
 			&i.DanceStyles,
-			&i.DanceRole,
-			&i.DanceLevel,
-			&i.HeightCm,
-			&i.Bio,
-			&i.BirthDate,
-			&i.Gender,
-			&i.City,
+			&i.Data,
 			&i.Latitude,
 			&i.Longitude,
-			&i.MediaUrls,
 			&i.ProfileData,
 			&i.DistanceKm,
 		); err != nil {
@@ -172,7 +138,7 @@ func (q *Queries) FindNearbyVisibleProfiles(ctx context.Context, arg FindNearbyV
 }
 
 const getProfileByUserID = `-- name: GetProfileByUserID :one
-SELECT id, user_id, dance_styles, dance_role, dance_level, height_cm, bio, birth_date, gender, city, latitude, longitude, visible, media_urls, created_at, updated_at FROM profiles WHERE user_id = $1
+SELECT id, user_id, dance_styles, latitude, longitude, visible, data, created_at, updated_at FROM profiles WHERE user_id = $1
 `
 
 func (q *Queries) GetProfileByUserID(ctx context.Context, userID pgtype.UUID) (Profile, error) {
@@ -182,17 +148,10 @@ func (q *Queries) GetProfileByUserID(ctx context.Context, userID pgtype.UUID) (P
 		&i.ID,
 		&i.UserID,
 		&i.DanceStyles,
-		&i.DanceRole,
-		&i.DanceLevel,
-		&i.HeightCm,
-		&i.Bio,
-		&i.BirthDate,
-		&i.Gender,
-		&i.City,
 		&i.Latitude,
 		&i.Longitude,
 		&i.Visible,
-		&i.MediaUrls,
+		&i.Data,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -201,8 +160,7 @@ func (q *Queries) GetProfileByUserID(ctx context.Context, userID pgtype.UUID) (P
 
 const getProfilePreview = `-- name: GetProfilePreview :one
 SELECT
-    p.user_id, p.dance_styles, p.dance_role, p.dance_level,
-    p.height_cm, p.bio, p.gender, p.city, p.media_urls,
+    p.user_id, p.dance_styles, p.data, p.visible,
     u.profile_data
 FROM profiles p
 JOIN users u ON u.id = p.user_id
@@ -212,13 +170,8 @@ WHERE p.user_id = $1 AND p.visible = true
 type GetProfilePreviewRow struct {
 	UserID      pgtype.UUID `db:"user_id" json:"user_id"`
 	DanceStyles []string    `db:"dance_styles" json:"dance_styles"`
-	DanceRole   pgtype.Text `db:"dance_role" json:"dance_role"`
-	DanceLevel  pgtype.Text `db:"dance_level" json:"dance_level"`
-	HeightCm    pgtype.Int4 `db:"height_cm" json:"height_cm"`
-	Bio         pgtype.Text `db:"bio" json:"bio"`
-	Gender      pgtype.Text `db:"gender" json:"gender"`
-	City        pgtype.Text `db:"city" json:"city"`
-	MediaUrls   []string    `db:"media_urls" json:"media_urls"`
+	Data        types.JSONB `db:"data" json:"data"`
+	Visible     bool        `db:"visible" json:"visible"`
 	ProfileData types.JSONB `db:"profile_data" json:"profile_data"`
 }
 
@@ -228,13 +181,8 @@ func (q *Queries) GetProfilePreview(ctx context.Context, userID pgtype.UUID) (Ge
 	err := row.Scan(
 		&i.UserID,
 		&i.DanceStyles,
-		&i.DanceRole,
-		&i.DanceLevel,
-		&i.HeightCm,
-		&i.Bio,
-		&i.Gender,
-		&i.City,
-		&i.MediaUrls,
+		&i.Data,
+		&i.Visible,
 		&i.ProfileData,
 	)
 	return i, err
@@ -243,66 +191,48 @@ func (q *Queries) GetProfilePreview(ctx context.Context, userID pgtype.UUID) (Ge
 const updateProfile = `-- name: UpdateProfile :exec
 UPDATE profiles SET
     dance_styles = $1,
-    dance_role = $2,
-    dance_level = $3,
-    height_cm = $4,
-    bio = $5,
-    birth_date = $6,
-    gender = $7,
-    city = $8,
-    latitude = $9,
-    longitude = $10,
-    visible = $11,
+    latitude = $2,
+    longitude = $3,
+    visible = $4,
+    data = $5,
     updated_at = CURRENT_TIMESTAMP
-WHERE user_id = $12
+WHERE user_id = $6
 `
 
 type UpdateProfileParams struct {
 	DanceStyles []string      `db:"dance_styles" json:"dance_styles"`
-	DanceRole   pgtype.Text   `db:"dance_role" json:"dance_role"`
-	DanceLevel  pgtype.Text   `db:"dance_level" json:"dance_level"`
-	HeightCm    pgtype.Int4   `db:"height_cm" json:"height_cm"`
-	Bio         pgtype.Text   `db:"bio" json:"bio"`
-	BirthDate   pgtype.Date   `db:"birth_date" json:"birth_date"`
-	Gender      pgtype.Text   `db:"gender" json:"gender"`
-	City        pgtype.Text   `db:"city" json:"city"`
 	Latitude    pgtype.Float8 `db:"latitude" json:"latitude"`
 	Longitude   pgtype.Float8 `db:"longitude" json:"longitude"`
 	Visible     bool          `db:"visible" json:"visible"`
+	Data        types.JSONB   `db:"data" json:"data"`
 	UserID      pgtype.UUID   `db:"user_id" json:"user_id"`
 }
 
 func (q *Queries) UpdateProfile(ctx context.Context, arg UpdateProfileParams) error {
 	_, err := q.db.Exec(ctx, updateProfile,
 		arg.DanceStyles,
-		arg.DanceRole,
-		arg.DanceLevel,
-		arg.HeightCm,
-		arg.Bio,
-		arg.BirthDate,
-		arg.Gender,
-		arg.City,
 		arg.Latitude,
 		arg.Longitude,
 		arg.Visible,
+		arg.Data,
 		arg.UserID,
 	)
 	return err
 }
 
-const updateProfileMediaURLs = `-- name: UpdateProfileMediaURLs :exec
+const updateProfileData = `-- name: UpdateProfileData :exec
 UPDATE profiles SET
-    media_urls = $1,
+    data = $1,
     updated_at = CURRENT_TIMESTAMP
 WHERE user_id = $2
 `
 
-type UpdateProfileMediaURLsParams struct {
-	MediaUrls []string    `db:"media_urls" json:"media_urls"`
-	UserID    pgtype.UUID `db:"user_id" json:"user_id"`
+type UpdateProfileDataParams struct {
+	Data   types.JSONB `db:"data" json:"data"`
+	UserID pgtype.UUID `db:"user_id" json:"user_id"`
 }
 
-func (q *Queries) UpdateProfileMediaURLs(ctx context.Context, arg UpdateProfileMediaURLsParams) error {
-	_, err := q.db.Exec(ctx, updateProfileMediaURLs, arg.MediaUrls, arg.UserID)
+func (q *Queries) UpdateProfileData(ctx context.Context, arg UpdateProfileDataParams) error {
+	_, err := q.db.Exec(ctx, updateProfileData, arg.Data, arg.UserID)
 	return err
 }

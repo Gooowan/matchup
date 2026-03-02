@@ -25,15 +25,12 @@ func (q *Queries) AdminGetTotalUsers(ctx context.Context) (int64, error) {
 }
 
 const adminGetUser = `-- name: AdminGetUser :one
-SELECT 
+SELECT
     u.id,
-    u.telegram_id,
     u.email,
-    u.referral_id,
     u.inviter_id,
     u.metadata,
     u.profile_data,
-    u.telegram_data,
     u.created_at,
     u.role,
     u.auth_nonce,
@@ -45,13 +42,10 @@ WHERE u.id = $1
 
 type AdminGetUserRow struct {
 	ID                     pgtype.UUID      `db:"id" json:"id"`
-	TelegramID             pgtype.Int8      `db:"telegram_id" json:"telegram_id"`
 	Email                  pgtype.Text      `db:"email" json:"email"`
-	ReferralID             int64            `db:"referral_id" json:"referral_id"`
 	InviterID              pgtype.UUID      `db:"inviter_id" json:"inviter_id"`
 	Metadata               types.JSONB      `db:"metadata" json:"metadata"`
 	ProfileData            types.JSONB      `db:"profile_data" json:"profile_data"`
-	TelegramData           types.JSONB      `db:"telegram_data" json:"telegram_data"`
 	CreatedAt              pgtype.Timestamp `db:"created_at" json:"created_at"`
 	Role                   string           `db:"role" json:"role"`
 	AuthNonce              int32            `db:"auth_nonce" json:"auth_nonce"`
@@ -64,13 +58,10 @@ func (q *Queries) AdminGetUser(ctx context.Context, userID pgtype.UUID) (AdminGe
 	var i AdminGetUserRow
 	err := row.Scan(
 		&i.ID,
-		&i.TelegramID,
 		&i.Email,
-		&i.ReferralID,
 		&i.InviterID,
 		&i.Metadata,
 		&i.ProfileData,
-		&i.TelegramData,
 		&i.CreatedAt,
 		&i.Role,
 		&i.AuthNonce,
@@ -81,29 +72,26 @@ func (q *Queries) AdminGetUser(ctx context.Context, userID pgtype.UUID) (AdminGe
 }
 
 const adminSearchUsers = `-- name: AdminSearchUsers :many
-SELECT 
+SELECT
     u.id,
-    u.telegram_id,
     u.email,
-    u.referral_id,
     u.inviter_id,
     u.metadata,
     u.profile_data,
-    u.telegram_data,
     u.created_at,
     u.role,
     u.auth_nonce,
     COUNT(*) OVER() as total_count
 FROM users u
-WHERE 
+WHERE
     (
-        CASE 
+        CASE
             WHEN $1::text = '' THEN true
             ELSE (
                 u.email ILIKE '%' || $1::text || '%' OR
                 (u.profile_data->>'first_name') ILIKE '%' || $1::text || '%' OR
                 (u.profile_data->>'last_name') ILIKE '%' || $1::text || '%' OR
-                u.referral_id::text = $1::text
+                u.id::text = $1::text
             )
         END
     )
@@ -118,18 +106,15 @@ type AdminSearchUsersParams struct {
 }
 
 type AdminSearchUsersRow struct {
-	ID           pgtype.UUID      `db:"id" json:"id"`
-	TelegramID   pgtype.Int8      `db:"telegram_id" json:"telegram_id"`
-	Email        pgtype.Text      `db:"email" json:"email"`
-	ReferralID   int64            `db:"referral_id" json:"referral_id"`
-	InviterID    pgtype.UUID      `db:"inviter_id" json:"inviter_id"`
-	Metadata     types.JSONB      `db:"metadata" json:"metadata"`
-	ProfileData  types.JSONB      `db:"profile_data" json:"profile_data"`
-	TelegramData types.JSONB      `db:"telegram_data" json:"telegram_data"`
-	CreatedAt    pgtype.Timestamp `db:"created_at" json:"created_at"`
-	Role         string           `db:"role" json:"role"`
-	AuthNonce    int32            `db:"auth_nonce" json:"auth_nonce"`
-	TotalCount   int64            `db:"total_count" json:"total_count"`
+	ID          pgtype.UUID      `db:"id" json:"id"`
+	Email       pgtype.Text      `db:"email" json:"email"`
+	InviterID   pgtype.UUID      `db:"inviter_id" json:"inviter_id"`
+	Metadata    types.JSONB      `db:"metadata" json:"metadata"`
+	ProfileData types.JSONB      `db:"profile_data" json:"profile_data"`
+	CreatedAt   pgtype.Timestamp `db:"created_at" json:"created_at"`
+	Role        string           `db:"role" json:"role"`
+	AuthNonce   int32            `db:"auth_nonce" json:"auth_nonce"`
+	TotalCount  int64            `db:"total_count" json:"total_count"`
 }
 
 func (q *Queries) AdminSearchUsers(ctx context.Context, arg AdminSearchUsersParams) ([]AdminSearchUsersRow, error) {
@@ -143,13 +128,10 @@ func (q *Queries) AdminSearchUsers(ctx context.Context, arg AdminSearchUsersPara
 		var i AdminSearchUsersRow
 		if err := rows.Scan(
 			&i.ID,
-			&i.TelegramID,
 			&i.Email,
-			&i.ReferralID,
 			&i.InviterID,
 			&i.Metadata,
 			&i.ProfileData,
-			&i.TelegramData,
 			&i.CreatedAt,
 			&i.Role,
 			&i.AuthNonce,

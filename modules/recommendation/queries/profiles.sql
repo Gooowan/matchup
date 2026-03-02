@@ -1,6 +1,6 @@
 -- name: CreateProfile :one
-INSERT INTO profiles(user_id, dance_styles, dance_role, dance_level, height_cm, bio, birth_date, gender, city, latitude, longitude, visible)
-    VALUES (@user_id, @dance_styles, @dance_role, @dance_level, @height_cm, @bio, @birth_date, @gender, @city, @latitude, @longitude, @visible)
+INSERT INTO profiles(user_id, dance_styles, latitude, longitude, visible, data)
+    VALUES (@user_id, @dance_styles, @latitude, @longitude, @visible, @data)
 RETURNING *;
 
 -- name: GetProfileByUserID :one
@@ -9,29 +9,22 @@ SELECT * FROM profiles WHERE user_id = @user_id;
 -- name: UpdateProfile :exec
 UPDATE profiles SET
     dance_styles = @dance_styles,
-    dance_role = @dance_role,
-    dance_level = @dance_level,
-    height_cm = @height_cm,
-    bio = @bio,
-    birth_date = @birth_date,
-    gender = @gender,
-    city = @city,
     latitude = @latitude,
     longitude = @longitude,
     visible = @visible,
+    data = @data,
     updated_at = CURRENT_TIMESTAMP
 WHERE user_id = @user_id;
 
--- name: UpdateProfileMediaURLs :exec
+-- name: UpdateProfileData :exec
 UPDATE profiles SET
-    media_urls = @media_urls,
+    data = @data,
     updated_at = CURRENT_TIMESTAMP
 WHERE user_id = @user_id;
 
 -- name: GetProfilePreview :one
 SELECT
-    p.user_id, p.dance_styles, p.dance_role, p.dance_level,
-    p.height_cm, p.bio, p.gender, p.city, p.media_urls,
+    p.user_id, p.dance_styles, p.data, p.visible,
     u.profile_data
 FROM profiles p
 JOIN users u ON u.id = p.user_id
@@ -42,9 +35,8 @@ DELETE FROM profiles WHERE user_id = @user_id;
 
 -- name: FindNearbyVisibleProfiles :many
 SELECT
-    p.id, p.user_id, p.dance_styles, p.dance_role, p.dance_level,
-    p.height_cm, p.bio, p.birth_date, p.gender, p.city,
-    p.latitude, p.longitude, p.media_urls,
+    p.id, p.user_id, p.dance_styles, p.data,
+    p.latitude, p.longitude,
     u.profile_data,
     (6371 * acos(
         cos(radians(@latitude::double precision)) *

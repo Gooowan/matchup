@@ -20,7 +20,6 @@ type Querier interface {
 	GetUserByEmail(ctx context.Context, email pgtype.Text) (User, error)
 	GetUserByEmailVerificationToken(ctx context.Context, emailVerificationToken pgtype.Text) (User, error)
 	GetUserByForgotPasswordToken(ctx context.Context, forgotPasswordToken pgtype.Text) (User, error)
-	GetUserByReferralId(ctx context.Context, referralID int64) (User, error)
 	GetUsersCount(ctx context.Context) (int64, error)
 	IncrementUserNonce(ctx context.Context, userID pgtype.UUID) (int32, error)
 	UpdateUserEmailVerificationToken(ctx context.Context, arg UpdateUserEmailVerificationTokenParams) error

@@ -12,7 +12,7 @@ import (
 )
 
 const createMaterial = `-- name: CreateMaterial :one
-INSERT INTO marketing_materials (
+INSERT INTO media (
     name,
     file_key,
     file_size,
@@ -24,18 +24,18 @@ INSERT INTO marketing_materials (
     $3,
     $4,
     COALESCE($5, false)
-) RETURNING id, name, file_key, file_size, content_type, visible, created_at, updated_at
+) RETURNING id, owner_id, name, file_key, file_size, content_type, visible, created_at, updated_at
 `
 
 type CreateMaterialParams struct {
-	Name        string      `db:"name" json:"name"`
+	Name        pgtype.Text `db:"name" json:"name"`
 	FileKey     string      `db:"file_key" json:"file_key"`
 	FileSize    int64       `db:"file_size" json:"file_size"`
 	ContentType string      `db:"content_type" json:"content_type"`
 	Visible     interface{} `db:"visible" json:"visible"`
 }
 
-func (q *Queries) CreateMaterial(ctx context.Context, arg CreateMaterialParams) (MarketingMaterial, error) {
+func (q *Queries) CreateMaterial(ctx context.Context, arg CreateMaterialParams) (Medium, error) {
 	row := q.db.QueryRow(ctx, createMaterial,
 		arg.Name,
 		arg.FileKey,
@@ -43,9 +43,10 @@ func (q *Queries) CreateMaterial(ctx context.Context, arg CreateMaterialParams) 
 		arg.ContentType,
 		arg.Visible,
 	)
-	var i MarketingMaterial
+	var i Medium
 	err := row.Scan(
 		&i.ID,
+		&i.OwnerID,
 		&i.Name,
 		&i.FileKey,
 		&i.FileSize,
@@ -58,8 +59,8 @@ func (q *Queries) CreateMaterial(ctx context.Context, arg CreateMaterialParams) 
 }
 
 const deleteMaterial = `-- name: DeleteMaterial :exec
-DELETE FROM marketing_materials
-WHERE id = $1
+DELETE FROM media
+WHERE id = $1 AND owner_id IS NULL
 `
 
 func (q *Queries) DeleteMaterial(ctx context.Context, id pgtype.UUID) error {
@@ -68,15 +69,16 @@ func (q *Queries) DeleteMaterial(ctx context.Context, id pgtype.UUID) error {
 }
 
 const getMaterial = `-- name: GetMaterial :one
-SELECT id, name, file_key, file_size, content_type, visible, created_at, updated_at FROM marketing_materials
-WHERE id = $1
+SELECT id, owner_id, name, file_key, file_size, content_type, visible, created_at, updated_at FROM media
+WHERE id = $1 AND owner_id IS NULL
 `
 
-func (q *Queries) GetMaterial(ctx context.Context, id pgtype.UUID) (MarketingMaterial, error) {
+func (q *Queries) GetMaterial(ctx context.Context, id pgtype.UUID) (Medium, error) {
 	row := q.db.QueryRow(ctx, getMaterial, id)
-	var i MarketingMaterial
+	var i Medium
 	err := row.Scan(
 		&i.ID,
+		&i.OwnerID,
 		&i.Name,
 		&i.FileKey,
 		&i.FileSize,
@@ -89,15 +91,16 @@ func (q *Queries) GetMaterial(ctx context.Context, id pgtype.UUID) (MarketingMat
 }
 
 const getMaterialByKey = `-- name: GetMaterialByKey :one
-SELECT id, name, file_key, file_size, content_type, visible, created_at, updated_at FROM marketing_materials
-WHERE file_key = $1
+SELECT id, owner_id, name, file_key, file_size, content_type, visible, created_at, updated_at FROM media
+WHERE file_key = $1 AND owner_id IS NULL
 `
 
-func (q *Queries) GetMaterialByKey(ctx context.Context, fileKey string) (MarketingMaterial, error) {
+func (q *Queries) GetMaterialByKey(ctx context.Context, fileKey string) (Medium, error) {
 	row := q.db.QueryRow(ctx, getMaterialByKey, fileKey)
-	var i MarketingMaterial
+	var i Medium
 	err := row.Scan(
 		&i.ID,
+		&i.OwnerID,
 		&i.Name,
 		&i.FileKey,
 		&i.FileSize,
@@ -110,10 +113,11 @@ func (q *Queries) GetMaterialByKey(ctx context.Context, fileKey string) (Marketi
 }
 
 const listMaterials = `-- name: ListMaterials :many
-SELECT 
-    id, name, file_key, file_size, content_type, visible, created_at, updated_at,
+SELECT
+    id, owner_id, name, file_key, file_size, content_type, visible, created_at, updated_at,
     COUNT(*) OVER() as total_count
-FROM marketing_materials
+FROM media
+WHERE owner_id IS NULL
 ORDER BY created_at DESC
 LIMIT $2
 OFFSET $1
@@ -126,7 +130,8 @@ type ListMaterialsParams struct {
 
 type ListMaterialsRow struct {
 	ID          pgtype.UUID      `db:"id" json:"id"`
-	Name        string           `db:"name" json:"name"`
+	OwnerID     pgtype.UUID      `db:"owner_id" json:"owner_id"`
+	Name        pgtype.Text      `db:"name" json:"name"`
 	FileKey     string           `db:"file_key" json:"file_key"`
 	FileSize    int64            `db:"file_size" json:"file_size"`
 	ContentType string           `db:"content_type" json:"content_type"`
@@ -147,6 +152,7 @@ func (q *Queries) ListMaterials(ctx context.Context, arg ListMaterialsParams) ([
 		var i ListMaterialsRow
 		if err := rows.Scan(
 			&i.ID,
+			&i.OwnerID,
 			&i.Name,
 			&i.FileKey,
 			&i.FileSize,
@@ -167,11 +173,11 @@ func (q *Queries) ListMaterials(ctx context.Context, arg ListMaterialsParams) ([
 }
 
 const listVisibleMaterials = `-- name: ListVisibleMaterials :many
-SELECT 
-    id, name, file_key, file_size, content_type, visible, created_at, updated_at,
+SELECT
+    id, owner_id, name, file_key, file_size, content_type, visible, created_at, updated_at,
     COUNT(*) OVER() as total_count
-FROM marketing_materials
-WHERE visible = true
+FROM media
+WHERE owner_id IS NULL AND visible = true
 ORDER BY created_at DESC
 LIMIT $2
 OFFSET $1
@@ -184,7 +190,8 @@ type ListVisibleMaterialsParams struct {
 
 type ListVisibleMaterialsRow struct {
 	ID          pgtype.UUID      `db:"id" json:"id"`
-	Name        string           `db:"name" json:"name"`
+	OwnerID     pgtype.UUID      `db:"owner_id" json:"owner_id"`
+	Name        pgtype.Text      `db:"name" json:"name"`
 	FileKey     string           `db:"file_key" json:"file_key"`
 	FileSize    int64            `db:"file_size" json:"file_size"`
 	ContentType string           `db:"content_type" json:"content_type"`
@@ -205,6 +212,7 @@ func (q *Queries) ListVisibleMaterials(ctx context.Context, arg ListVisibleMater
 		var i ListVisibleMaterialsRow
 		if err := rows.Scan(
 			&i.ID,
+			&i.OwnerID,
 			&i.Name,
 			&i.FileKey,
 			&i.FileSize,
@@ -224,16 +232,34 @@ func (q *Queries) ListVisibleMaterials(ctx context.Context, arg ListVisibleMater
 	return items, nil
 }
 
+const updateMaterialFileKey = `-- name: UpdateMaterialFileKey :exec
+UPDATE media
+SET
+    file_key = $1,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = $2 AND owner_id IS NULL
+`
+
+type UpdateMaterialFileKeyParams struct {
+	FileKey string      `db:"file_key" json:"file_key"`
+	ID      pgtype.UUID `db:"id" json:"id"`
+}
+
+func (q *Queries) UpdateMaterialFileKey(ctx context.Context, arg UpdateMaterialFileKeyParams) error {
+	_, err := q.db.Exec(ctx, updateMaterialFileKey, arg.FileKey, arg.ID)
+	return err
+}
+
 const updateMaterialName = `-- name: UpdateMaterialName :exec
-UPDATE marketing_materials
-SET 
+UPDATE media
+SET
     name = $1,
     updated_at = CURRENT_TIMESTAMP
-WHERE id = $2
+WHERE id = $2 AND owner_id IS NULL
 `
 
 type UpdateMaterialNameParams struct {
-	Name string      `db:"name" json:"name"`
+	Name pgtype.Text `db:"name" json:"name"`
 	ID   pgtype.UUID `db:"id" json:"id"`
 }
 
@@ -243,11 +269,11 @@ func (q *Queries) UpdateMaterialName(ctx context.Context, arg UpdateMaterialName
 }
 
 const updateMaterialVisibility = `-- name: UpdateMaterialVisibility :exec
-UPDATE marketing_materials
-SET 
+UPDATE media
+SET
     visible = $1,
     updated_at = CURRENT_TIMESTAMP
-WHERE id = $2
+WHERE id = $2 AND owner_id IS NULL
 `
 
 type UpdateMaterialVisibilityParams struct {

@@ -16,7 +16,7 @@ const createUser = `-- name: CreateUser :one
 INSERT INTO users(email, email_verification_token, PASSWORD, inviter_id, profile_data, metadata)
     VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb)
 RETURNING
-    id, telegram_id, email, referral_id, inviter_id, rank_id, metadata, profile_data, telegram_data, created_at, role, password, auth_nonce, forgot_password_token, email_verification_token
+    id, email, inviter_id, metadata, profile_data, created_at, role, password, auth_nonce, forgot_password_token, email_verification_token
 `
 
 type CreateUserParams struct {
@@ -40,14 +40,10 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 	var i User
 	err := row.Scan(
 		&i.ID,
-		&i.TelegramID,
 		&i.Email,
-		&i.ReferralID,
 		&i.InviterID,
-		&i.RankID,
 		&i.Metadata,
 		&i.ProfileData,
-		&i.TelegramData,
 		&i.CreatedAt,
 		&i.Role,
 		&i.Password,
@@ -60,7 +56,7 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 
 const getUser = `-- name: GetUser :one
 SELECT
-    id, telegram_id, email, referral_id, inviter_id, rank_id, metadata, profile_data, telegram_data, created_at, role, password, auth_nonce, forgot_password_token, email_verification_token
+    id, email, inviter_id, metadata, profile_data, created_at, role, password, auth_nonce, forgot_password_token, email_verification_token
 FROM
     users
 WHERE
@@ -72,14 +68,10 @@ func (q *Queries) GetUser(ctx context.Context, userID pgtype.UUID) (User, error)
 	var i User
 	err := row.Scan(
 		&i.ID,
-		&i.TelegramID,
 		&i.Email,
-		&i.ReferralID,
 		&i.InviterID,
-		&i.RankID,
 		&i.Metadata,
 		&i.ProfileData,
-		&i.TelegramData,
 		&i.CreatedAt,
 		&i.Role,
 		&i.Password,
@@ -92,7 +84,7 @@ func (q *Queries) GetUser(ctx context.Context, userID pgtype.UUID) (User, error)
 
 const getUserByEmail = `-- name: GetUserByEmail :one
 SELECT
-    id, telegram_id, email, referral_id, inviter_id, rank_id, metadata, profile_data, telegram_data, created_at, role, password, auth_nonce, forgot_password_token, email_verification_token
+    id, email, inviter_id, metadata, profile_data, created_at, role, password, auth_nonce, forgot_password_token, email_verification_token
 FROM
     users
 WHERE
@@ -104,14 +96,10 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email pgtype.Text) (User, 
 	var i User
 	err := row.Scan(
 		&i.ID,
-		&i.TelegramID,
 		&i.Email,
-		&i.ReferralID,
 		&i.InviterID,
-		&i.RankID,
 		&i.Metadata,
 		&i.ProfileData,
-		&i.TelegramData,
 		&i.CreatedAt,
 		&i.Role,
 		&i.Password,
@@ -124,7 +112,7 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email pgtype.Text) (User, 
 
 const getUserByEmailVerificationToken = `-- name: GetUserByEmailVerificationToken :one
 SELECT
-    id, telegram_id, email, referral_id, inviter_id, rank_id, metadata, profile_data, telegram_data, created_at, role, password, auth_nonce, forgot_password_token, email_verification_token
+    id, email, inviter_id, metadata, profile_data, created_at, role, password, auth_nonce, forgot_password_token, email_verification_token
 FROM
     users
 WHERE
@@ -136,14 +124,10 @@ func (q *Queries) GetUserByEmailVerificationToken(ctx context.Context, emailVeri
 	var i User
 	err := row.Scan(
 		&i.ID,
-		&i.TelegramID,
 		&i.Email,
-		&i.ReferralID,
 		&i.InviterID,
-		&i.RankID,
 		&i.Metadata,
 		&i.ProfileData,
-		&i.TelegramData,
 		&i.CreatedAt,
 		&i.Role,
 		&i.Password,
@@ -156,7 +140,7 @@ func (q *Queries) GetUserByEmailVerificationToken(ctx context.Context, emailVeri
 
 const getUserByForgotPasswordToken = `-- name: GetUserByForgotPasswordToken :one
 SELECT
-    id, telegram_id, email, referral_id, inviter_id, rank_id, metadata, profile_data, telegram_data, created_at, role, password, auth_nonce, forgot_password_token, email_verification_token
+    id, email, inviter_id, metadata, profile_data, created_at, role, password, auth_nonce, forgot_password_token, email_verification_token
 FROM
     users
 WHERE
@@ -168,46 +152,10 @@ func (q *Queries) GetUserByForgotPasswordToken(ctx context.Context, forgotPasswo
 	var i User
 	err := row.Scan(
 		&i.ID,
-		&i.TelegramID,
 		&i.Email,
-		&i.ReferralID,
 		&i.InviterID,
-		&i.RankID,
 		&i.Metadata,
 		&i.ProfileData,
-		&i.TelegramData,
-		&i.CreatedAt,
-		&i.Role,
-		&i.Password,
-		&i.AuthNonce,
-		&i.ForgotPasswordToken,
-		&i.EmailVerificationToken,
-	)
-	return i, err
-}
-
-const getUserByReferralId = `-- name: GetUserByReferralId :one
-SELECT
-    id, telegram_id, email, referral_id, inviter_id, rank_id, metadata, profile_data, telegram_data, created_at, role, password, auth_nonce, forgot_password_token, email_verification_token
-FROM
-    users
-WHERE
-    referral_id = $1
-`
-
-func (q *Queries) GetUserByReferralId(ctx context.Context, referralID int64) (User, error) {
-	row := q.db.QueryRow(ctx, getUserByReferralId, referralID)
-	var i User
-	err := row.Scan(
-		&i.ID,
-		&i.TelegramID,
-		&i.Email,
-		&i.ReferralID,
-		&i.InviterID,
-		&i.RankID,
-		&i.Metadata,
-		&i.ProfileData,
-		&i.TelegramData,
 		&i.CreatedAt,
 		&i.Role,
 		&i.Password,

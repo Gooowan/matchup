@@ -1,27 +1,24 @@
 -- name: AdminSearchUsers :many
-SELECT 
+SELECT
     u.id,
-    u.telegram_id,
     u.email,
-    u.referral_id,
     u.inviter_id,
     u.metadata,
     u.profile_data,
-    u.telegram_data,
     u.created_at,
     u.role,
     u.auth_nonce,
     COUNT(*) OVER() as total_count
 FROM users u
-WHERE 
+WHERE
     (
-        CASE 
+        CASE
             WHEN @search_term::text = '' THEN true
             ELSE (
                 u.email ILIKE '%' || @search_term::text || '%' OR
                 (u.profile_data->>'first_name') ILIKE '%' || @search_term::text || '%' OR
                 (u.profile_data->>'last_name') ILIKE '%' || @search_term::text || '%' OR
-                u.referral_id::text = @search_term::text
+                u.id::text = @search_term::text
             )
         END
     )
@@ -29,15 +26,12 @@ ORDER BY u.created_at DESC
 LIMIT @limit_val OFFSET @offset_val;
 
 -- name: AdminGetUser :one
-SELECT 
+SELECT
     u.id,
-    u.telegram_id,
     u.email,
-    u.referral_id,
     u.inviter_id,
     u.metadata,
     u.profile_data,
-    u.telegram_data,
     u.created_at,
     u.role,
     u.auth_nonce,

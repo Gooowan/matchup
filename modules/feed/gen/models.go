@@ -23,17 +23,6 @@ type Chat struct {
 	CreatedAt pgtype.Timestamp `db:"created_at" json:"created_at"`
 }
 
-type MarketingMaterial struct {
-	ID          pgtype.UUID      `db:"id" json:"id"`
-	Name        string           `db:"name" json:"name"`
-	FileKey     string           `db:"file_key" json:"file_key"`
-	FileSize    int64            `db:"file_size" json:"file_size"`
-	ContentType string           `db:"content_type" json:"content_type"`
-	Visible     bool             `db:"visible" json:"visible"`
-	CreatedAt   pgtype.Timestamp `db:"created_at" json:"created_at"`
-	UpdatedAt   pgtype.Timestamp `db:"updated_at" json:"updated_at"`
-}
-
 type Match struct {
 	ID         pgtype.UUID      `db:"id" json:"id"`
 	FromUserID pgtype.UUID      `db:"from_user_id" json:"from_user_id"`
@@ -45,6 +34,7 @@ type Match struct {
 type Medium struct {
 	ID          pgtype.UUID      `db:"id" json:"id"`
 	OwnerID     pgtype.UUID      `db:"owner_id" json:"owner_id"`
+	Name        pgtype.Text      `db:"name" json:"name"`
 	FileKey     string           `db:"file_key" json:"file_key"`
 	FileSize    int64            `db:"file_size" json:"file_size"`
 	ContentType string           `db:"content_type" json:"content_type"`
@@ -66,17 +56,10 @@ type Profile struct {
 	ID          pgtype.UUID      `db:"id" json:"id"`
 	UserID      pgtype.UUID      `db:"user_id" json:"user_id"`
 	DanceStyles []string         `db:"dance_styles" json:"dance_styles"`
-	DanceRole   pgtype.Text      `db:"dance_role" json:"dance_role"`
-	DanceLevel  pgtype.Text      `db:"dance_level" json:"dance_level"`
-	HeightCm    pgtype.Int4      `db:"height_cm" json:"height_cm"`
-	Bio         pgtype.Text      `db:"bio" json:"bio"`
-	BirthDate   pgtype.Date      `db:"birth_date" json:"birth_date"`
-	Gender      pgtype.Text      `db:"gender" json:"gender"`
-	City        pgtype.Text      `db:"city" json:"city"`
 	Latitude    pgtype.Float8    `db:"latitude" json:"latitude"`
 	Longitude   pgtype.Float8    `db:"longitude" json:"longitude"`
 	Visible     bool             `db:"visible" json:"visible"`
-	MediaUrls   []string         `db:"media_urls" json:"media_urls"`
+	Data        types.JSONB      `db:"data" json:"data"`
 	CreatedAt   pgtype.Timestamp `db:"created_at" json:"created_at"`
 	UpdatedAt   pgtype.Timestamp `db:"updated_at" json:"updated_at"`
 }
@@ -92,14 +75,10 @@ type Report struct {
 
 type User struct {
 	ID                     pgtype.UUID      `db:"id" json:"id"`
-	TelegramID             pgtype.Int8      `db:"telegram_id" json:"telegram_id"`
 	Email                  pgtype.Text      `db:"email" json:"email"`
-	ReferralID             int64            `db:"referral_id" json:"referral_id"`
 	InviterID              pgtype.UUID      `db:"inviter_id" json:"inviter_id"`
-	RankID                 pgtype.Int4      `db:"rank_id" json:"rank_id"`
 	Metadata               types.JSONB      `db:"metadata" json:"metadata"`
 	ProfileData            types.JSONB      `db:"profile_data" json:"profile_data"`
-	TelegramData           types.JSONB      `db:"telegram_data" json:"telegram_data"`
 	CreatedAt              pgtype.Timestamp `db:"created_at" json:"created_at"`
 	Role                   string           `db:"role" json:"role"`
 	Password               pgtype.Text      `db:"password" json:"password"`
@@ -117,18 +96,9 @@ type UserLocation struct {
 }
 
 type UserPreference struct {
-	ID               pgtype.UUID      `db:"id" json:"id"`
-	UserID           pgtype.UUID      `db:"user_id" json:"user_id"`
-	PreferredStyles  []string         `db:"preferred_styles" json:"preferred_styles"`
-	PreferredRole    pgtype.Text      `db:"preferred_role" json:"preferred_role"`
-	MinLevel         pgtype.Text      `db:"min_level" json:"min_level"`
-	MaxLevel         pgtype.Text      `db:"max_level" json:"max_level"`
-	MinHeightCm      pgtype.Int4      `db:"min_height_cm" json:"min_height_cm"`
-	MaxHeightCm      pgtype.Int4      `db:"max_height_cm" json:"max_height_cm"`
-	MinAge           pgtype.Int4      `db:"min_age" json:"min_age"`
-	MaxAge           pgtype.Int4      `db:"max_age" json:"max_age"`
-	MaxDistanceKm    pgtype.Float8    `db:"max_distance_km" json:"max_distance_km"`
-	GenderPreference pgtype.Text      `db:"gender_preference" json:"gender_preference"`
-	CreatedAt        pgtype.Timestamp `db:"created_at" json:"created_at"`
-	UpdatedAt        pgtype.Timestamp `db:"updated_at" json:"updated_at"`
+	ID        pgtype.UUID      `db:"id" json:"id"`
+	UserID    pgtype.UUID      `db:"user_id" json:"user_id"`
+	Data      types.JSONB      `db:"data" json:"data"`
+	CreatedAt pgtype.Timestamp `db:"created_at" json:"created_at"`
+	UpdatedAt pgtype.Timestamp `db:"updated_at" json:"updated_at"`
 }

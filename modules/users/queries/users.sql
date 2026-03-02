@@ -20,14 +20,6 @@ FROM
 WHERE
     email = @email;
 
--- name: GetUserByReferralId :one
-SELECT
-    *
-FROM
-    users
-WHERE
-    referral_id = @referral_id;
-
 -- name: GetUserByEmailVerificationToken :one
 SELECT
     *

@@ -5,17 +5,10 @@ CREATE TABLE profiles(
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id uuid NOT NULL REFERENCES users(id) UNIQUE,
     dance_styles text[],
-    dance_role varchar(20),
-    dance_level varchar(20),
-    height_cm int,
-    bio text,
-    birth_date date,
-    gender varchar(20),
-    city varchar(100),
     latitude double precision,
     longitude double precision,
     visible boolean NOT NULL DEFAULT true,
-    media_urls text[],
+    data jsonb NOT NULL DEFAULT '{}',
     created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
@@ -34,16 +27,7 @@ WHERE
 CREATE TABLE user_preferences(
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id uuid NOT NULL REFERENCES users(id) UNIQUE,
-    preferred_styles text[],
-    preferred_role varchar(20),
-    min_level varchar(20),
-    max_level varchar(20),
-    min_height_cm int,
-    max_height_cm int,
-    min_age int,
-    max_age int,
-    max_distance_km double precision,
-    gender_preference varchar(20),
+    data jsonb NOT NULL DEFAULT '{}',
     created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
 );

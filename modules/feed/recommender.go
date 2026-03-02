@@ -8,6 +8,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/Gooowan/matchup/modules/core/types"
 	"github.com/Gooowan/matchup/modules/recommendation"
 	recgen "github.com/Gooowan/matchup/modules/recommendation/gen"
 )
@@ -36,8 +37,10 @@ func NewNearestCandidatesProvider(recommendationSvc *recommendation.Recommendati
 
 func (p *NearestCandidatesProvider) GetFeed(ctx context.Context, params FeedParams) ([]recgen.FindNearbyVisibleProfilesRow, error) {
 	maxDist := 100.0 // default 100km
-	if params.Prefs != nil && params.Prefs.MaxDistanceKm.Valid && params.Prefs.MaxDistanceKm.Float64 > 0 {
-		maxDist = params.Prefs.MaxDistanceKm.Float64
+	if params.Prefs != nil {
+		if v, ok := jsonbFloat(params.Prefs.Data, "max_distance_km"); ok && v > 0 {
+			maxDist = v
+		}
 	}
 
 	// over-fetch to compensate for preference filtering
@@ -63,7 +66,7 @@ func (p *NearestCandidatesProvider) GetFeed(ctx context.Context, params FeedPara
 		if c.DistanceKm > maxDist {
 			continue
 		}
-		if params.Prefs != nil && !matchesPreferences(c, params.Prefs) {
+		if params.Prefs != nil && !matchesPreferences(c, params.Prefs.Data) {
 			continue
 		}
 		filtered = append(filtered, c)
@@ -123,47 +126,57 @@ func (p *FallbackProvider) GetFeed(ctx context.Context, params FeedParams) ([]re
 
 // preference matching helpers
 
-func matchesPreferences(c recgen.FindNearbyVisibleProfilesRow, prefs *recgen.UserPreference) bool {
-	if prefs.PreferredRole.Valid && prefs.PreferredRole.String != "" && c.DanceRole.Valid {
-		if !roleCompatible(prefs.PreferredRole.String, c.DanceRole.String) {
+func matchesPreferences(c recgen.FindNearbyVisibleProfilesRow, prefs types.JSONB) bool {
+	candidateData := getJSONB(c.Data)
+
+	if prefRole, ok := jsonbString(prefs, "preferred_role"); ok && prefRole != "" {
+		if candidateRole, ok := jsonbString(candidateData, "dance_role"); ok {
+			if !roleCompatible(prefRole, candidateRole) {
+				return false
+			}
+		}
+	}
+
+	if prefStyles := jsonbStringSlice(prefs, "preferred_styles"); len(prefStyles) > 0 {
+		if len(c.DanceStyles) > 0 && !stylesOverlap(prefStyles, c.DanceStyles) {
 			return false
 		}
 	}
 
-	if len(prefs.PreferredStyles) > 0 && len(c.DanceStyles) > 0 {
-		if !stylesOverlap(prefs.PreferredStyles, c.DanceStyles) {
+	if candidateLevel, ok := jsonbString(candidateData, "dance_level"); ok {
+		minLevel, _ := jsonbString(prefs, "min_level")
+		maxLevel, _ := jsonbString(prefs, "max_level")
+		if !levelInRange(candidateLevel, minLevel, maxLevel) {
 			return false
 		}
 	}
 
-	if c.DanceLevel.Valid {
-		if !levelInRange(c.DanceLevel.String, prefs.MinLevel, prefs.MaxLevel) {
+	if heightCm, ok := jsonbFloat(candidateData, "height_cm"); ok {
+		if minH, ok := jsonbFloat(prefs, "min_height_cm"); ok && heightCm < minH {
+			return false
+		}
+		if maxH, ok := jsonbFloat(prefs, "max_height_cm"); ok && heightCm > maxH {
 			return false
 		}
 	}
 
-	if c.HeightCm.Valid {
-		if prefs.MinHeightCm.Valid && c.HeightCm.Int32 < prefs.MinHeightCm.Int32 {
-			return false
-		}
-		if prefs.MaxHeightCm.Valid && c.HeightCm.Int32 > prefs.MaxHeightCm.Int32 {
-			return false
-		}
-	}
-
-	if c.BirthDate.Valid && (prefs.MinAge.Valid || prefs.MaxAge.Valid) {
-		age := computeAge(c.BirthDate.Time)
-		if prefs.MinAge.Valid && age < int(prefs.MinAge.Int32) {
-			return false
-		}
-		if prefs.MaxAge.Valid && age > int(prefs.MaxAge.Int32) {
-			return false
+	if birthDateStr, ok := jsonbString(candidateData, "birth_date"); ok && birthDateStr != "" {
+		if birthDate, err := time.Parse("2006-01-02", birthDateStr); err == nil {
+			age := computeAge(birthDate)
+			if minAge, ok := jsonbFloat(prefs, "min_age"); ok && age < int(minAge) {
+				return false
+			}
+			if maxAge, ok := jsonbFloat(prefs, "max_age"); ok && age > int(maxAge) {
+				return false
+			}
 		}
 	}
 
-	if prefs.GenderPreference.Valid && prefs.GenderPreference.String != "" && c.Gender.Valid {
-		if c.Gender.String != prefs.GenderPreference.String {
-			return false
+	if genderPref, ok := jsonbString(prefs, "gender_preference"); ok && genderPref != "" {
+		if candidateGender, ok := jsonbString(candidateData, "gender"); ok {
+			if candidateGender != genderPref {
+				return false
+			}
 		}
 	}
 
@@ -174,7 +187,6 @@ func roleCompatible(preferred, candidate string) bool {
 	if preferred == "both" || candidate == "both" {
 		return true
 	}
-	// leader wants follower and vice versa
 	if preferred == "leader" && candidate == "follower" {
 		return true
 	}
@@ -200,18 +212,18 @@ var levelOrder = map[string]int{
 	"professional": 4,
 }
 
-func levelInRange(level string, min, max pgtype.Text) bool {
+func levelInRange(level, min, max string) bool {
 	ord, ok := levelOrder[level]
 	if !ok {
 		return true
 	}
-	if min.Valid && min.String != "" {
-		if minOrd, ok := levelOrder[min.String]; ok && ord < minOrd {
+	if min != "" {
+		if minOrd, ok := levelOrder[min]; ok && ord < minOrd {
 			return false
 		}
 	}
-	if max.Valid && max.String != "" {
-		if maxOrd, ok := levelOrder[max.String]; ok && ord > maxOrd {
+	if max != "" {
+		if maxOrd, ok := levelOrder[max]; ok && ord > maxOrd {
 			return false
 		}
 	}
@@ -225,4 +237,65 @@ func computeAge(birthDate time.Time) int {
 		age--
 	}
 	return age
+}
+
+// JSONB helper functions
+
+func getJSONB(v interface{}) types.JSONB {
+	if m, ok := v.(types.JSONB); ok {
+		return m
+	}
+	if m, ok := v.(map[string]any); ok {
+		return types.JSONB(m)
+	}
+	return types.JSONB{}
+}
+
+func jsonbString(data types.JSONB, key string) (string, bool) {
+	v, ok := data[key]
+	if !ok {
+		return "", false
+	}
+	s, ok := v.(string)
+	return s, ok
+}
+
+func jsonbFloat(data types.JSONB, key string) (float64, bool) {
+	v, ok := data[key]
+	if !ok {
+		return 0, false
+	}
+	switch n := v.(type) {
+	case float64:
+		return n, true
+	case float32:
+		return float64(n), true
+	case int:
+		return float64(n), true
+	case int32:
+		return float64(n), true
+	case int64:
+		return float64(n), true
+	}
+	return 0, false
+}
+
+func jsonbStringSlice(data types.JSONB, key string) []string {
+	v, ok := data[key]
+	if !ok {
+		return nil
+	}
+	if arr, ok := v.([]any); ok {
+		var result []string
+		for _, item := range arr {
+			if s, ok := item.(string); ok {
+				result = append(result, s)
+			}
+		}
+		return result
+	}
+	if arr, ok := v.([]string); ok {
+		return arr
+	}
+	return nil
 }

@@ -18,7 +18,7 @@ type Querier interface {
 	GetProfileByUserID(ctx context.Context, userID pgtype.UUID) (Profile, error)
 	GetProfilePreview(ctx context.Context, userID pgtype.UUID) (GetProfilePreviewRow, error)
 	UpdateProfile(ctx context.Context, arg UpdateProfileParams) error
-	UpdateProfileMediaURLs(ctx context.Context, arg UpdateProfileMediaURLsParams) error
+	UpdateProfileData(ctx context.Context, arg UpdateProfileDataParams) error
 	UpsertPreferences(ctx context.Context, arg UpsertPreferencesParams) (UserPreference, error)
 }
 

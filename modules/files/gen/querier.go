@@ -11,12 +11,13 @@ import (
 )
 
 type Querier interface {
-	CreateMaterial(ctx context.Context, arg CreateMaterialParams) (MarketingMaterial, error)
+	CreateMaterial(ctx context.Context, arg CreateMaterialParams) (Medium, error)
 	DeleteMaterial(ctx context.Context, id pgtype.UUID) error
-	GetMaterial(ctx context.Context, id pgtype.UUID) (MarketingMaterial, error)
-	GetMaterialByKey(ctx context.Context, fileKey string) (MarketingMaterial, error)
+	GetMaterial(ctx context.Context, id pgtype.UUID) (Medium, error)
+	GetMaterialByKey(ctx context.Context, fileKey string) (Medium, error)
 	ListMaterials(ctx context.Context, arg ListMaterialsParams) ([]ListMaterialsRow, error)
 	ListVisibleMaterials(ctx context.Context, arg ListVisibleMaterialsParams) ([]ListVisibleMaterialsRow, error)
+	UpdateMaterialFileKey(ctx context.Context, arg UpdateMaterialFileKeyParams) error
 	UpdateMaterialName(ctx context.Context, arg UpdateMaterialNameParams) error
 	UpdateMaterialVisibility(ctx context.Context, arg UpdateMaterialVisibilityParams) error
 }

@@ -10,6 +10,7 @@ import (
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/Gooowan/matchup/modules/core/types"
+	"github.com/Gooowan/matchup/modules/core/utils"
 )
 
 type AuthController struct {
@@ -136,7 +137,7 @@ func (c *AuthController) CheckEmail(ctx *gin.Context) {
 
 func (c *AuthController) CheckInviter(ctx *gin.Context) {
 	var req struct {
-		ReferralID int64 `json:"referral_id" binding:"required"`
+		InviterID string `json:"inviter_id" binding:"required"`
 	}
 
 	if err := ctx.ShouldBindJSON(&req); err != nil {
@@ -144,13 +145,19 @@ func (c *AuthController) CheckInviter(ctx *gin.Context) {
 		return
 	}
 
-	user, err := c.authService.core.Queries.GetUserByReferralId(ctx.Request.Context(), req.ReferralID)
+	inviterUUID, err := utils.StringToUUID(req.InviterID)
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, types.Resp{Error: "Invalid inviter ID"})
+		return
+	}
+
+	user, err := c.authService.core.Queries.GetUser(ctx.Request.Context(), inviterUUID)
 	if err != nil {
 		ctx.JSON(http.StatusNotFound, types.Resp{Error: "User not found"})
 		return
 	}
 
-	ctx.JSON(http.StatusOK, types.Resp{Data: gin.H{"inviter": gin.H{"profile_data": user.ProfileData, "referral_id": user.ReferralID}}})
+	ctx.JSON(http.StatusOK, types.Resp{Data: gin.H{"inviter": gin.H{"profile_data": user.ProfileData}}})
 }
 
 func (c *AuthController) ForgotPassword(ctx *gin.Context) {

@@ -6,13 +6,10 @@ import (
 )
 
 type UserDTO struct {
-	ID   string `json:"id"`
-	Role string `json:"role"`
-	// TelegramID   int64       `json:"telegram_id"`
-	Email      string `json:"email"`
-	ReferralID int64  `json:"referral_id"`
-	InviterID  string `json:"inviter_id"`
-	// TelegramData types.JSONB `json:"telegram_data"`
+	ID          string      `json:"id"`
+	Role        string      `json:"role"`
+	Email       string      `json:"email"`
+	InviterID   string      `json:"inviter_id"`
 	ProfileData types.JSONB `json:"profile_data"`
 	CreatedAt   int64       `json:"created_at"`
 }
@@ -33,13 +30,10 @@ func (users Users) ToDTO() []*UserDTO {
 
 func (user User) ToDTO() *UserDTO {
 	return &UserDTO{
-		ID: utils.UUIDToString(user.ID),
-		// TelegramID:   user.TelegramID.Int64,
-		Role:       user.Role,
-		Email:      user.Email.String,
-		ReferralID: user.ReferralID,
-		InviterID:  utils.UUIDToString(user.InviterID),
-		// TelegramData: user.TelegramData,
+		ID:          utils.UUIDToString(user.ID),
+		Role:        user.Role,
+		Email:       user.Email.String,
+		InviterID:   utils.UUIDToString(user.InviterID),
 		ProfileData: user.ProfileData,
 		CreatedAt:   user.CreatedAt.Time.UnixMilli(),
 	}
@@ -47,13 +41,10 @@ func (user User) ToDTO() *UserDTO {
 
 type AdminUserDTO struct {
 	ID                     string      `json:"id"`
-	TelegramID             *int64      `json:"telegram_id"`
 	Email                  string      `json:"email"`
-	ReferralID             int64       `json:"referral_id"`
 	InviterID              string      `json:"inviter_id"`
 	Metadata               types.JSONB `json:"metadata"`
 	ProfileData            types.JSONB `json:"profile_data"`
-	TelegramData           types.JSONB `json:"telegram_data"`
 	CreatedAt              int64       `json:"created_at"`
 	Role                   string      `json:"role"`
 	AuthNonce              int32       `json:"auth_nonce"`
@@ -62,43 +53,30 @@ type AdminUserDTO struct {
 }
 
 func (user AdminSearchUsersRow) ToAdminDTO() *AdminUserDTO {
-	dto := &AdminUserDTO{
-		ID:           utils.UUIDToString(user.ID),
-		Email:        user.Email.String,
-		ReferralID:   user.ReferralID,
-		InviterID:    utils.UUIDToString(user.InviterID),
-		Metadata:     user.Metadata,
-		ProfileData:  user.ProfileData,
-		TelegramData: user.TelegramData,
-		CreatedAt:    user.CreatedAt.Time.UnixMilli(),
-		Role:         user.Role,
-		AuthNonce:    user.AuthNonce,
+	return &AdminUserDTO{
+		ID:          utils.UUIDToString(user.ID),
+		Email:       user.Email.String,
+		InviterID:   utils.UUIDToString(user.InviterID),
+		Metadata:    user.Metadata,
+		ProfileData: user.ProfileData,
+		CreatedAt:   user.CreatedAt.Time.UnixMilli(),
+		Role:        user.Role,
+		AuthNonce:   user.AuthNonce,
 	}
-
-	if user.TelegramID.Valid {
-		dto.TelegramID = &user.TelegramID.Int64
-	}
-
-	return dto
 }
 
 func (user AdminGetUserRow) ToAdminDTO() *AdminUserDTO {
 	dto := &AdminUserDTO{
-		ID:           utils.UUIDToString(user.ID),
-		Email:        user.Email.String,
-		ReferralID:   user.ReferralID,
-		InviterID:    utils.UUIDToString(user.InviterID),
-		Metadata:     user.Metadata,
-		ProfileData:  user.ProfileData,
-		TelegramData: user.TelegramData,
-		CreatedAt:    user.CreatedAt.Time.UnixMilli(),
-		Role:         user.Role,
-		AuthNonce:    user.AuthNonce,
+		ID:          utils.UUIDToString(user.ID),
+		Email:       user.Email.String,
+		InviterID:   utils.UUIDToString(user.InviterID),
+		Metadata:    user.Metadata,
+		ProfileData: user.ProfileData,
+		CreatedAt:   user.CreatedAt.Time.UnixMilli(),
+		Role:        user.Role,
+		AuthNonce:   user.AuthNonce,
 	}
 
-	if user.TelegramID.Valid {
-		dto.TelegramID = &user.TelegramID.Int64
-	}
 	if user.ForgotPasswordToken.Valid {
 		dto.ForgotPasswordToken = &user.ForgotPasswordToken.String
 	}

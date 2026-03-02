@@ -2,7 +2,6 @@ package recommendation
 
 import (
 	"net/http"
-	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -46,16 +45,17 @@ func (c *RecommendationController) CreateOrUpdateProfile(ctx *gin.Context) {
 
 	var req struct {
 		DanceStyles []string `json:"dance_styles"`
-		DanceRole   string   `json:"dance_role"`
-		DanceLevel  string   `json:"dance_level"`
-		HeightCm    int32    `json:"height_cm"`
-		Bio         string   `json:"bio"`
-		BirthDate   string   `json:"birth_date"`
-		Gender      string   `json:"gender"`
-		City        string   `json:"city"`
 		Latitude    float64  `json:"latitude"`
 		Longitude   float64  `json:"longitude"`
 		Visible     *bool    `json:"visible"`
+		// Fields stored in JSONB data
+		DanceRole  string `json:"dance_role"`
+		DanceLevel string `json:"dance_level"`
+		HeightCm   int32  `json:"height_cm"`
+		Bio        string `json:"bio"`
+		BirthDate  string `json:"birth_date"`
+		Gender     string `json:"gender"`
+		City       string `json:"city"`
 	}
 	if err := ctx.ShouldBindJSON(&req); err != nil {
 		ctx.JSON(http.StatusBadRequest, types.Resp{Error: err.Error()})
@@ -67,14 +67,28 @@ func (c *RecommendationController) CreateOrUpdateProfile(ctx *gin.Context) {
 		visible = *req.Visible
 	}
 
-	var birthDate pgtype.Date
+	// Build JSONB data from request fields
+	data := types.JSONB{}
+	if req.DanceRole != "" {
+		data["dance_role"] = req.DanceRole
+	}
+	if req.DanceLevel != "" {
+		data["dance_level"] = req.DanceLevel
+	}
+	if req.HeightCm > 0 {
+		data["height_cm"] = req.HeightCm
+	}
+	if req.Bio != "" {
+		data["bio"] = req.Bio
+	}
 	if req.BirthDate != "" {
-		parsed, err := parseDate(req.BirthDate)
-		if err != nil {
-			ctx.JSON(http.StatusBadRequest, types.Resp{Error: "Invalid birth_date format, use YYYY-MM-DD"})
-			return
-		}
-		birthDate = pgtype.Date{Time: parsed, Valid: true}
+		data["birth_date"] = req.BirthDate
+	}
+	if req.Gender != "" {
+		data["gender"] = req.Gender
+	}
+	if req.City != "" {
+		data["city"] = req.City
 	}
 
 	// Try update first, create if not exists
@@ -83,16 +97,10 @@ func (c *RecommendationController) CreateOrUpdateProfile(ctx *gin.Context) {
 		// Create
 		profile, err := c.svc.CreateProfile(ctx.Request.Context(), user.ID, gen.CreateProfileParams{
 			DanceStyles: req.DanceStyles,
-			DanceRole:   pgtype.Text{String: req.DanceRole, Valid: req.DanceRole != ""},
-			DanceLevel:  pgtype.Text{String: req.DanceLevel, Valid: req.DanceLevel != ""},
-			HeightCm:    pgtype.Int4{Int32: req.HeightCm, Valid: req.HeightCm > 0},
-			Bio:         pgtype.Text{String: req.Bio, Valid: req.Bio != ""},
-			BirthDate:   birthDate,
-			Gender:      pgtype.Text{String: req.Gender, Valid: req.Gender != ""},
-			City:        pgtype.Text{String: req.City, Valid: req.City != ""},
 			Latitude:    pgtype.Float8{Float64: req.Latitude, Valid: req.Latitude != 0},
 			Longitude:   pgtype.Float8{Float64: req.Longitude, Valid: req.Longitude != 0},
 			Visible:     visible,
+			Data:        data,
 		})
 		if err != nil {
 			ctx.JSON(http.StatusInternalServerError, types.Resp{Error: "Failed to create profile"})
@@ -102,24 +110,32 @@ func (c *RecommendationController) CreateOrUpdateProfile(ctx *gin.Context) {
 		return
 	}
 
-	// Update — merge with existing
+	// Update — merge JSONB data with existing
+	existingData := getProfileData(existing.Data)
+	for k, v := range data {
+		existingData[k] = v
+	}
+
 	styles := req.DanceStyles
 	if styles == nil {
 		styles = existing.DanceStyles
 	}
 
+	lat := pgtype.Float8{Float64: req.Latitude, Valid: req.Latitude != 0}
+	if !lat.Valid {
+		lat = existing.Latitude
+	}
+	lon := pgtype.Float8{Float64: req.Longitude, Valid: req.Longitude != 0}
+	if !lon.Valid {
+		lon = existing.Longitude
+	}
+
 	err = c.svc.UpdateProfile(ctx.Request.Context(), user.ID, gen.UpdateProfileParams{
 		DanceStyles: styles,
-		DanceRole:   textOrExisting(req.DanceRole, existing.DanceRole),
-		DanceLevel:  textOrExisting(req.DanceLevel, existing.DanceLevel),
-		HeightCm:    int4OrExisting(req.HeightCm, existing.HeightCm),
-		Bio:         textOrExisting(req.Bio, existing.Bio),
-		BirthDate:   dateOrExisting(birthDate, existing.BirthDate),
-		Gender:      textOrExisting(req.Gender, existing.Gender),
-		City:        textOrExisting(req.City, existing.City),
-		Latitude:    float8OrExisting(req.Latitude, existing.Latitude),
-		Longitude:   float8OrExisting(req.Longitude, existing.Longitude),
+		Latitude:    lat,
+		Longitude:   lon,
 		Visible:     visible,
+		Data:        existingData,
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, types.Resp{Error: "Failed to update profile"})
@@ -169,34 +185,15 @@ func (c *RecommendationController) UpdatePreferences(ctx *gin.Context) {
 		return
 	}
 
-	var req struct {
-		PreferredStyles  []string `json:"preferred_styles"`
-		PreferredRole    string   `json:"preferred_role"`
-		MinLevel         string   `json:"min_level"`
-		MaxLevel         string   `json:"max_level"`
-		MinHeightCm      int32    `json:"min_height_cm"`
-		MaxHeightCm      int32    `json:"max_height_cm"`
-		MinAge           int32    `json:"min_age"`
-		MaxAge           int32    `json:"max_age"`
-		MaxDistanceKm    float64  `json:"max_distance_km"`
-		GenderPreference string   `json:"gender_preference"`
-	}
+	// Accept the entire preferences as a JSONB object
+	var req types.JSONB
 	if err := ctx.ShouldBindJSON(&req); err != nil {
 		ctx.JSON(http.StatusBadRequest, types.Resp{Error: err.Error()})
 		return
 	}
 
 	prefs, err := c.svc.UpsertPreferences(ctx.Request.Context(), user.ID, gen.UpsertPreferencesParams{
-		PreferredStyles:  req.PreferredStyles,
-		PreferredRole:    pgtype.Text{String: req.PreferredRole, Valid: req.PreferredRole != ""},
-		MinLevel:         pgtype.Text{String: req.MinLevel, Valid: req.MinLevel != ""},
-		MaxLevel:         pgtype.Text{String: req.MaxLevel, Valid: req.MaxLevel != ""},
-		MinHeightCm:      pgtype.Int4{Int32: req.MinHeightCm, Valid: req.MinHeightCm > 0},
-		MaxHeightCm:      pgtype.Int4{Int32: req.MaxHeightCm, Valid: req.MaxHeightCm > 0},
-		MinAge:           pgtype.Int4{Int32: req.MinAge, Valid: req.MinAge > 0},
-		MaxAge:           pgtype.Int4{Int32: req.MaxAge, Valid: req.MaxAge > 0},
-		MaxDistanceKm:    pgtype.Float8{Float64: req.MaxDistanceKm, Valid: req.MaxDistanceKm > 0},
-		GenderPreference: pgtype.Text{String: req.GenderPreference, Valid: req.GenderPreference != ""},
+		Data: req,
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, types.Resp{Error: "Failed to update preferences"})
@@ -260,38 +257,4 @@ func (c *RecommendationController) RegisterRoutes(rg *gin.RouterGroup, userAuth 
 	rg.DELETE("/profile/media", c.RemoveMedia)
 	rg.GET("/preferences", c.GetPreferences)
 	rg.PUT("/preferences", c.UpdatePreferences)
-}
-
-// helpers
-
-func textOrExisting(val string, existing pgtype.Text) pgtype.Text {
-	if val != "" {
-		return pgtype.Text{String: val, Valid: true}
-	}
-	return existing
-}
-
-func int4OrExisting(val int32, existing pgtype.Int4) pgtype.Int4 {
-	if val > 0 {
-		return pgtype.Int4{Int32: val, Valid: true}
-	}
-	return existing
-}
-
-func float8OrExisting(val float64, existing pgtype.Float8) pgtype.Float8 {
-	if val != 0 {
-		return pgtype.Float8{Float64: val, Valid: true}
-	}
-	return existing
-}
-
-func dateOrExisting(val pgtype.Date, existing pgtype.Date) pgtype.Date {
-	if val.Valid {
-		return val
-	}
-	return existing
-}
-
-func parseDate(s string) (time.Time, error) {
-	return time.Parse("2006-01-02", s)
 }

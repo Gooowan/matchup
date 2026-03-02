@@ -1,5 +1,5 @@
 -- name: CreateMaterial :one
-INSERT INTO marketing_materials (
+INSERT INTO media (
     name,
     file_key,
     file_size,
@@ -14,47 +14,55 @@ INSERT INTO marketing_materials (
 ) RETURNING *;
 
 -- name: GetMaterial :one
-SELECT * FROM marketing_materials
-WHERE id = @id;
+SELECT * FROM media
+WHERE id = @id AND owner_id IS NULL;
 
 -- name: GetMaterialByKey :one
-SELECT * FROM marketing_materials
-WHERE file_key = @file_key;
+SELECT * FROM media
+WHERE file_key = @file_key AND owner_id IS NULL;
 
 -- name: ListMaterials :many
-SELECT 
+SELECT
     *,
     COUNT(*) OVER() as total_count
-FROM marketing_materials
+FROM media
+WHERE owner_id IS NULL
 ORDER BY created_at DESC
 LIMIT @limit_val
 OFFSET @offset_val;
 
 -- name: ListVisibleMaterials :many
-SELECT 
+SELECT
     *,
     COUNT(*) OVER() as total_count
-FROM marketing_materials
-WHERE visible = true
+FROM media
+WHERE owner_id IS NULL AND visible = true
 ORDER BY created_at DESC
 LIMIT @limit_val
 OFFSET @offset_val;
 
 -- name: UpdateMaterialName :exec
-UPDATE marketing_materials
-SET 
+UPDATE media
+SET
     name = @name,
     updated_at = CURRENT_TIMESTAMP
-WHERE id = @id;
+WHERE id = @id AND owner_id IS NULL;
+
+-- name: UpdateMaterialFileKey :exec
+UPDATE media
+SET
+    file_key = @file_key,
+    updated_at = CURRENT_TIMESTAMP
+WHERE id = @id AND owner_id IS NULL;
 
 -- name: UpdateMaterialVisibility :exec
-UPDATE marketing_materials
-SET 
+UPDATE media
+SET
     visible = @visible,
     updated_at = CURRENT_TIMESTAMP
-WHERE id = @id;
+WHERE id = @id AND owner_id IS NULL;
 
 -- name: DeleteMaterial :exec
-DELETE FROM marketing_materials
-WHERE id = @id;
+DELETE FROM media
+WHERE id = @id AND owner_id IS NULL;
 
