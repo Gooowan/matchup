@@ -13,12 +13,12 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/valkey-io/valkey-go"
 
-	"github.com/Gooowan/matchup/modules/core"
-	"github.com/Gooowan/matchup/modules/core/auth"
 	"github.com/Gooowan/matchup/modules/core/db"
 	"github.com/Gooowan/matchup/modules/email"
 	"github.com/Gooowan/matchup/modules/email/providers"
 	"github.com/Gooowan/matchup/modules/files"
+	core "github.com/Gooowan/matchup/modules/users"
+	"github.com/Gooowan/matchup/modules/users/auth"
 	"github.com/Gooowan/matchup/services/api/controllers"
 
 	matchupmod "github.com/Gooowan/matchup/modules/matchup"

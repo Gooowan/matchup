@@ -6,7 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	coremodels "github.com/Gooowan/matchup/modules/core/gen"
+	coremodels "github.com/Gooowan/matchup/modules/users/gen"
 )
 
 const (

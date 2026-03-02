@@ -13,10 +13,10 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"golang.org/x/crypto/bcrypt"
 
-	"github.com/Gooowan/matchup/modules/core"
-	coregen "github.com/Gooowan/matchup/modules/core/gen"
 	"github.com/Gooowan/matchup/modules/core/types"
 	"github.com/Gooowan/matchup/modules/email"
+	core "github.com/Gooowan/matchup/modules/users"
+	coregen "github.com/Gooowan/matchup/modules/users/gen"
 )
 
 var (
@@ -27,7 +27,7 @@ var (
 )
 
 type AuthService struct {
-	core         *core.CoreService
+	core         *core.UserService
 	hooks        []RegistrationHook
 	secretKey    []byte
 	issuer       string
@@ -63,7 +63,7 @@ type RegistrationHook interface {
 	PostRegistration(qtx *coregen.Queries, ctx context.Context, user *coregen.User, req *RegistrationRequest) error
 }
 
-func NewAuthService(coreService *core.CoreService, emailService *email.EmailService) (*AuthService, error) {
+func NewAuthService(coreService *core.UserService, emailService *email.EmailService) (*AuthService, error) {
 	secretKey := os.Getenv("JWT_SECRET")
 	if secretKey == "" {
 		return nil, fmt.Errorf("JWT_SECRET environment variable not set")

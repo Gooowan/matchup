@@ -10,10 +10,10 @@ import (
 
 	"github.com/Gooowan/matchup/modules/core"
 	"github.com/Gooowan/matchup/modules/core/auth"
-	coremodels "github.com/Gooowan/matchup/modules/core/gen"
 	"github.com/Gooowan/matchup/modules/core/types"
 	"github.com/Gooowan/matchup/modules/core/utils"
 	filesgen "github.com/Gooowan/matchup/modules/files/gen"
+	coremodels "github.com/Gooowan/matchup/modules/users/gen"
 )
 
 type FilesController struct {

@@ -7,10 +7,10 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgtype"
 
-	"github.com/Gooowan/matchup/modules/core/auth"
 	"github.com/Gooowan/matchup/modules/core/types"
 	"github.com/Gooowan/matchup/modules/core/utils"
 	gen "github.com/Gooowan/matchup/modules/matchup/gen"
+	"github.com/Gooowan/matchup/modules/users/auth"
 )
 
 type ProfileController struct {

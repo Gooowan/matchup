@@ -10,15 +10,13 @@ import (
 	ratelimit "github.com/JGLTechnologies/gin-rate-limit"
 	"github.com/redis/go-redis/v9"
 
-	"github.com/Gooowan/matchup/modules/core/auth"
 	"github.com/Gooowan/matchup/modules/core/utils"
+	"github.com/Gooowan/matchup/modules/users/auth"
 	"github.com/gin-gonic/gin"
 )
 
 type RLService struct {
-	LoginRateLimiter        gin.HandlerFunc
-	ExchangeRateLimiter     gin.HandlerFunc
-	WithdrawCodeRateLimiter gin.HandlerFunc
+	LoginRateLimiter gin.HandlerFunc
 }
 
 func NewRLService(redisClient *redis.Client) *RLService {
@@ -32,39 +30,9 @@ func NewRLService(redisClient *redis.Client) *RLService {
 		KeyFunc:      emailKeyFunc,
 	})
 
-	exchangeStore := ratelimit.RedisStore(&ratelimit.RedisOptions{
-		RedisClient: redisClient,
-		Rate:        time.Minute,
-		Limit:       10,
-	})
-	exchangeRateLimiter := ratelimit.RateLimiter(exchangeStore, &ratelimit.Options{
-		ErrorHandler: errorHandler,
-		KeyFunc:      exchangeRateKeyFunc,
-	})
-
-	withdrawCodeStore := ratelimit.RedisStore(&ratelimit.RedisOptions{
-		RedisClient: redisClient,
-		Rate:        time.Second,
-		Limit:       10,
-	})
-	withdrawCodeRateLimiter := ratelimit.RateLimiter(withdrawCodeStore, &ratelimit.Options{
-		ErrorHandler: errorHandler,
-		KeyFunc:      userKeyFunc,
-	})
-
 	return &RLService{
-		LoginRateLimiter:        loginRateLimiter,
-		ExchangeRateLimiter:     exchangeRateLimiter,
-		WithdrawCodeRateLimiter: withdrawCodeRateLimiter,
+		LoginRateLimiter: loginRateLimiter,
 	}
-}
-
-func exchangeRateKeyFunc(c *gin.Context) string {
-	user, ok := auth.GetUserFromContext(c)
-	if !ok {
-		return fmt.Sprintf("rl:exchange:%s", c.ClientIP())
-	}
-	return fmt.Sprintf("rl:exchange:%s", utils.UUIDToString(user.ID))
 }
 
 func userKeyFunc(c *gin.Context) string {

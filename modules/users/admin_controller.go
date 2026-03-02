@@ -5,16 +5,16 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	gen "github.com/Gooowan/matchup/modules/core/gen"
 	"github.com/Gooowan/matchup/modules/core/types"
 	"github.com/Gooowan/matchup/modules/core/utils"
+	gen "github.com/Gooowan/matchup/modules/users/gen"
 )
 
 type AdminController struct {
-	service *CoreService
+	service *UserService
 }
 
-func NewAdminController(service *CoreService) *AdminController {
+func NewAdminController(service *UserService) *AdminController {
 	return &AdminController{
 		service: service,
 	}

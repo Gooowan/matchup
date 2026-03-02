@@ -1,11 +1,11 @@
 -- name: UpsertUserLocation :one
-INSERT INTO user_locations(user_id, latitude, longitude, updated_at)
+INSERT INTO user_locations(user_id, latitude, longitude, created_at)
     VALUES (@user_id, @latitude, @longitude, CURRENT_TIMESTAMP)
 ON CONFLICT (user_id)
     DO UPDATE SET
         latitude = EXCLUDED.latitude,
         longitude = EXCLUDED.longitude,
-        updated_at = CURRENT_TIMESTAMP
+        created_at = CURRENT_TIMESTAMP
 RETURNING *;
 
 -- name: GetUserLocation :one
@@ -19,7 +19,7 @@ SELECT
     ul.user_id,
     ul.latitude,
     ul.longitude,
-    ul.updated_at,
+    ul.created_at,
     (6371 * acos(
         cos(radians(@latitude::double precision)) *
         cos(radians(ul.latitude)) *
@@ -33,12 +33,12 @@ ORDER BY distance_km ASC
 LIMIT @max_results;
 
 -- name: FindNearbyUsersWithinRadius :many
-SELECT user_id, latitude, longitude, updated_at, distance_km FROM (
+SELECT user_id, latitude, longitude, created_at, distance_km FROM (
     SELECT
         ul.user_id,
         ul.latitude,
         ul.longitude,
-        ul.updated_at,
+        ul.created_at,
         (6371 * acos(
             cos(radians(@latitude::double precision)) *
             cos(radians(ul.latitude)) *

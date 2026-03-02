@@ -8,7 +8,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgtype"
 
-	gen "github.com/Gooowan/matchup/modules/matchup/gen"
+	gen "github.com/Gooowan/matchup/modules/feed/gen"
 )
 
 type FeedParams struct {

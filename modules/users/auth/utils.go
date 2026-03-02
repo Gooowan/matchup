@@ -12,8 +12,8 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"golang.org/x/crypto/bcrypt"
 
-	coregen "github.com/Gooowan/matchup/modules/core/gen"
 	"github.com/Gooowan/matchup/modules/core/utils"
+	coregen "github.com/Gooowan/matchup/modules/users/gen"
 )
 
 func (s *AuthService) CreateJwtToken(ctx context.Context, userID pgtype.UUID) (string, time.Time, error) {

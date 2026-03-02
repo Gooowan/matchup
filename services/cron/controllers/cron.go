@@ -7,15 +7,15 @@ import (
 	"math"
 	"time"
 
-	"github.com/Gooowan/matchup/modules/core"
 	"github.com/Gooowan/matchup/modules/core/utils"
+	core "github.com/Gooowan/matchup/modules/users"
 )
 
 type CronController struct {
-	core *core.CoreService
+	core *core.UserService
 }
 
-func NewCronController(coreService *core.CoreService) *CronController {
+func NewCronController(coreService *core.UserService) *CronController {
 	return &CronController{
 		core: coreService,
 	}

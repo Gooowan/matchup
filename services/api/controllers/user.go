@@ -9,9 +9,9 @@ import (
 
 	"github.com/Gooowan/matchup/modules/core"
 	"github.com/Gooowan/matchup/modules/core/auth"
-	coregen "github.com/Gooowan/matchup/modules/core/gen"
 	"github.com/Gooowan/matchup/modules/core/types"
 	"github.com/Gooowan/matchup/modules/files"
+	coregen "github.com/Gooowan/matchup/modules/users/gen"
 )
 
 const MAX_DEPTH = 999
