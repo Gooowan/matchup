@@ -18,3 +18,16 @@ CREATE INDEX idx_users_email ON users(email);
 CREATE INDEX idx_users_email_verification_token ON users(email_verification_token);
 
 CREATE INDEX idx_users_forgot_password_token ON users(forgot_password_token);
+
+-- Seed root user (used as initial inviter / admin)
+INSERT INTO users (id, email, inviter_id, metadata, profile_data, role, password, auth_nonce)
+VALUES (
+    '00000000-0000-0000-0000-000000000001'::uuid,
+    'root@matchup.local',
+    NULL,
+    '{"seed": true}'::jsonb,
+    '{"first_name": "Root", "last_name": "User"}'::jsonb,
+    'ADMIN',
+    NULL,
+    0
+);

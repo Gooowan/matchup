@@ -109,23 +109,23 @@ services:
   #   networks:
   #     - matchup-network
 
-  web:
-    image: node:24
-    working_dir: /app
-    volumes:
-      - .env:/app/.env
-      - ./services/frontend:/app
-      - /app/node_modules
-    command: >
-      sh -c "
-        export COREPACK_ENABLE_DOWNLOAD_PROMPT=0 &&
-        corepack enable pnpm &&
-        pnpm install &&
-        pnpm run dev
-      "
-    networks:
-      matchup-network:
-        ipv4_address: 172.3.0.20
+  # web:
+  #   image: node:24
+  #   working_dir: /app
+  #   volumes:
+  #     - .env:/app/.env
+  #     - ./services/frontend:/app
+  #     - /app/node_modules
+  #   command: >
+  #     sh -c "
+  #       export COREPACK_ENABLE_DOWNLOAD_PROMPT=0 &&
+  #       corepack enable pnpm &&
+  #       pnpm install &&
+  #       pnpm run dev
+  #     "
+  #   networks:
+  #     matchup-network:
+  #       ipv4_address: 172.3.0.20
 
 volumes:
   postgres_data:
