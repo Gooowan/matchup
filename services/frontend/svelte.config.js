@@ -1,0 +1,29 @@
+import adapter from '@sveltejs/adapter-static';
+import { vitePreprocess } from '@sveltejs/vite-plugin-svelte';
+
+/** @type {import('@sveltejs/kit').Config} */
+const config = {
+	preprocess: vitePreprocess(),
+
+	kit: {
+		adapter: adapter(),
+		alias: {
+			$components: './src/lib/components',
+			$assets: './src/lib/assets',
+			$svg: './src/lib/assets/svg',
+			$stores: './src/lib/stores',
+			$utils: './src/lib/utils',
+			$types: './src/lib/types',
+		},
+		csrf: {
+			checkOrigin: false, // Temporarily disable origin checking before we figure out how to handle it
+		},
+	},
+	compilerOptions: {
+		warningFilter: (warning) =>
+			// @ts-ignore
+			!warning.filename?.includes('node_modules') && !warning.code.startsWith('a11y'),
+	},
+};
+
+export default config;

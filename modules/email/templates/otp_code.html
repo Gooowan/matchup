@@ -1,0 +1,26 @@
+{{define "otp-code"}}
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Your Verification Code</title>
+</head>
+
+<body>
+    <div>
+        <p>Here is your verification code:</p>
+
+        <div class="code">{{.Code}}</div>
+
+        <div class="expires">
+            <strong>Important:</strong> This code will expire in {{.ExpiresIn}} minutes.
+        </div>
+
+        <p>If you didn't request this code, you can safely ignore this email.</p>
+    </div>
+</body>
+
+</html>
+{{end}}

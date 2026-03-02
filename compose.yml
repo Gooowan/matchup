@@ -1,0 +1,146 @@
+services:
+  db:
+    image: postgres:18
+    hostname: db
+    env_file: 
+      - .env 
+    volumes:
+      - postgres_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $POSTGRES_USER -d $POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks:
+      desim-network:
+        ipv4_address: 172.3.0.5
+
+  redis:
+    image: valkey/valkey:8-alpine
+    volumes:
+      - valkey_data:/data
+    healthcheck:
+      test: ["CMD", "valkey-cli", "PING"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    networks:
+      desim-network:
+        ipv4_address: 172.3.0.6
+
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile.migrate
+    depends_on:
+      db:
+        condition: service_healthy
+    env_file: 
+      - .env
+    environment:
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+    networks:
+      - desim-network
+
+  minio:
+    image: minio/minio:latest
+    env_file:
+      - .env
+    volumes:
+      - minio_data:/data
+      - minio_config:/root/.minio
+    command: server /data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://127.0.0.1:9000/minio/health/live"]
+      start_period: 10s
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      desim-network:
+        ipv4_address: 172.3.0.7
+
+  api:
+    build:
+      context: .
+      args:
+        SERVICE_NAME: api
+        ARCHITECTURE: amd64
+    env_file: 
+      - .env
+    depends_on:
+      redis:
+        condition: service_healthy
+      db:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:8000/health"]
+      interval: 30s
+      timeout: 100ms
+      retries: 3
+      start_period: 10s
+    networks:
+      desim-network:
+        ipv4_address: 172.3.0.10
+
+  cron:
+    build:
+      context: .
+      args:
+        SERVICE_NAME: cron
+        ARCHITECTURE: amd64
+    env_file: 
+      - .env
+    depends_on:
+      db:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:8000/health"]
+      interval: 30s
+      timeout: 100ms
+      retries: 3
+      start_period: 10s
+    networks:
+      - desim-network
+
+  web:
+    image: node:24
+    working_dir: /app
+    volumes:
+      - .env:/app/.env
+      - ./services/frontend:/app
+      - /app/node_modules
+    command: >
+      sh -c "
+        export COREPACK_ENABLE_DOWNLOAD_PROMPT=0 &&
+        corepack enable pnpm &&
+        pnpm install &&
+        pnpm run dev
+      "
+    networks:
+      desim-network:
+        ipv4_address: 172.3.0.20
+
+volumes:
+  postgres_data:
+    driver: local
+  valkey_data:
+    driver: local
+  minio_data:
+    driver: local
+  minio_config:
+    driver: local
+
+networks:
+  desim-network:
+    driver: bridge 
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.3.0.0/24

@@ -1,0 +1,32 @@
+FROM golang:1.25.0-alpine AS schema-builder
+
+ENV GOMODCACHE=/go-cache/mod
+ENV GOCACHE=/go-cache/build
+
+WORKDIR /app
+
+COPY go.mod go.sum ./
+RUN --mount=type=cache,target=/go-cache \
+    go mod download
+
+COPY ./shared ./shared
+COPY ./modules ./modules
+COPY config.yaml ./config.yaml
+
+COPY cmd/schema-gen ./cmd/schema-gen
+
+RUN --mount=type=cache,target=/go-cache \
+    go run cmd/schema-gen/main.go --schema-only
+
+FROM alpine:3.22
+RUN apk add --no-cache postgresql-client wget tar && \
+    wget -O - https://github.com/sqldef/sqldef/releases/latest/download/psqldef_linux_amd64.tar.gz | tar xvz && \
+    mv psqldef /usr/local/bin/ && \
+    apk del wget tar
+
+COPY --from=schema-builder /app/build/combined_schema.sql /schema.sql
+COPY --from=schema-builder /app/build/combined_views.sql /views.sql
+COPY cmd/schema-gen/migrations.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+
+ENTRYPOINT ["/entrypoint.sh"]

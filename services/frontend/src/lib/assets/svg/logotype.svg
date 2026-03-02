@@ -1,0 +1,14 @@
+<svg viewBox="0 0 112 24" fill="#fff" xmlns="http://www.w3.org/2000/svg">
+  <!-- Placeholder text blocks -->
+  <rect x="0" y="4" width="75" height="4" rx="1"/>
+  <rect x="0" y="10" width="60" height="4" rx="1"/>
+  <rect x="0" y="16" width="70" height="4" rx="1"/>
+  
+  <!-- Placeholder icon (same structure as logo.svg) -->
+  <rect x="80" y="2" width="8" height="8" rx="2"/>
+  <rect x="92" y="2" width="8" height="8" rx="2"/>
+  <rect x="86" y="14" width="8" height="8" rx="2"/>
+  <circle cx="86" cy="8" r="1.5" fill="#666"/>
+  <circle cx="98" cy="8" r="1.5" fill="#666"/>
+  <circle cx="92" cy="20" r="1.5" fill="#666"/>
+</svg>

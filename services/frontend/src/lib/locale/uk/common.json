@@ -1,0 +1,22 @@
+{
+  "loading": "Завантаження...",
+  "register-button": "Зареєструватися",
+  "login-button": "Увійти",
+  "footer-terms": "Умови використання",
+  "footer-privacy": "Політика конфіденційності",
+  "footer-cookies": "Політика Cookies",
+  "header-account": "Обліковий запис",
+  "header-security": "Безпека",
+  "header-referrals": "Реферали",
+  "header-logout": "Вийти",
+  "header-admin": "Панель адміністратора",
+  "title-admin": "Панель адміністратора",
+  "title-landing": "Головна",
+  "title-login": "Увійти",
+  "title-register": "Реєстрація",
+  "title-app": "Платформа",
+  "title-id": "ID",
+  "title-team": "Команда",
+  "title-finance": "Фінанси",
+  "title-career": "Кар'єра"
+}

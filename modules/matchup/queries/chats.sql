@@ -1,0 +1,20 @@
+-- name: CreateChat :one
+INSERT INTO chats(user1_id, user2_id)
+    VALUES (@user1_id, @user2_id)
+RETURNING *;
+
+-- name: GetChat :one
+SELECT * FROM chats WHERE id = @chat_id;
+
+-- name: GetChatByUsers :one
+SELECT * FROM chats
+WHERE (user1_id = @user1_id AND user2_id = @user2_id)
+   OR (user1_id = @user2_id AND user2_id = @user1_id);
+
+-- name: ListUserChats :many
+SELECT
+    c.*,
+    CASE WHEN c.user1_id = @user_id THEN c.user2_id ELSE c.user1_id END AS other_user_id
+FROM chats c
+WHERE c.user1_id = @user_id OR c.user2_id = @user_id
+ORDER BY c.created_at DESC;

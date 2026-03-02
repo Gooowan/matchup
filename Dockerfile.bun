@@ -1,0 +1,18 @@
+FROM oven/bun:1 AS base
+ARG SERVICE_NAME=api
+WORKDIR /usr/src/app
+
+FROM base AS install
+ARG SERVICE_NAME=api
+RUN mkdir -p /temp/prod
+COPY services/${SERVICE_NAME}/package.json services/${SERVICE_NAME}/bun.lock /temp/prod/
+RUN cd /temp/prod && bun install --frozen-lockfile --production
+
+FROM base AS release
+ARG SERVICE_NAME=payments-sol
+COPY --from=install /temp/prod/node_modules node_modules
+COPY services/${SERVICE_NAME}/ .
+
+USER bun
+EXPOSE 8000
+ENTRYPOINT [ "bun", "run", "index.ts" ]
