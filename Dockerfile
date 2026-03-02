@@ -11,7 +11,6 @@ COPY go.mod go.sum ./
 RUN --mount=type=cache,target=/go-cache \
     go mod download
 
-COPY ./shared ./shared
 COPY ./modules ./modules
 COPY ./services/$SERVICE_NAME ./services/$SERVICE_NAME
 

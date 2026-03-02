@@ -9,7 +9,6 @@ COPY go.mod go.sum ./
 RUN --mount=type=cache,target=/go-cache \
     go mod download
 
-COPY ./shared ./shared
 COPY ./modules ./modules
 COPY config.yaml ./config.yaml
 
@@ -25,7 +24,7 @@ RUN apk add --no-cache postgresql-client wget tar && \
     apk del wget tar
 
 COPY --from=schema-builder /app/build/combined_schema.sql /schema.sql
-COPY --from=schema-builder /app/build/combined_views.sql /views.sql
+COPY --from=schema-builder /app/build/combined_views.sql* /views.sql
 COPY cmd/schema-gen/migrations.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 

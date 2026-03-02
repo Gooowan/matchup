@@ -2,5 +2,10 @@ name: "matchup"
 version: "1.0.0"
 modules:
   - core
+  - users
   - files
-  - matchup
+  - recommendation
+  - feed
+  - chat
+  - map
+  - moderation

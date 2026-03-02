@@ -12,7 +12,7 @@ services:
       timeout: 5s
       retries: 20
     networks:
-      desim-network:
+      matchup-network:
         ipv4_address: 172.3.0.5
 
   redis:
@@ -25,7 +25,7 @@ services:
       timeout: 5s
       retries: 20
     networks:
-      desim-network:
+      matchup-network:
         ipv4_address: 172.3.0.6
 
   migrate:
@@ -40,7 +40,7 @@ services:
     environment:
       PGPASSWORD: ${POSTGRES_PASSWORD}
     networks:
-      - desim-network
+      - matchup-network
 
   minio:
     image: minio/minio:latest
@@ -57,7 +57,7 @@ services:
       timeout: 10s
       retries: 3
     networks:
-      desim-network:
+      matchup-network:
         ipv4_address: 172.3.0.7
 
   api:
@@ -84,30 +84,30 @@ services:
       retries: 3
       start_period: 10s
     networks:
-      desim-network:
+      matchup-network:
         ipv4_address: 172.3.0.10
 
-  cron:
-    build:
-      context: .
-      args:
-        SERVICE_NAME: cron
-        ARCHITECTURE: amd64
-    env_file: 
-      - .env
-    depends_on:
-      db:
-        condition: service_healthy
-      migrate:
-        condition: service_completed_successfully
-    healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:8000/health"]
-      interval: 30s
-      timeout: 100ms
-      retries: 3
-      start_period: 10s
-    networks:
-      - desim-network
+  # cron:
+  #   build:
+  #     context: .
+  #     args:
+  #       SERVICE_NAME: cron
+  #       ARCHITECTURE: amd64
+  #   env_file: 
+  #     - .env
+  #   depends_on:
+  #     db:
+  #       condition: service_healthy
+  #     migrate:
+  #       condition: service_completed_successfully
+  #   healthcheck:
+  #     test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://127.0.0.1:8000/health"]
+  #     interval: 30s
+  #     timeout: 100ms
+  #     retries: 3
+  #     start_period: 10s
+  #   networks:
+  #     - matchup-network
 
   web:
     image: node:24
@@ -124,7 +124,7 @@ services:
         pnpm run dev
       "
     networks:
-      desim-network:
+      matchup-network:
         ipv4_address: 172.3.0.20
 
 volumes:
@@ -138,7 +138,7 @@ volumes:
     driver: local
 
 networks:
-  desim-network:
+  matchup-network:
     driver: bridge 
     ipam:
       driver: default

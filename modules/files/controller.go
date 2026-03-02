@@ -8,8 +8,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/Gooowan/matchup/modules/core"
-	"github.com/Gooowan/matchup/modules/core/auth"
+	core "github.com/Gooowan/matchup/modules/users"
+	"github.com/Gooowan/matchup/modules/users/auth"
 	"github.com/Gooowan/matchup/modules/core/types"
 	"github.com/Gooowan/matchup/modules/core/utils"
 	filesgen "github.com/Gooowan/matchup/modules/files/gen"
@@ -17,11 +17,11 @@ import (
 )
 
 type FilesController struct {
-	coreService *core.CoreService
+	coreService *core.UserService
 	fileService *FileService
 }
 
-func NewFilesController(coreService *core.CoreService, fileService *FileService) *FilesController {
+func NewFilesController(coreService *core.UserService, fileService *FileService) *FilesController {
 	return &FilesController{
 		coreService: coreService,
 		fileService: fileService,

@@ -8,17 +8,30 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	gen "github.com/Gooowan/matchup/modules/chat/gen"
 	"github.com/Gooowan/matchup/modules/core/utils"
-	gen "github.com/Gooowan/matchup/modules/matchup/gen"
+	"github.com/Gooowan/matchup/modules/moderation"
 )
 
 type ChatService struct {
-	DB      *pgxpool.Pool
-	Queries *gen.Queries
+	DB            *pgxpool.Pool
+	Queries       *gen.Queries
+	ModerationSvc *moderation.ModerationService
 }
 
-func NewChatService(db *pgxpool.Pool, queries *gen.Queries) *ChatService {
-	return &ChatService{DB: db, Queries: queries}
+func NewChatService(db *pgxpool.Pool, moderationSvc *moderation.ModerationService) *ChatService {
+	return &ChatService{DB: db, Queries: gen.New(db), ModerationSvc: moderationSvc}
+}
+
+func (s *ChatService) CreateChat(ctx context.Context, user1ID, user2ID pgtype.UUID) (pgtype.UUID, error) {
+	chat, err := s.Queries.CreateChat(ctx, gen.CreateChatParams{
+		User1ID: user1ID,
+		User2ID: user2ID,
+	})
+	if err != nil {
+		return pgtype.UUID{}, err
+	}
+	return chat.ID, nil
 }
 
 func (s *ChatService) ListChats(ctx context.Context, userID pgtype.UUID) ([]gen.ChatDTO, error) {
@@ -94,10 +107,7 @@ func (s *ChatService) SendMessage(ctx context.Context, chatID, senderID pgtype.U
 		otherID = chat.User1ID
 	}
 
-	blocked, err := s.Queries.IsBlocked(ctx, gen.IsBlockedParams{
-		User1ID: senderID,
-		User2ID: otherID,
-	})
+	blocked, err := s.ModerationSvc.IsBlocked(ctx, senderID, otherID)
 	if err == nil && blocked {
 		return nil, fmt.Errorf("cannot send message to blocked user")
 	}

@@ -5,7 +5,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/Gooowan/matchup/modules/core/auth"
+	"github.com/Gooowan/matchup/modules/users/auth"
 	"github.com/Gooowan/matchup/modules/core/types"
 	"github.com/Gooowan/matchup/modules/core/utils"
 )

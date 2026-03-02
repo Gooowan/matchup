@@ -7,8 +7,8 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/Gooowan/matchup/modules/core"
-	"github.com/Gooowan/matchup/modules/core/auth"
+	core "github.com/Gooowan/matchup/modules/users"
+	"github.com/Gooowan/matchup/modules/users/auth"
 	"github.com/Gooowan/matchup/modules/core/types"
 	"github.com/Gooowan/matchup/modules/files"
 	coregen "github.com/Gooowan/matchup/modules/users/gen"
@@ -17,10 +17,10 @@ import (
 const MAX_DEPTH = 999
 
 type UserController struct {
-	core *core.CoreService
+	core *core.UserService
 }
 
-func NewUserController(coreService *core.CoreService) *UserController {
+func NewUserController(coreService *core.UserService) *UserController {
 	return &UserController{
 		core: coreService,
 	}

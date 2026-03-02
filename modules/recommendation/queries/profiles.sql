@@ -39,3 +39,26 @@ WHERE p.user_id = @user_id AND p.visible = true;
 
 -- name: DeleteProfile :exec
 DELETE FROM profiles WHERE user_id = @user_id;
+
+-- name: FindNearbyVisibleProfiles :many
+SELECT
+    p.id, p.user_id, p.dance_styles, p.dance_role, p.dance_level,
+    p.height_cm, p.bio, p.birth_date, p.gender, p.city,
+    p.latitude, p.longitude, p.media_urls,
+    u.profile_data,
+    (6371 * acos(
+        cos(radians(@latitude::double precision)) *
+        cos(radians(p.latitude)) *
+        cos(radians(p.longitude) - radians(@longitude::double precision)) +
+        sin(radians(@latitude::double precision)) *
+        sin(radians(p.latitude))
+    ))::double precision AS distance_km
+FROM profiles p
+JOIN users u ON u.id = p.user_id
+WHERE p.visible = true
+  AND p.user_id != @user_id
+  AND p.latitude IS NOT NULL
+  AND p.longitude IS NOT NULL
+  AND NOT (p.user_id = ANY(@exclude_ids::uuid[]))
+ORDER BY distance_km ASC
+LIMIT @limit_val;

@@ -42,6 +42,17 @@ type Match struct {
 	CreatedAt  pgtype.Timestamp `db:"created_at" json:"created_at"`
 }
 
+type Medium struct {
+	ID          pgtype.UUID      `db:"id" json:"id"`
+	OwnerID     pgtype.UUID      `db:"owner_id" json:"owner_id"`
+	FileKey     string           `db:"file_key" json:"file_key"`
+	FileSize    int64            `db:"file_size" json:"file_size"`
+	ContentType string           `db:"content_type" json:"content_type"`
+	Visible     bool             `db:"visible" json:"visible"`
+	CreatedAt   pgtype.Timestamp `db:"created_at" json:"created_at"`
+	UpdatedAt   pgtype.Timestamp `db:"updated_at" json:"updated_at"`
+}
+
 type Message struct {
 	ID        pgtype.UUID      `db:"id" json:"id"`
 	ChatID    pgtype.UUID      `db:"chat_id" json:"chat_id"`

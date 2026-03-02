@@ -5,10 +5,10 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/Gooowan/matchup/modules/core/auth"
 	"github.com/Gooowan/matchup/modules/core/types"
 	"github.com/Gooowan/matchup/modules/core/utils"
-	gen "github.com/Gooowan/matchup/modules/matchup/gen"
+	gen "github.com/Gooowan/matchup/modules/map/gen"
+	"github.com/Gooowan/matchup/modules/users/auth"
 )
 
 type MapController struct {
@@ -170,7 +170,4 @@ func (c *MapController) RegisterRoutes(rg *gin.RouterGroup, userAuth gin.Handler
 
 	rg.POST("/nearby/count", c.FindNearbyByCount)
 	rg.POST("/nearby/radius", c.FindNearbyByRadius)
-
-	// TODO: GET /map/dancers?lat=..&lng=..&radius_km=.. with filter params
-	// TODO: GET /map/schools?lat=..&lng=..&radius_km=..
 }

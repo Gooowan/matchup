@@ -4,16 +4,17 @@ import (
 	"context"
 
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 
-	gen "github.com/Gooowan/matchup/modules/matchup/gen"
+	gen "github.com/Gooowan/matchup/modules/moderation/gen"
 )
 
 type ModerationService struct {
 	Queries *gen.Queries
 }
 
-func NewModerationService(queries *gen.Queries) *ModerationService {
-	return &ModerationService{Queries: queries}
+func NewModerationService(db *pgxpool.Pool) *ModerationService {
+	return &ModerationService{Queries: gen.New(db)}
 }
 
 func (s *ModerationService) BlockUser(ctx context.Context, blockerID, blockedID pgtype.UUID) error {

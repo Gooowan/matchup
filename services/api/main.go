@@ -13,15 +13,18 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/valkey-io/valkey-go"
 
+	"github.com/Gooowan/matchup/modules/chat"
 	"github.com/Gooowan/matchup/modules/core/db"
 	"github.com/Gooowan/matchup/modules/email"
 	"github.com/Gooowan/matchup/modules/email/providers"
+	"github.com/Gooowan/matchup/modules/feed"
 	"github.com/Gooowan/matchup/modules/files"
+	mapmod "github.com/Gooowan/matchup/modules/map"
+	"github.com/Gooowan/matchup/modules/moderation"
+	"github.com/Gooowan/matchup/modules/recommendation"
 	core "github.com/Gooowan/matchup/modules/users"
 	"github.com/Gooowan/matchup/modules/users/auth"
 	"github.com/Gooowan/matchup/services/api/controllers"
-
-	matchupmod "github.com/Gooowan/matchup/modules/matchup"
 
 	// "github.com/Gooowan/matchup/modules/otp"
 	"github.com/Gooowan/matchup/modules/ratelimit"
@@ -107,13 +110,25 @@ func main() {
 	// Initialize OTP service
 	// otpService := otp.NewOTPService(valkeyClient, emailService)
 
-	matchupModule := matchupmod.NewMatchupModule(dbpool)
+	// Initialize module services
+	moderationSvc := moderation.NewModerationService(dbpool)
+	recommendationSvc := recommendation.NewRecommendationService(dbpool)
+	chatSvc := chat.NewChatService(dbpool, moderationSvc)
+	feedSvc := feed.NewFeedService(dbpool, chatSvc, moderationSvc, recommendationSvc)
+	mapSvc := mapmod.NewMapService(dbpool, recommendationSvc)
 
+	// Initialize controllers
 	authController := auth.NewAuthController(authService)
 	userController := controllers.NewUserController(coreService)
 	filesController := files.NewFilesController(coreService, fileService)
 	fileAdminController := files.NewFileAdminController(fileService)
 	adminController := core.NewAdminController(coreService)
+
+	recommendationCtrl := recommendation.NewRecommendationController(recommendationSvc)
+	feedCtrl := feed.NewFeedController(feedSvc)
+	chatCtrl := chat.NewChatController(chatSvc)
+	mapCtrl := mapmod.NewMapController(mapSvc)
+	moderationCtrl := moderation.NewModerationController(moderationSvc)
 
 	r := gin.Default()
 
@@ -145,10 +160,32 @@ func main() {
 	userGroup := r.Group("/user")
 	userController.RegisterRoutes(userGroup, userAuth, filesController, authController)
 
-	matchupModule.RegisterRoutes(r, userAuth)
+	// Profile & preferences: /me/...
+	meGroup := r.Group("/me")
+	recommendationCtrl.RegisterRoutes(meGroup, userAuth)
+
+	// Feed & swipe: /matchup/...
+	matchupGroup := r.Group("/matchup")
+	feedCtrl.RegisterRoutes(matchupGroup, userAuth)
+
+	// Chats: /chats/...
+	chatsGroup := r.Group("/chats")
+	chatCtrl.RegisterRoutes(chatsGroup, userAuth)
+
+	// Map: /map/...
+	mapGroup := r.Group("/map")
+	mapCtrl.RegisterRoutes(mapGroup, userAuth)
+
+	// Profile preview (authenticated, but views other users)
+	profilesGroup := r.Group("/profiles")
+	profilesGroup.Use(userAuth)
+	profilesGroup.GET("/:userId/preview", recommendationCtrl.GetProfilePreview)
+
+	// Moderation: /users/:userId/block, /users/:userId/report
+	moderationCtrl.RegisterRoutes(r, userAuth)
 
 	// Public marketing materials routes (no authentication required)
-	marketingGroup := r.Group("/marketing")
+	marketingGroup := r.Group("/media")
 	marketingGroup.GET("", filesController.ListVisibleMaterials)
 	marketingGroup.GET("/:id/download", filesController.GetMaterialDownloadURL)
 

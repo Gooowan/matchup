@@ -8,32 +8,33 @@ import (
 
 	"github.com/jackc/pgx/v5/pgtype"
 
-	gen "github.com/Gooowan/matchup/modules/feed/gen"
+	"github.com/Gooowan/matchup/modules/recommendation"
+	recgen "github.com/Gooowan/matchup/modules/recommendation/gen"
 )
 
 type FeedParams struct {
 	UserID     pgtype.UUID
 	Latitude   float64
 	Longitude  float64
-	Prefs      *gen.UserPreference
+	Prefs      *recgen.UserPreference
 	ExcludeIDs []pgtype.UUID
 	Limit      int32
 }
 
 type RecommendationProvider interface {
-	GetFeed(ctx context.Context, params FeedParams) ([]gen.FindNearbyVisibleProfilesRow, error)
+	GetFeed(ctx context.Context, params FeedParams) ([]recgen.FindNearbyVisibleProfilesRow, error)
 }
 
 // NearestCandidatesProvider ranks by distance and filters by preferences
 type NearestCandidatesProvider struct {
-	Queries *gen.Queries
+	RecommendationSvc *recommendation.RecommendationService
 }
 
-func NewNearestCandidatesProvider(queries *gen.Queries) *NearestCandidatesProvider {
-	return &NearestCandidatesProvider{Queries: queries}
+func NewNearestCandidatesProvider(recommendationSvc *recommendation.RecommendationService) *NearestCandidatesProvider {
+	return &NearestCandidatesProvider{RecommendationSvc: recommendationSvc}
 }
 
-func (p *NearestCandidatesProvider) GetFeed(ctx context.Context, params FeedParams) ([]gen.FindNearbyVisibleProfilesRow, error) {
+func (p *NearestCandidatesProvider) GetFeed(ctx context.Context, params FeedParams) ([]recgen.FindNearbyVisibleProfilesRow, error) {
 	maxDist := 100.0 // default 100km
 	if params.Prefs != nil && params.Prefs.MaxDistanceKm.Valid && params.Prefs.MaxDistanceKm.Float64 > 0 {
 		maxDist = params.Prefs.MaxDistanceKm.Float64
@@ -45,7 +46,7 @@ func (p *NearestCandidatesProvider) GetFeed(ctx context.Context, params FeedPara
 		fetchLimit = 30
 	}
 
-	candidates, err := p.Queries.FindNearbyVisibleProfiles(ctx, gen.FindNearbyVisibleProfilesParams{
+	candidates, err := p.RecommendationSvc.FindNearbyVisibleProfiles(ctx, recgen.FindNearbyVisibleProfilesParams{
 		Latitude:   params.Latitude,
 		Longitude:  params.Longitude,
 		UserID:     params.UserID,
@@ -57,7 +58,7 @@ func (p *NearestCandidatesProvider) GetFeed(ctx context.Context, params FeedPara
 	}
 
 	// filter by distance and preferences
-	var filtered []gen.FindNearbyVisibleProfilesRow
+	var filtered []recgen.FindNearbyVisibleProfilesRow
 	for _, c := range candidates {
 		if c.DistanceKm > maxDist {
 			continue
@@ -76,16 +77,16 @@ func (p *NearestCandidatesProvider) GetFeed(ctx context.Context, params FeedPara
 
 // RandomFallbackProvider returns random visible profiles (used if primary returns empty)
 type RandomFallbackProvider struct {
-	Queries *gen.Queries
+	RecommendationSvc *recommendation.RecommendationService
 }
 
-func NewRandomFallbackProvider(queries *gen.Queries) *RandomFallbackProvider {
-	return &RandomFallbackProvider{Queries: queries}
+func NewRandomFallbackProvider(recommendationSvc *recommendation.RecommendationService) *RandomFallbackProvider {
+	return &RandomFallbackProvider{RecommendationSvc: recommendationSvc}
 }
 
-func (p *RandomFallbackProvider) GetFeed(ctx context.Context, params FeedParams) ([]gen.FindNearbyVisibleProfilesRow, error) {
+func (p *RandomFallbackProvider) GetFeed(ctx context.Context, params FeedParams) ([]recgen.FindNearbyVisibleProfilesRow, error) {
 	// fetch more candidates and shuffle
-	candidates, err := p.Queries.FindNearbyVisibleProfiles(ctx, gen.FindNearbyVisibleProfilesParams{
+	candidates, err := p.RecommendationSvc.FindNearbyVisibleProfiles(ctx, recgen.FindNearbyVisibleProfilesParams{
 		Latitude:   params.Latitude,
 		Longitude:  params.Longitude,
 		UserID:     params.UserID,
@@ -112,7 +113,7 @@ type FallbackProvider struct {
 	Fallback RecommendationProvider
 }
 
-func (p *FallbackProvider) GetFeed(ctx context.Context, params FeedParams) ([]gen.FindNearbyVisibleProfilesRow, error) {
+func (p *FallbackProvider) GetFeed(ctx context.Context, params FeedParams) ([]recgen.FindNearbyVisibleProfilesRow, error) {
 	result, err := p.Primary.GetFeed(ctx, params)
 	if err == nil && len(result) > 0 {
 		return result, nil
@@ -122,7 +123,7 @@ func (p *FallbackProvider) GetFeed(ctx context.Context, params FeedParams) ([]ge
 
 // preference matching helpers
 
-func matchesPreferences(c gen.FindNearbyVisibleProfilesRow, prefs *gen.UserPreference) bool {
+func matchesPreferences(c recgen.FindNearbyVisibleProfilesRow, prefs *recgen.UserPreference) bool {
 	if prefs.PreferredRole.Valid && prefs.PreferredRole.String != "" && c.DanceRole.Valid {
 		if !roleCompatible(prefs.PreferredRole.String, c.DanceRole.String) {
 			return false

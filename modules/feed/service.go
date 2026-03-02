@@ -8,22 +8,32 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	gen "github.com/Gooowan/matchup/modules/matchup/gen"
+	"github.com/Gooowan/matchup/modules/chat"
+	"github.com/Gooowan/matchup/modules/feed/gen"
+	"github.com/Gooowan/matchup/modules/moderation"
+	"github.com/Gooowan/matchup/modules/recommendation"
+	recgen "github.com/Gooowan/matchup/modules/recommendation/gen"
 )
 
 type FeedService struct {
-	DB          *pgxpool.Pool
-	Queries     *gen.Queries
-	Recommender RecommendationProvider
+	DB                *pgxpool.Pool
+	Queries           *gen.Queries
+	ChatSvc           *chat.ChatService
+	ModerationSvc     *moderation.ModerationService
+	RecommendationSvc *recommendation.RecommendationService
+	Recommender       RecommendationProvider
 }
 
-func NewFeedService(db *pgxpool.Pool, queries *gen.Queries) *FeedService {
-	primary := NewNearestCandidatesProvider(queries)
-	fallback := NewRandomFallbackProvider(queries)
+func NewFeedService(db *pgxpool.Pool, chatSvc *chat.ChatService, moderationSvc *moderation.ModerationService, recommendationSvc *recommendation.RecommendationService) *FeedService {
+	primary := NewNearestCandidatesProvider(recommendationSvc)
+	fallback := NewRandomFallbackProvider(recommendationSvc)
 
 	return &FeedService{
-		DB:      db,
-		Queries: queries,
+		DB:                db,
+		Queries:           gen.New(db),
+		ChatSvc:           chatSvc,
+		ModerationSvc:     moderationSvc,
+		RecommendationSvc: recommendationSvc,
 		Recommender: &FallbackProvider{
 			Primary:  primary,
 			Fallback: fallback,
@@ -31,8 +41,8 @@ func NewFeedService(db *pgxpool.Pool, queries *gen.Queries) *FeedService {
 	}
 }
 
-func (s *FeedService) GetFeed(ctx context.Context, userID pgtype.UUID, limit int32) ([]gen.FindNearbyVisibleProfilesRow, error) {
-	profile, err := s.Queries.GetProfileByUserID(ctx, userID)
+func (s *FeedService) GetFeed(ctx context.Context, userID pgtype.UUID, limit int32) ([]recgen.FindNearbyVisibleProfilesRow, error) {
+	profile, err := s.RecommendationSvc.GetProfile(ctx, userID)
 	if err != nil {
 		return nil, fmt.Errorf("profile required to get feed: %w", err)
 	}
@@ -43,13 +53,13 @@ func (s *FeedService) GetFeed(ctx context.Context, userID pgtype.UUID, limit int
 
 	// build exclude list: swiped + blocked
 	swipedIDs, _ := s.Queries.GetSwipedUserIDs(ctx, userID)
-	blockedIDs, _ := s.Queries.GetBlockedUserIDs(ctx, userID)
+	blockedIDs, _ := s.ModerationSvc.GetBlockedIDs(ctx, userID)
 
 	excludeIDs := make([]pgtype.UUID, 0, len(swipedIDs)+len(blockedIDs))
 	excludeIDs = append(excludeIDs, swipedIDs...)
 	excludeIDs = append(excludeIDs, blockedIDs...)
 
-	prefs, _ := s.Queries.GetPreferences(ctx, userID)
+	prefs, _ := s.RecommendationSvc.GetPreferences(ctx, userID)
 
 	return s.Recommender.GetFeed(ctx, FeedParams{
 		UserID:     userID,
@@ -93,22 +103,21 @@ func (s *FeedService) Swipe(ctx context.Context, fromUserID, toUserID pgtype.UUI
 		})
 		if err == nil && isMutual {
 			result.IsMutualMatch = true
-
-			// order UUIDs for consistent UNIQUE constraint
-			u1, u2 := orderUUIDs(fromUserID, toUserID)
-			chat, err := qtx.CreateChat(ctx, gen.CreateChatParams{
-				User1ID: u1,
-				User2ID: u2,
-			})
-			if err != nil {
-				return nil, fmt.Errorf("failed to create chat: %w", err)
-			}
-			result.ChatID = &chat.ID
 		}
 	}
 
 	if err := tx.Commit(ctx); err != nil {
 		return nil, fmt.Errorf("failed to commit: %w", err)
+	}
+
+	// Create chat on mutual match (separate from match transaction)
+	if result.IsMutualMatch {
+		u1, u2 := orderUUIDs(fromUserID, toUserID)
+		chatID, err := s.ChatSvc.CreateChat(ctx, u1, u2)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create chat: %w", err)
+		}
+		result.ChatID = &chatID
 	}
 
 	return result, nil

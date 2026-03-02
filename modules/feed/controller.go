@@ -6,10 +6,10 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/Gooowan/matchup/modules/core/auth"
 	"github.com/Gooowan/matchup/modules/core/types"
 	"github.com/Gooowan/matchup/modules/core/utils"
-	gen "github.com/Gooowan/matchup/modules/matchup/gen"
+	recgen "github.com/Gooowan/matchup/modules/recommendation/gen"
+	"github.com/Gooowan/matchup/modules/users/auth"
 )
 
 type FeedController struct {
@@ -40,7 +40,7 @@ func (c *FeedController) GetFeed(ctx *gin.Context) {
 		return
 	}
 
-	dtos := make([]gen.FeedCandidateDTO, len(candidates))
+	dtos := make([]recgen.FeedCandidateDTO, len(candidates))
 	for i, c := range candidates {
 		dtos[i] = c.ToFeedDTO()
 	}
