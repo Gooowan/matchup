@@ -42,7 +42,7 @@ func NewFeedService(db *pgxpool.Pool, chatSvc *chat.ChatService, moderationSvc *
 }
 
 func (s *FeedService) GetFeed(ctx context.Context, userID pgtype.UUID, limit int32) ([]recgen.FindNearbyVisibleProfilesRow, error) {
-	profile, err := s.RecommendationSvc.GetProfile(ctx, userID)
+	profile, err := s.RecommendationSvc.Queries.GetProfileByUserID(ctx, userID)
 	if err != nil {
 		return nil, fmt.Errorf("profile required to get feed: %w", err)
 	}
@@ -53,13 +53,13 @@ func (s *FeedService) GetFeed(ctx context.Context, userID pgtype.UUID, limit int
 
 	// build exclude list: swiped + blocked
 	swipedIDs, _ := s.Queries.GetSwipedUserIDs(ctx, userID)
-	blockedIDs, _ := s.ModerationSvc.GetBlockedIDs(ctx, userID)
+	blockedIDs, _ := s.ModerationSvc.Queries.GetBlockedUserIDs(ctx, userID)
 
 	excludeIDs := make([]pgtype.UUID, 0, len(swipedIDs)+len(blockedIDs))
 	excludeIDs = append(excludeIDs, swipedIDs...)
 	excludeIDs = append(excludeIDs, blockedIDs...)
 
-	prefs, _ := s.RecommendationSvc.GetPreferences(ctx, userID)
+	prefs, _ := s.RecommendationSvc.Queries.GetPreferences(ctx, userID)
 
 	return s.Recommender.GetFeed(ctx, FeedParams{
 		UserID:     userID,

@@ -11,6 +11,7 @@ import (
 	gen "github.com/Gooowan/matchup/modules/chat/gen"
 	"github.com/Gooowan/matchup/modules/core/utils"
 	"github.com/Gooowan/matchup/modules/moderation"
+	modgen "github.com/Gooowan/matchup/modules/moderation/gen"
 )
 
 type ChatService struct {
@@ -107,7 +108,10 @@ func (s *ChatService) SendMessage(ctx context.Context, chatID, senderID pgtype.U
 		otherID = chat.User1ID
 	}
 
-	blocked, err := s.ModerationSvc.IsBlocked(ctx, senderID, otherID)
+	blocked, err := s.ModerationSvc.Queries.IsBlocked(ctx, modgen.IsBlockedParams{
+		User1ID: senderID,
+		User2ID: otherID,
+	})
 	if err == nil && blocked {
 		return nil, fmt.Errorf("cannot send message to blocked user")
 	}

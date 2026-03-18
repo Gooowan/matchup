@@ -5,9 +5,10 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/Gooowan/matchup/modules/users/auth"
 	"github.com/Gooowan/matchup/modules/core/types"
 	"github.com/Gooowan/matchup/modules/core/utils"
+	gen "github.com/Gooowan/matchup/modules/moderation/gen"
+	"github.com/Gooowan/matchup/modules/users/auth"
 )
 
 type ModerationController struct {
@@ -31,7 +32,10 @@ func (c *ModerationController) BlockUser(ctx *gin.Context) {
 		return
 	}
 
-	if err := c.svc.BlockUser(ctx.Request.Context(), user.ID, targetID); err != nil {
+	if err := c.svc.Queries.CreateBlock(ctx.Request.Context(), gen.CreateBlockParams{
+		BlockerID: user.ID,
+		BlockedID: targetID,
+	}); err != nil {
 		ctx.JSON(http.StatusInternalServerError, types.Resp{Error: "Failed to block user"})
 		return
 	}
@@ -52,7 +56,10 @@ func (c *ModerationController) UnblockUser(ctx *gin.Context) {
 		return
 	}
 
-	if err := c.svc.UnblockUser(ctx.Request.Context(), user.ID, targetID); err != nil {
+	if err := c.svc.Queries.DeleteBlock(ctx.Request.Context(), gen.DeleteBlockParams{
+		BlockerID: user.ID,
+		BlockedID: targetID,
+	}); err != nil {
 		ctx.JSON(http.StatusInternalServerError, types.Resp{Error: "Failed to unblock user"})
 		return
 	}

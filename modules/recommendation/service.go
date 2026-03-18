@@ -21,33 +21,6 @@ func NewRecommendationService(db *pgxpool.Pool) *RecommendationService {
 	return &RecommendationService{DB: db, Queries: gen.New(db)}
 }
 
-func (s *RecommendationService) CreateProfile(ctx context.Context, userID pgtype.UUID, params gen.CreateProfileParams) (gen.Profile, error) {
-	params.UserID = userID
-	return s.Queries.CreateProfile(ctx, params)
-}
-
-func (s *RecommendationService) GetProfile(ctx context.Context, userID pgtype.UUID) (gen.Profile, error) {
-	return s.Queries.GetProfileByUserID(ctx, userID)
-}
-
-func (s *RecommendationService) UpdateProfile(ctx context.Context, userID pgtype.UUID, params gen.UpdateProfileParams) error {
-	params.UserID = userID
-	return s.Queries.UpdateProfile(ctx, params)
-}
-
-func (s *RecommendationService) GetProfilePreview(ctx context.Context, userID pgtype.UUID) (gen.GetProfilePreviewRow, error) {
-	return s.Queries.GetProfilePreview(ctx, userID)
-}
-
-func (s *RecommendationService) GetPreferences(ctx context.Context, userID pgtype.UUID) (gen.UserPreference, error) {
-	return s.Queries.GetPreferences(ctx, userID)
-}
-
-func (s *RecommendationService) UpsertPreferences(ctx context.Context, userID pgtype.UUID, params gen.UpsertPreferencesParams) (gen.UserPreference, error) {
-	params.UserID = userID
-	return s.Queries.UpsertPreferences(ctx, params)
-}
-
 // getProfileData extracts the data JSONB from a profile as a map
 func getProfileData(data types.JSONB) types.JSONB {
 	if data == nil {
@@ -64,7 +37,6 @@ func (s *RecommendationService) AddMediaURL(ctx context.Context, userID pgtype.U
 
 	data := getProfileData(profile.Data)
 
-	// Extract existing media_urls from JSONB
 	var urls []string
 	if raw, ok := data["media_urls"]; ok {
 		b, _ := json.Marshal(raw)
@@ -105,8 +77,4 @@ func (s *RecommendationService) RemoveMediaURL(ctx context.Context, userID pgtyp
 		Data:   data,
 		UserID: userID,
 	})
-}
-
-func (s *RecommendationService) FindNearbyVisibleProfiles(ctx context.Context, params gen.FindNearbyVisibleProfilesParams) ([]gen.FindNearbyVisibleProfilesRow, error) {
-	return s.Queries.FindNearbyVisibleProfiles(ctx, params)
 }

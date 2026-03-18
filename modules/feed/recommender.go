@@ -49,7 +49,7 @@ func (p *NearestCandidatesProvider) GetFeed(ctx context.Context, params FeedPara
 		fetchLimit = 30
 	}
 
-	candidates, err := p.RecommendationSvc.FindNearbyVisibleProfiles(ctx, recgen.FindNearbyVisibleProfilesParams{
+	candidates, err := p.RecommendationSvc.Queries.FindNearbyVisibleProfiles(ctx, recgen.FindNearbyVisibleProfilesParams{
 		Latitude:   params.Latitude,
 		Longitude:  params.Longitude,
 		UserID:     params.UserID,
@@ -89,7 +89,7 @@ func NewRandomFallbackProvider(recommendationSvc *recommendation.RecommendationS
 
 func (p *RandomFallbackProvider) GetFeed(ctx context.Context, params FeedParams) ([]recgen.FindNearbyVisibleProfilesRow, error) {
 	// fetch more candidates and shuffle
-	candidates, err := p.RecommendationSvc.FindNearbyVisibleProfiles(ctx, recgen.FindNearbyVisibleProfilesParams{
+	candidates, err := p.RecommendationSvc.Queries.FindNearbyVisibleProfiles(ctx, recgen.FindNearbyVisibleProfilesParams{
 		Latitude:   params.Latitude,
 		Longitude:  params.Longitude,
 		UserID:     params.UserID,

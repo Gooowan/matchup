@@ -73,6 +73,17 @@ type Report struct {
 	CreatedAt  pgtype.Timestamp `db:"created_at" json:"created_at"`
 }
 
+type Subscription struct {
+	ID           pgtype.UUID      `db:"id" json:"id"`
+	Name         string           `db:"name" json:"name"`
+	Description  pgtype.Text      `db:"description" json:"description"`
+	DurationDays int32            `db:"duration_days" json:"duration_days"`
+	PriceCents   int64            `db:"price_cents" json:"price_cents"`
+	IsActive     bool             `db:"is_active" json:"is_active"`
+	CreatedAt    pgtype.Timestamp `db:"created_at" json:"created_at"`
+	UpdatedAt    pgtype.Timestamp `db:"updated_at" json:"updated_at"`
+}
+
 type User struct {
 	ID                     pgtype.UUID      `db:"id" json:"id"`
 	Email                  pgtype.Text      `db:"email" json:"email"`
@@ -101,4 +112,33 @@ type UserPreference struct {
 	Data      types.JSONB      `db:"data" json:"data"`
 	CreatedAt pgtype.Timestamp `db:"created_at" json:"created_at"`
 	UpdatedAt pgtype.Timestamp `db:"updated_at" json:"updated_at"`
+}
+
+type UserSubscription struct {
+	ID             pgtype.UUID      `db:"id" json:"id"`
+	UserID         pgtype.UUID      `db:"user_id" json:"user_id"`
+	SubscriptionID pgtype.UUID      `db:"subscription_id" json:"subscription_id"`
+	Status         string           `db:"status" json:"status"`
+	StartedAt      pgtype.Timestamp `db:"started_at" json:"started_at"`
+	ExpiredAt      pgtype.Timestamp `db:"expired_at" json:"expired_at"`
+}
+
+type UserSubscriptionsExpiring1d struct {
+	ID               pgtype.UUID      `db:"id" json:"id"`
+	UserID           pgtype.UUID      `db:"user_id" json:"user_id"`
+	SubscriptionID   pgtype.UUID      `db:"subscription_id" json:"subscription_id"`
+	Status           string           `db:"status" json:"status"`
+	StartedAt        pgtype.Timestamp `db:"started_at" json:"started_at"`
+	ExpiredAt        pgtype.Timestamp `db:"expired_at" json:"expired_at"`
+	SubscriptionName string           `db:"subscription_name" json:"subscription_name"`
+}
+
+type UserSubscriptionsExpiring1w struct {
+	ID               pgtype.UUID      `db:"id" json:"id"`
+	UserID           pgtype.UUID      `db:"user_id" json:"user_id"`
+	SubscriptionID   pgtype.UUID      `db:"subscription_id" json:"subscription_id"`
+	Status           string           `db:"status" json:"status"`
+	StartedAt        pgtype.Timestamp `db:"started_at" json:"started_at"`
+	ExpiredAt        pgtype.Timestamp `db:"expired_at" json:"expired_at"`
+	SubscriptionName string           `db:"subscription_name" json:"subscription_name"`
 }

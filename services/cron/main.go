@@ -1,60 +1,51 @@
 package main
 
-//
+import (
+	"log"
+	"net/http"
 
-// import (
-// 	"log"
-// 	"net/http"
+	"github.com/gin-gonic/gin"
+	"github.com/robfig/cron/v3"
 
-// 	"github.com/gin-gonic/gin"
-// 	"github.com/robfig/cron/v3"
+	"github.com/Gooowan/matchup/modules/core/db"
+	"github.com/Gooowan/matchup/modules/subscriptions"
+	"github.com/Gooowan/matchup/services/cron/controllers"
+)
 
-// 	core "github.com/Gooowan/matchup/modules/users"
-// 	"github.com/Gooowan/matchup/modules/core/db"
-// 	"github.com/Gooowan/matchup/services/cron/controllers"
-// )
+func main() {
+	dbpool, err := db.PostgresConnect()
+	if err != nil {
+		log.Fatalf("Error connecting to database: %v", err)
+	}
+	defer dbpool.Close()
 
-// func main() {
-// 	dbpool, err := db.PostgresConnect()
-// 	if err != nil {
-// 		log.Fatalf("Error connecting to database: %v", err)
-// 	}
-// 	defer dbpool.Close()
+	subscriptionSvc := subscriptions.NewSubscriptionService(dbpool)
+	cronController := controllers.NewCronController(subscriptionSvc)
 
-// 	coreService := core.NewCoreService(dbpool)
+	c := cron.New(cron.WithSeconds())
 
-// 	cronController := controllers.NewCronController(coreService, paymentsService, desimService)
+	// Expire active subscriptions past their expiry date (every 5 minutes)
+	if _, err := c.AddFunc("0 */5 * * * *", cronController.ExpireSubscriptions); err != nil {
+		log.Fatalf("[CRON] Error scheduling ExpireSubscriptions: %v", err)
+	}
 
-// 	c := cron.New(cron.WithSeconds())
+	// Check for subscriptions expiring within 1 day (once per hour)
+	if _, err := c.AddFunc("0 0 * * * *", cronController.NotifyExpiringSoon); err != nil {
+		log.Fatalf("[CRON] Error scheduling NotifyExpiringSoon: %v", err)
+	}
 
-// 	_, err = c.AddFunc("@every 30s", cronController.ExpirePendingInvoices)
-// 	if err != nil {
-// 		log.Fatalf("[CRON] Error scheduling ExpirePendingInvoices job: %v", err)
-// 	}
+	c.Start()
+	log.Println("[CRON] service started")
 
-// 	if _, err = c.AddFunc("@every 40s", cronController.RefreshReferralStuff); err != nil {
-// 		log.Fatalf("[CRON] Error scheduling RefreshUserPersonalTurnover job: %v", err)
-// 	}
+	r := gin.Default()
+	r.GET("/health", func(c *gin.Context) {
+		c.String(http.StatusOK, "OK")
+	})
+	r.HEAD("/health", func(c *gin.Context) {
+		c.String(http.StatusOK, "OK")
+	})
 
-// 	if _, err = c.AddFunc("0 0 0 * * *", cronController.DepositDailyAccruedBalance); err != nil {
-// 		log.Fatalf("[CRON] Error scheduling DepositDailyAccruedBalance job: %v", err)
-// 	}
-
-// 	c.Start()
-// 	log.Println("[CRON] service started")
-
-// 	r := gin.Default()
-// 	r.GET("/health", func(c *gin.Context) {
-// 		c.String(http.StatusOK, "OK")
-// 	})
-// 	r.HEAD("/health", func(c *gin.Context) {
-// 		c.String(http.StatusOK, "OK")
-// 	})
-
-// 	cronController.DepositDailyAccruedBalance()
-// 	cronController.RefreshReferralStuff()
-
-// 	if err := r.Run(":8000"); err != nil {
-// 		log.Fatalf("Failed to start server: %v", err)
-// 	}
-// }
+	if err := r.Run(":8001"); err != nil {
+		log.Fatalf("Failed to start cron health server: %v", err)
+	}
+}

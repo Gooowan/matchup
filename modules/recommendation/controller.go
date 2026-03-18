@@ -27,7 +27,7 @@ func (c *RecommendationController) GetProfile(ctx *gin.Context) {
 		return
 	}
 
-	profile, err := c.svc.GetProfile(ctx.Request.Context(), user.ID)
+	profile, err := c.svc.Queries.GetProfileByUserID(ctx.Request.Context(), user.ID)
 	if err != nil {
 		ctx.JSON(http.StatusNotFound, types.Resp{Error: "Profile not found"})
 		return
@@ -92,10 +92,11 @@ func (c *RecommendationController) CreateOrUpdateProfile(ctx *gin.Context) {
 	}
 
 	// Try update first, create if not exists
-	existing, err := c.svc.GetProfile(ctx.Request.Context(), user.ID)
+	existing, err := c.svc.Queries.GetProfileByUserID(ctx.Request.Context(), user.ID)
 	if err != nil {
 		// Create
-		profile, err := c.svc.CreateProfile(ctx.Request.Context(), user.ID, gen.CreateProfileParams{
+		profile, err := c.svc.Queries.CreateProfile(ctx.Request.Context(), gen.CreateProfileParams{
+			UserID:      user.ID,
 			DanceStyles: req.DanceStyles,
 			Latitude:    pgtype.Float8{Float64: req.Latitude, Valid: req.Latitude != 0},
 			Longitude:   pgtype.Float8{Float64: req.Longitude, Valid: req.Longitude != 0},
@@ -130,7 +131,8 @@ func (c *RecommendationController) CreateOrUpdateProfile(ctx *gin.Context) {
 		lon = existing.Longitude
 	}
 
-	err = c.svc.UpdateProfile(ctx.Request.Context(), user.ID, gen.UpdateProfileParams{
+	err = c.svc.Queries.UpdateProfile(ctx.Request.Context(), gen.UpdateProfileParams{
+		UserID:      user.ID,
 		DanceStyles: styles,
 		Latitude:    lat,
 		Longitude:   lon,
@@ -142,7 +144,7 @@ func (c *RecommendationController) CreateOrUpdateProfile(ctx *gin.Context) {
 		return
 	}
 
-	updated, _ := c.svc.GetProfile(ctx.Request.Context(), user.ID)
+	updated, _ := c.svc.Queries.GetProfileByUserID(ctx.Request.Context(), user.ID)
 	ctx.JSON(http.StatusOK, types.Resp{Data: updated.ToDTO()})
 }
 
@@ -153,7 +155,7 @@ func (c *RecommendationController) GetProfilePreview(ctx *gin.Context) {
 		return
 	}
 
-	preview, err := c.svc.GetProfilePreview(ctx.Request.Context(), targetID)
+	preview, err := c.svc.Queries.GetProfilePreview(ctx.Request.Context(), targetID)
 	if err != nil {
 		ctx.JSON(http.StatusNotFound, types.Resp{Error: "Profile not found"})
 		return
@@ -169,7 +171,7 @@ func (c *RecommendationController) GetPreferences(ctx *gin.Context) {
 		return
 	}
 
-	prefs, err := c.svc.GetPreferences(ctx.Request.Context(), user.ID)
+	prefs, err := c.svc.Queries.GetPreferences(ctx.Request.Context(), user.ID)
 	if err != nil {
 		ctx.JSON(http.StatusNotFound, types.Resp{Error: "Preferences not found"})
 		return
@@ -185,15 +187,15 @@ func (c *RecommendationController) UpdatePreferences(ctx *gin.Context) {
 		return
 	}
 
-	// Accept the entire preferences as a JSONB object
 	var req types.JSONB
 	if err := ctx.ShouldBindJSON(&req); err != nil {
 		ctx.JSON(http.StatusBadRequest, types.Resp{Error: err.Error()})
 		return
 	}
 
-	prefs, err := c.svc.UpsertPreferences(ctx.Request.Context(), user.ID, gen.UpsertPreferencesParams{
-		Data: req,
+	prefs, err := c.svc.Queries.UpsertPreferences(ctx.Request.Context(), gen.UpsertPreferencesParams{
+		UserID: user.ID,
+		Data:   req,
 	})
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, types.Resp{Error: "Failed to update preferences"})

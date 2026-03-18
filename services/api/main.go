@@ -22,6 +22,7 @@ import (
 	mapmod "github.com/Gooowan/matchup/modules/map"
 	"github.com/Gooowan/matchup/modules/moderation"
 	"github.com/Gooowan/matchup/modules/recommendation"
+	"github.com/Gooowan/matchup/modules/subscriptions"
 	core "github.com/Gooowan/matchup/modules/users"
 	"github.com/Gooowan/matchup/modules/users/auth"
 	"github.com/Gooowan/matchup/services/api/controllers"
@@ -116,6 +117,7 @@ func main() {
 	chatSvc := chat.NewChatService(dbpool, moderationSvc)
 	feedSvc := feed.NewFeedService(dbpool, chatSvc, moderationSvc, recommendationSvc)
 	mapSvc := mapmod.NewMapService(dbpool, recommendationSvc)
+	subscriptionSvc := subscriptions.NewSubscriptionService(dbpool)
 
 	// Initialize controllers
 	authController := auth.NewAuthController(authService)
@@ -129,6 +131,7 @@ func main() {
 	chatCtrl := chat.NewChatController(chatSvc)
 	mapCtrl := mapmod.NewMapController(mapSvc)
 	moderationCtrl := moderation.NewModerationController(moderationSvc)
+	subscriptionCtrl := subscriptions.NewSubscriptionController(subscriptionSvc)
 
 	r := gin.Default()
 
@@ -183,6 +186,10 @@ func main() {
 
 	// Moderation: /users/:userId/block, /users/:userId/report
 	moderationCtrl.RegisterRoutes(r, userAuth)
+
+	// Subscriptions: /subscriptions/...
+	subscriptionsGroup := r.Group("/subscriptions")
+	subscriptionCtrl.RegisterRoutes(subscriptionsGroup, adminAuth, userAuth)
 
 	// Public marketing materials routes (no authentication required)
 	marketingGroup := r.Group("/media")
