@@ -33,32 +33,39 @@ func (q *Queries) CheckMutualMatch(ctx context.Context, arg CheckMutualMatchPara
 }
 
 const createMatch = `-- name: CreateMatch :one
-INSERT INTO matches(from_user_id, to_user_id, action)
-    VALUES ($1, $2, $3)
-RETURNING id, from_user_id, to_user_id, action, created_at
+INSERT INTO matches(from_user_id, to_user_id, action, source)
+    VALUES ($1, $2, $3, $4)
+RETURNING id, from_user_id, to_user_id, action, source, created_at
 `
 
 type CreateMatchParams struct {
 	FromUserID pgtype.UUID `db:"from_user_id" json:"from_user_id"`
 	ToUserID   pgtype.UUID `db:"to_user_id" json:"to_user_id"`
 	Action     string      `db:"action" json:"action"`
+	Source     pgtype.Text `db:"source" json:"source"`
 }
 
 func (q *Queries) CreateMatch(ctx context.Context, arg CreateMatchParams) (Match, error) {
-	row := q.db.QueryRow(ctx, createMatch, arg.FromUserID, arg.ToUserID, arg.Action)
+	row := q.db.QueryRow(ctx, createMatch,
+		arg.FromUserID,
+		arg.ToUserID,
+		arg.Action,
+		arg.Source,
+	)
 	var i Match
 	err := row.Scan(
 		&i.ID,
 		&i.FromUserID,
 		&i.ToUserID,
 		&i.Action,
+		&i.Source,
 		&i.CreatedAt,
 	)
 	return i, err
 }
 
 const getMatch = `-- name: GetMatch :one
-SELECT id, from_user_id, to_user_id, action, created_at FROM matches
+SELECT id, from_user_id, to_user_id, action, source, created_at FROM matches
 WHERE from_user_id = $1 AND to_user_id = $2
 `
 
@@ -75,6 +82,7 @@ func (q *Queries) GetMatch(ctx context.Context, arg GetMatchParams) (Match, erro
 		&i.FromUserID,
 		&i.ToUserID,
 		&i.Action,
+		&i.Source,
 		&i.CreatedAt,
 	)
 	return i, err

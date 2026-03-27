@@ -1,6 +1,6 @@
 -- name: CreateMatch :one
-INSERT INTO matches(from_user_id, to_user_id, action)
-    VALUES (@from_user_id, @to_user_id, @action)
+INSERT INTO matches(from_user_id, to_user_id, action, source)
+    VALUES (@from_user_id, @to_user_id, @action, @source)
 RETURNING *;
 
 -- name: GetMatch :one

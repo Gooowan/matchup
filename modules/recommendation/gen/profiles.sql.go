@@ -13,18 +13,39 @@ import (
 )
 
 const createProfile = `-- name: CreateProfile :one
-INSERT INTO profiles(user_id, dance_styles, latitude, longitude, visible, data)
-    VALUES ($1, $2, $3, $4, $5, $6)
-RETURNING id, user_id, dance_styles, latitude, longitude, visible, data, created_at, updated_at
+INSERT INTO profiles(
+    user_id, dance_styles, latitude, longitude, visible,
+    gender, birth_date, height_cm, goal, program, categories,
+    country, city, ready_to_relocate, ready_to_finance,
+    metadata, data
+)
+VALUES (
+    $1, $2, $3, $4, $5,
+    $6, $7, $8, $9, $10, $11,
+    $12, $13, $14, $15,
+    $16, $17
+)
+RETURNING id, user_id, latitude, longitude, visible, dance_styles, gender, birth_date, height_cm, goal, program, categories, country, city, ready_to_relocate, ready_to_finance, metadata, data, created_at, updated_at
 `
 
 type CreateProfileParams struct {
-	UserID      pgtype.UUID   `db:"user_id" json:"user_id"`
-	DanceStyles []string      `db:"dance_styles" json:"dance_styles"`
-	Latitude    pgtype.Float8 `db:"latitude" json:"latitude"`
-	Longitude   pgtype.Float8 `db:"longitude" json:"longitude"`
-	Visible     bool          `db:"visible" json:"visible"`
-	Data        types.JSONB   `db:"data" json:"data"`
+	UserID          pgtype.UUID   `db:"user_id" json:"user_id"`
+	DanceStyles     []string      `db:"dance_styles" json:"dance_styles"`
+	Latitude        pgtype.Float8 `db:"latitude" json:"latitude"`
+	Longitude       pgtype.Float8 `db:"longitude" json:"longitude"`
+	Visible         bool          `db:"visible" json:"visible"`
+	Gender          string        `db:"gender" json:"gender"`
+	BirthDate       pgtype.Date   `db:"birth_date" json:"birth_date"`
+	HeightCm        pgtype.Int2   `db:"height_cm" json:"height_cm"`
+	Goal            string        `db:"goal" json:"goal"`
+	Program         string        `db:"program" json:"program"`
+	Categories      []string      `db:"categories" json:"categories"`
+	Country         pgtype.Text   `db:"country" json:"country"`
+	City            pgtype.Text   `db:"city" json:"city"`
+	ReadyToRelocate pgtype.Bool   `db:"ready_to_relocate" json:"ready_to_relocate"`
+	ReadyToFinance  pgtype.Text   `db:"ready_to_finance" json:"ready_to_finance"`
+	Metadata        types.JSONB   `db:"metadata" json:"metadata"`
+	Data            types.JSONB   `db:"data" json:"data"`
 }
 
 func (q *Queries) CreateProfile(ctx context.Context, arg CreateProfileParams) (Profile, error) {
@@ -34,16 +55,38 @@ func (q *Queries) CreateProfile(ctx context.Context, arg CreateProfileParams) (P
 		arg.Latitude,
 		arg.Longitude,
 		arg.Visible,
+		arg.Gender,
+		arg.BirthDate,
+		arg.HeightCm,
+		arg.Goal,
+		arg.Program,
+		arg.Categories,
+		arg.Country,
+		arg.City,
+		arg.ReadyToRelocate,
+		arg.ReadyToFinance,
+		arg.Metadata,
 		arg.Data,
 	)
 	var i Profile
 	err := row.Scan(
 		&i.ID,
 		&i.UserID,
-		&i.DanceStyles,
 		&i.Latitude,
 		&i.Longitude,
 		&i.Visible,
+		&i.DanceStyles,
+		&i.Gender,
+		&i.BirthDate,
+		&i.HeightCm,
+		&i.Goal,
+		&i.Program,
+		&i.Categories,
+		&i.Country,
+		&i.City,
+		&i.ReadyToRelocate,
+		&i.ReadyToFinance,
+		&i.Metadata,
 		&i.Data,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -62,8 +105,10 @@ func (q *Queries) DeleteProfile(ctx context.Context, userID pgtype.UUID) error {
 
 const findNearbyVisibleProfiles = `-- name: FindNearbyVisibleProfiles :many
 SELECT
-    p.id, p.user_id, p.dance_styles, p.data,
+    p.id, p.user_id, p.dance_styles, p.metadata, p.data,
     p.latitude, p.longitude,
+    p.gender, p.birth_date, p.height_cm, p.goal, p.program,
+    p.categories, p.country, p.city, p.ready_to_relocate, p.ready_to_finance,
     u.profile_data,
     (6371 * acos(
         cos(radians($1::double precision)) *
@@ -79,27 +124,62 @@ WHERE p.visible = true
   AND p.latitude IS NOT NULL
   AND p.longitude IS NOT NULL
   AND NOT (p.user_id = ANY($4::uuid[]))
+  AND ($5::varchar IS NULL OR p.gender = $5)
+  AND ($6::smallint IS NULL OR EXTRACT(YEAR FROM AGE(p.birth_date))::smallint >= $6)
+  AND ($7::smallint IS NULL OR EXTRACT(YEAR FROM AGE(p.birth_date))::smallint <= $7)
+  AND ($8::smallint IS NULL OR p.height_cm >= $8)
+  AND ($9::smallint IS NULL OR p.height_cm <= $9)
+  AND ($10::varchar IS NULL OR p.goal = $10)
+  AND ($11::varchar IS NULL OR p.program = $11)
+  AND ($12::text[] IS NULL OR p.categories && $12)
+  AND (
+      $13::varchar IS NULL
+      OR p.city = $13
+      OR p.ready_to_relocate = true
+  )
+  AND ($14::varchar IS NULL OR p.country = $14)
 ORDER BY distance_km ASC
-LIMIT $5
+LIMIT $15
 `
 
 type FindNearbyVisibleProfilesParams struct {
-	Latitude   float64       `db:"latitude" json:"latitude"`
-	Longitude  float64       `db:"longitude" json:"longitude"`
-	UserID     pgtype.UUID   `db:"user_id" json:"user_id"`
-	ExcludeIds []pgtype.UUID `db:"exclude_ids" json:"exclude_ids"`
-	LimitVal   int32         `db:"limit_val" json:"limit_val"`
+	Latitude            float64       `db:"latitude" json:"latitude"`
+	Longitude           float64       `db:"longitude" json:"longitude"`
+	UserID              pgtype.UUID   `db:"user_id" json:"user_id"`
+	ExcludeIds          []pgtype.UUID `db:"exclude_ids" json:"exclude_ids"`
+	PreferredGender     pgtype.Text   `db:"preferred_gender" json:"preferred_gender"`
+	AgeMin              pgtype.Int2   `db:"age_min" json:"age_min"`
+	AgeMax              pgtype.Int2   `db:"age_max" json:"age_max"`
+	HeightMin           pgtype.Int2   `db:"height_min" json:"height_min"`
+	HeightMax           pgtype.Int2   `db:"height_max" json:"height_max"`
+	PreferredGoal       pgtype.Text   `db:"preferred_goal" json:"preferred_goal"`
+	PreferredProgram    pgtype.Text   `db:"preferred_program" json:"preferred_program"`
+	PreferredCategories []string      `db:"preferred_categories" json:"preferred_categories"`
+	PreferredCity       pgtype.Text   `db:"preferred_city" json:"preferred_city"`
+	PreferredCountry    pgtype.Text   `db:"preferred_country" json:"preferred_country"`
+	LimitVal            int32         `db:"limit_val" json:"limit_val"`
 }
 
 type FindNearbyVisibleProfilesRow struct {
-	ID          pgtype.UUID   `db:"id" json:"id"`
-	UserID      pgtype.UUID   `db:"user_id" json:"user_id"`
-	DanceStyles []string      `db:"dance_styles" json:"dance_styles"`
-	Data        types.JSONB   `db:"data" json:"data"`
-	Latitude    pgtype.Float8 `db:"latitude" json:"latitude"`
-	Longitude   pgtype.Float8 `db:"longitude" json:"longitude"`
-	ProfileData types.JSONB   `db:"profile_data" json:"profile_data"`
-	DistanceKm  float64       `db:"distance_km" json:"distance_km"`
+	ID              pgtype.UUID   `db:"id" json:"id"`
+	UserID          pgtype.UUID   `db:"user_id" json:"user_id"`
+	DanceStyles     []string      `db:"dance_styles" json:"dance_styles"`
+	Metadata        types.JSONB   `db:"metadata" json:"metadata"`
+	Data            types.JSONB   `db:"data" json:"data"`
+	Latitude        pgtype.Float8 `db:"latitude" json:"latitude"`
+	Longitude       pgtype.Float8 `db:"longitude" json:"longitude"`
+	Gender          string        `db:"gender" json:"gender"`
+	BirthDate       pgtype.Date   `db:"birth_date" json:"birth_date"`
+	HeightCm        pgtype.Int2   `db:"height_cm" json:"height_cm"`
+	Goal            string        `db:"goal" json:"goal"`
+	Program         string        `db:"program" json:"program"`
+	Categories      []string      `db:"categories" json:"categories"`
+	Country         pgtype.Text   `db:"country" json:"country"`
+	City            pgtype.Text   `db:"city" json:"city"`
+	ReadyToRelocate pgtype.Bool   `db:"ready_to_relocate" json:"ready_to_relocate"`
+	ReadyToFinance  pgtype.Text   `db:"ready_to_finance" json:"ready_to_finance"`
+	ProfileData     types.JSONB   `db:"profile_data" json:"profile_data"`
+	DistanceKm      float64       `db:"distance_km" json:"distance_km"`
 }
 
 func (q *Queries) FindNearbyVisibleProfiles(ctx context.Context, arg FindNearbyVisibleProfilesParams) ([]FindNearbyVisibleProfilesRow, error) {
@@ -108,6 +188,16 @@ func (q *Queries) FindNearbyVisibleProfiles(ctx context.Context, arg FindNearbyV
 		arg.Longitude,
 		arg.UserID,
 		arg.ExcludeIds,
+		arg.PreferredGender,
+		arg.AgeMin,
+		arg.AgeMax,
+		arg.HeightMin,
+		arg.HeightMax,
+		arg.PreferredGoal,
+		arg.PreferredProgram,
+		arg.PreferredCategories,
+		arg.PreferredCity,
+		arg.PreferredCountry,
 		arg.LimitVal,
 	)
 	if err != nil {
@@ -121,9 +211,20 @@ func (q *Queries) FindNearbyVisibleProfiles(ctx context.Context, arg FindNearbyV
 			&i.ID,
 			&i.UserID,
 			&i.DanceStyles,
+			&i.Metadata,
 			&i.Data,
 			&i.Latitude,
 			&i.Longitude,
+			&i.Gender,
+			&i.BirthDate,
+			&i.HeightCm,
+			&i.Goal,
+			&i.Program,
+			&i.Categories,
+			&i.Country,
+			&i.City,
+			&i.ReadyToRelocate,
+			&i.ReadyToFinance,
 			&i.ProfileData,
 			&i.DistanceKm,
 		); err != nil {
@@ -137,8 +238,240 @@ func (q *Queries) FindNearbyVisibleProfiles(ctx context.Context, arg FindNearbyV
 	return items, nil
 }
 
+const getCountryWideProfiles = `-- name: GetCountryWideProfiles :many
+SELECT
+    p.id, p.user_id, p.dance_styles, p.metadata,
+    p.latitude, p.longitude,
+    p.gender, p.birth_date, p.height_cm, p.goal, p.program,
+    p.categories, p.country, p.city, p.ready_to_relocate, p.ready_to_finance
+FROM profiles p
+WHERE p.country = $1
+  AND p.visible = true
+  AND p.user_id != $2
+  AND NOT (p.user_id = ANY($3::uuid[]))
+  AND ($4::varchar IS NULL OR p.gender = $4)
+  AND ($5::smallint IS NULL OR EXTRACT(YEAR FROM AGE(p.birth_date))::smallint >= $5)
+  AND ($6::smallint IS NULL OR EXTRACT(YEAR FROM AGE(p.birth_date))::smallint <= $6)
+  AND ($7::smallint IS NULL OR p.height_cm >= $7)
+  AND ($8::smallint IS NULL OR p.height_cm <= $8)
+  AND ($9::varchar IS NULL OR p.goal = $9)
+  AND ($10::varchar IS NULL OR p.program = $10)
+  AND ($11::text[] IS NULL OR p.categories && $11)
+ORDER BY RANDOM()
+LIMIT $12
+`
+
+type GetCountryWideProfilesParams struct {
+	Country             pgtype.Text   `db:"country" json:"country"`
+	UserID              pgtype.UUID   `db:"user_id" json:"user_id"`
+	ExcludeIds          []pgtype.UUID `db:"exclude_ids" json:"exclude_ids"`
+	PreferredGender     pgtype.Text   `db:"preferred_gender" json:"preferred_gender"`
+	AgeMin              pgtype.Int2   `db:"age_min" json:"age_min"`
+	AgeMax              pgtype.Int2   `db:"age_max" json:"age_max"`
+	HeightMin           pgtype.Int2   `db:"height_min" json:"height_min"`
+	HeightMax           pgtype.Int2   `db:"height_max" json:"height_max"`
+	PreferredGoal       pgtype.Text   `db:"preferred_goal" json:"preferred_goal"`
+	PreferredProgram    pgtype.Text   `db:"preferred_program" json:"preferred_program"`
+	PreferredCategories []string      `db:"preferred_categories" json:"preferred_categories"`
+	LimitVal            int32         `db:"limit_val" json:"limit_val"`
+}
+
+type GetCountryWideProfilesRow struct {
+	ID              pgtype.UUID   `db:"id" json:"id"`
+	UserID          pgtype.UUID   `db:"user_id" json:"user_id"`
+	DanceStyles     []string      `db:"dance_styles" json:"dance_styles"`
+	Metadata        types.JSONB   `db:"metadata" json:"metadata"`
+	Latitude        pgtype.Float8 `db:"latitude" json:"latitude"`
+	Longitude       pgtype.Float8 `db:"longitude" json:"longitude"`
+	Gender          string        `db:"gender" json:"gender"`
+	BirthDate       pgtype.Date   `db:"birth_date" json:"birth_date"`
+	HeightCm        pgtype.Int2   `db:"height_cm" json:"height_cm"`
+	Goal            string        `db:"goal" json:"goal"`
+	Program         string        `db:"program" json:"program"`
+	Categories      []string      `db:"categories" json:"categories"`
+	Country         pgtype.Text   `db:"country" json:"country"`
+	City            pgtype.Text   `db:"city" json:"city"`
+	ReadyToRelocate pgtype.Bool   `db:"ready_to_relocate" json:"ready_to_relocate"`
+	ReadyToFinance  pgtype.Text   `db:"ready_to_finance" json:"ready_to_finance"`
+}
+
+func (q *Queries) GetCountryWideProfiles(ctx context.Context, arg GetCountryWideProfilesParams) ([]GetCountryWideProfilesRow, error) {
+	rows, err := q.db.Query(ctx, getCountryWideProfiles,
+		arg.Country,
+		arg.UserID,
+		arg.ExcludeIds,
+		arg.PreferredGender,
+		arg.AgeMin,
+		arg.AgeMax,
+		arg.HeightMin,
+		arg.HeightMax,
+		arg.PreferredGoal,
+		arg.PreferredProgram,
+		arg.PreferredCategories,
+		arg.LimitVal,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetCountryWideProfilesRow
+	for rows.Next() {
+		var i GetCountryWideProfilesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.DanceStyles,
+			&i.Metadata,
+			&i.Latitude,
+			&i.Longitude,
+			&i.Gender,
+			&i.BirthDate,
+			&i.HeightCm,
+			&i.Goal,
+			&i.Program,
+			&i.Categories,
+			&i.Country,
+			&i.City,
+			&i.ReadyToRelocate,
+			&i.ReadyToFinance,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const getNearbyClubProfiles = `-- name: GetNearbyClubProfiles :many
+SELECT
+    p.id, p.user_id, p.dance_styles, p.metadata,
+    p.latitude, p.longitude,
+    p.gender, p.birth_date, p.height_cm, p.goal, p.program,
+    p.categories, p.country, p.city, p.ready_to_relocate, p.ready_to_finance,
+    cm.club_id,
+    (6371 * acos(
+        cos(radians($1::double precision)) *
+        cos(radians(c.latitude)) *
+        cos(radians(c.longitude) - radians($2::double precision)) +
+        sin(radians($1::double precision)) *
+        sin(radians(c.latitude))
+    ))::double precision AS club_dist_km
+FROM profiles p
+JOIN club_members cm ON cm.user_id = p.user_id
+JOIN clubs c ON c.id = cm.club_id
+WHERE c.id != ALL($3::uuid[])
+  AND p.visible = true
+  AND p.user_id != $4
+  AND NOT (p.user_id = ANY($5::uuid[]))
+  AND ($6::varchar IS NULL OR p.gender = $6)
+  AND ($7::smallint IS NULL OR EXTRACT(YEAR FROM AGE(p.birth_date))::smallint >= $7)
+  AND ($8::smallint IS NULL OR EXTRACT(YEAR FROM AGE(p.birth_date))::smallint <= $8)
+  AND ($9::smallint IS NULL OR p.height_cm >= $9)
+  AND ($10::smallint IS NULL OR p.height_cm <= $10)
+  AND ($11::varchar IS NULL OR p.goal = $11)
+  AND ($12::varchar IS NULL OR p.program = $12)
+  AND ($13::text[] IS NULL OR p.categories && $13)
+ORDER BY club_dist_km ASC
+LIMIT $14
+`
+
+type GetNearbyClubProfilesParams struct {
+	RefLatitude         float64       `db:"ref_latitude" json:"ref_latitude"`
+	RefLongitude        float64       `db:"ref_longitude" json:"ref_longitude"`
+	ExcludeClubIds      []pgtype.UUID `db:"exclude_club_ids" json:"exclude_club_ids"`
+	UserID              pgtype.UUID   `db:"user_id" json:"user_id"`
+	ExcludeIds          []pgtype.UUID `db:"exclude_ids" json:"exclude_ids"`
+	PreferredGender     pgtype.Text   `db:"preferred_gender" json:"preferred_gender"`
+	AgeMin              pgtype.Int2   `db:"age_min" json:"age_min"`
+	AgeMax              pgtype.Int2   `db:"age_max" json:"age_max"`
+	HeightMin           pgtype.Int2   `db:"height_min" json:"height_min"`
+	HeightMax           pgtype.Int2   `db:"height_max" json:"height_max"`
+	PreferredGoal       pgtype.Text   `db:"preferred_goal" json:"preferred_goal"`
+	PreferredProgram    pgtype.Text   `db:"preferred_program" json:"preferred_program"`
+	PreferredCategories []string      `db:"preferred_categories" json:"preferred_categories"`
+	LimitVal            int32         `db:"limit_val" json:"limit_val"`
+}
+
+type GetNearbyClubProfilesRow struct {
+	ID              pgtype.UUID   `db:"id" json:"id"`
+	UserID          pgtype.UUID   `db:"user_id" json:"user_id"`
+	DanceStyles     []string      `db:"dance_styles" json:"dance_styles"`
+	Metadata        types.JSONB   `db:"metadata" json:"metadata"`
+	Latitude        pgtype.Float8 `db:"latitude" json:"latitude"`
+	Longitude       pgtype.Float8 `db:"longitude" json:"longitude"`
+	Gender          string        `db:"gender" json:"gender"`
+	BirthDate       pgtype.Date   `db:"birth_date" json:"birth_date"`
+	HeightCm        pgtype.Int2   `db:"height_cm" json:"height_cm"`
+	Goal            string        `db:"goal" json:"goal"`
+	Program         string        `db:"program" json:"program"`
+	Categories      []string      `db:"categories" json:"categories"`
+	Country         pgtype.Text   `db:"country" json:"country"`
+	City            pgtype.Text   `db:"city" json:"city"`
+	ReadyToRelocate pgtype.Bool   `db:"ready_to_relocate" json:"ready_to_relocate"`
+	ReadyToFinance  pgtype.Text   `db:"ready_to_finance" json:"ready_to_finance"`
+	ClubID          pgtype.UUID   `db:"club_id" json:"club_id"`
+	ClubDistKm      float64       `db:"club_dist_km" json:"club_dist_km"`
+}
+
+func (q *Queries) GetNearbyClubProfiles(ctx context.Context, arg GetNearbyClubProfilesParams) ([]GetNearbyClubProfilesRow, error) {
+	rows, err := q.db.Query(ctx, getNearbyClubProfiles,
+		arg.RefLatitude,
+		arg.RefLongitude,
+		arg.ExcludeClubIds,
+		arg.UserID,
+		arg.ExcludeIds,
+		arg.PreferredGender,
+		arg.AgeMin,
+		arg.AgeMax,
+		arg.HeightMin,
+		arg.HeightMax,
+		arg.PreferredGoal,
+		arg.PreferredProgram,
+		arg.PreferredCategories,
+		arg.LimitVal,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetNearbyClubProfilesRow
+	for rows.Next() {
+		var i GetNearbyClubProfilesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.DanceStyles,
+			&i.Metadata,
+			&i.Latitude,
+			&i.Longitude,
+			&i.Gender,
+			&i.BirthDate,
+			&i.HeightCm,
+			&i.Goal,
+			&i.Program,
+			&i.Categories,
+			&i.Country,
+			&i.City,
+			&i.ReadyToRelocate,
+			&i.ReadyToFinance,
+			&i.ClubID,
+			&i.ClubDistKm,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getProfileByUserID = `-- name: GetProfileByUserID :one
-SELECT id, user_id, dance_styles, latitude, longitude, visible, data, created_at, updated_at FROM profiles WHERE user_id = $1
+SELECT id, user_id, latitude, longitude, visible, dance_styles, gender, birth_date, height_cm, goal, program, categories, country, city, ready_to_relocate, ready_to_finance, metadata, data, created_at, updated_at FROM profiles WHERE user_id = $1
 `
 
 func (q *Queries) GetProfileByUserID(ctx context.Context, userID pgtype.UUID) (Profile, error) {
@@ -147,10 +480,21 @@ func (q *Queries) GetProfileByUserID(ctx context.Context, userID pgtype.UUID) (P
 	err := row.Scan(
 		&i.ID,
 		&i.UserID,
-		&i.DanceStyles,
 		&i.Latitude,
 		&i.Longitude,
 		&i.Visible,
+		&i.DanceStyles,
+		&i.Gender,
+		&i.BirthDate,
+		&i.HeightCm,
+		&i.Goal,
+		&i.Program,
+		&i.Categories,
+		&i.Country,
+		&i.City,
+		&i.ReadyToRelocate,
+		&i.ReadyToFinance,
+		&i.Metadata,
 		&i.Data,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -160,7 +504,9 @@ func (q *Queries) GetProfileByUserID(ctx context.Context, userID pgtype.UUID) (P
 
 const getProfilePreview = `-- name: GetProfilePreview :one
 SELECT
-    p.user_id, p.dance_styles, p.data, p.visible,
+    p.user_id, p.dance_styles, p.metadata, p.visible,
+    p.gender, p.birth_date, p.height_cm, p.goal, p.program,
+    p.categories, p.country, p.city,
     u.profile_data
 FROM profiles p
 JOIN users u ON u.id = p.user_id
@@ -170,8 +516,16 @@ WHERE p.user_id = $1 AND p.visible = true
 type GetProfilePreviewRow struct {
 	UserID      pgtype.UUID `db:"user_id" json:"user_id"`
 	DanceStyles []string    `db:"dance_styles" json:"dance_styles"`
-	Data        types.JSONB `db:"data" json:"data"`
+	Metadata    types.JSONB `db:"metadata" json:"metadata"`
 	Visible     bool        `db:"visible" json:"visible"`
+	Gender      string      `db:"gender" json:"gender"`
+	BirthDate   pgtype.Date `db:"birth_date" json:"birth_date"`
+	HeightCm    pgtype.Int2 `db:"height_cm" json:"height_cm"`
+	Goal        string      `db:"goal" json:"goal"`
+	Program     string      `db:"program" json:"program"`
+	Categories  []string    `db:"categories" json:"categories"`
+	Country     pgtype.Text `db:"country" json:"country"`
+	City        pgtype.Text `db:"city" json:"city"`
 	ProfileData types.JSONB `db:"profile_data" json:"profile_data"`
 }
 
@@ -181,31 +535,172 @@ func (q *Queries) GetProfilePreview(ctx context.Context, userID pgtype.UUID) (Ge
 	err := row.Scan(
 		&i.UserID,
 		&i.DanceStyles,
-		&i.Data,
+		&i.Metadata,
 		&i.Visible,
+		&i.Gender,
+		&i.BirthDate,
+		&i.HeightCm,
+		&i.Goal,
+		&i.Program,
+		&i.Categories,
+		&i.Country,
+		&i.City,
 		&i.ProfileData,
 	)
 	return i, err
 }
 
+const getSameClubProfiles = `-- name: GetSameClubProfiles :many
+SELECT
+    p.id, p.user_id, p.dance_styles, p.metadata,
+    p.latitude, p.longitude,
+    p.gender, p.birth_date, p.height_cm, p.goal, p.program,
+    p.categories, p.country, p.city, p.ready_to_relocate, p.ready_to_finance,
+    cm.club_id
+FROM profiles p
+JOIN club_members cm ON cm.user_id = p.user_id
+WHERE cm.club_id = ANY($1::uuid[])
+  AND p.visible = true
+  AND p.user_id != $2
+  AND NOT (p.user_id = ANY($3::uuid[]))
+  AND ($4::varchar IS NULL OR p.gender = $4)
+  AND ($5::smallint IS NULL OR EXTRACT(YEAR FROM AGE(p.birth_date))::smallint >= $5)
+  AND ($6::smallint IS NULL OR EXTRACT(YEAR FROM AGE(p.birth_date))::smallint <= $6)
+  AND ($7::smallint IS NULL OR p.height_cm >= $7)
+  AND ($8::smallint IS NULL OR p.height_cm <= $8)
+  AND ($9::varchar IS NULL OR p.goal = $9)
+  AND ($10::varchar IS NULL OR p.program = $10)
+  AND ($11::text[] IS NULL OR p.categories && $11)
+ORDER BY cm.joined_at ASC
+LIMIT $12
+`
+
+type GetSameClubProfilesParams struct {
+	ClubIds             []pgtype.UUID `db:"club_ids" json:"club_ids"`
+	UserID              pgtype.UUID   `db:"user_id" json:"user_id"`
+	ExcludeIds          []pgtype.UUID `db:"exclude_ids" json:"exclude_ids"`
+	PreferredGender     pgtype.Text   `db:"preferred_gender" json:"preferred_gender"`
+	AgeMin              pgtype.Int2   `db:"age_min" json:"age_min"`
+	AgeMax              pgtype.Int2   `db:"age_max" json:"age_max"`
+	HeightMin           pgtype.Int2   `db:"height_min" json:"height_min"`
+	HeightMax           pgtype.Int2   `db:"height_max" json:"height_max"`
+	PreferredGoal       pgtype.Text   `db:"preferred_goal" json:"preferred_goal"`
+	PreferredProgram    pgtype.Text   `db:"preferred_program" json:"preferred_program"`
+	PreferredCategories []string      `db:"preferred_categories" json:"preferred_categories"`
+	LimitVal            int32         `db:"limit_val" json:"limit_val"`
+}
+
+type GetSameClubProfilesRow struct {
+	ID              pgtype.UUID   `db:"id" json:"id"`
+	UserID          pgtype.UUID   `db:"user_id" json:"user_id"`
+	DanceStyles     []string      `db:"dance_styles" json:"dance_styles"`
+	Metadata        types.JSONB   `db:"metadata" json:"metadata"`
+	Latitude        pgtype.Float8 `db:"latitude" json:"latitude"`
+	Longitude       pgtype.Float8 `db:"longitude" json:"longitude"`
+	Gender          string        `db:"gender" json:"gender"`
+	BirthDate       pgtype.Date   `db:"birth_date" json:"birth_date"`
+	HeightCm        pgtype.Int2   `db:"height_cm" json:"height_cm"`
+	Goal            string        `db:"goal" json:"goal"`
+	Program         string        `db:"program" json:"program"`
+	Categories      []string      `db:"categories" json:"categories"`
+	Country         pgtype.Text   `db:"country" json:"country"`
+	City            pgtype.Text   `db:"city" json:"city"`
+	ReadyToRelocate pgtype.Bool   `db:"ready_to_relocate" json:"ready_to_relocate"`
+	ReadyToFinance  pgtype.Text   `db:"ready_to_finance" json:"ready_to_finance"`
+	ClubID          pgtype.UUID   `db:"club_id" json:"club_id"`
+}
+
+func (q *Queries) GetSameClubProfiles(ctx context.Context, arg GetSameClubProfilesParams) ([]GetSameClubProfilesRow, error) {
+	rows, err := q.db.Query(ctx, getSameClubProfiles,
+		arg.ClubIds,
+		arg.UserID,
+		arg.ExcludeIds,
+		arg.PreferredGender,
+		arg.AgeMin,
+		arg.AgeMax,
+		arg.HeightMin,
+		arg.HeightMax,
+		arg.PreferredGoal,
+		arg.PreferredProgram,
+		arg.PreferredCategories,
+		arg.LimitVal,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetSameClubProfilesRow
+	for rows.Next() {
+		var i GetSameClubProfilesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.DanceStyles,
+			&i.Metadata,
+			&i.Latitude,
+			&i.Longitude,
+			&i.Gender,
+			&i.BirthDate,
+			&i.HeightCm,
+			&i.Goal,
+			&i.Program,
+			&i.Categories,
+			&i.Country,
+			&i.City,
+			&i.ReadyToRelocate,
+			&i.ReadyToFinance,
+			&i.ClubID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const updateProfile = `-- name: UpdateProfile :exec
 UPDATE profiles SET
-    dance_styles = $1,
-    latitude = $2,
-    longitude = $3,
-    visible = $4,
-    data = $5,
-    updated_at = CURRENT_TIMESTAMP
-WHERE user_id = $6
+    dance_styles      = $1,
+    latitude          = $2,
+    longitude         = $3,
+    visible           = $4,
+    gender            = $5,
+    birth_date        = $6,
+    height_cm         = $7,
+    goal              = $8,
+    program           = $9,
+    categories        = $10,
+    country           = $11,
+    city              = $12,
+    ready_to_relocate = $13,
+    ready_to_finance  = $14,
+    metadata          = $15,
+    data              = $16,
+    updated_at        = CURRENT_TIMESTAMP
+WHERE user_id = $17
 `
 
 type UpdateProfileParams struct {
-	DanceStyles []string      `db:"dance_styles" json:"dance_styles"`
-	Latitude    pgtype.Float8 `db:"latitude" json:"latitude"`
-	Longitude   pgtype.Float8 `db:"longitude" json:"longitude"`
-	Visible     bool          `db:"visible" json:"visible"`
-	Data        types.JSONB   `db:"data" json:"data"`
-	UserID      pgtype.UUID   `db:"user_id" json:"user_id"`
+	DanceStyles     []string      `db:"dance_styles" json:"dance_styles"`
+	Latitude        pgtype.Float8 `db:"latitude" json:"latitude"`
+	Longitude       pgtype.Float8 `db:"longitude" json:"longitude"`
+	Visible         bool          `db:"visible" json:"visible"`
+	Gender          string        `db:"gender" json:"gender"`
+	BirthDate       pgtype.Date   `db:"birth_date" json:"birth_date"`
+	HeightCm        pgtype.Int2   `db:"height_cm" json:"height_cm"`
+	Goal            string        `db:"goal" json:"goal"`
+	Program         string        `db:"program" json:"program"`
+	Categories      []string      `db:"categories" json:"categories"`
+	Country         pgtype.Text   `db:"country" json:"country"`
+	City            pgtype.Text   `db:"city" json:"city"`
+	ReadyToRelocate pgtype.Bool   `db:"ready_to_relocate" json:"ready_to_relocate"`
+	ReadyToFinance  pgtype.Text   `db:"ready_to_finance" json:"ready_to_finance"`
+	Metadata        types.JSONB   `db:"metadata" json:"metadata"`
+	Data            types.JSONB   `db:"data" json:"data"`
+	UserID          pgtype.UUID   `db:"user_id" json:"user_id"`
 }
 
 func (q *Queries) UpdateProfile(ctx context.Context, arg UpdateProfileParams) error {
@@ -214,25 +709,36 @@ func (q *Queries) UpdateProfile(ctx context.Context, arg UpdateProfileParams) er
 		arg.Latitude,
 		arg.Longitude,
 		arg.Visible,
+		arg.Gender,
+		arg.BirthDate,
+		arg.HeightCm,
+		arg.Goal,
+		arg.Program,
+		arg.Categories,
+		arg.Country,
+		arg.City,
+		arg.ReadyToRelocate,
+		arg.ReadyToFinance,
+		arg.Metadata,
 		arg.Data,
 		arg.UserID,
 	)
 	return err
 }
 
-const updateProfileData = `-- name: UpdateProfileData :exec
+const updateProfileMetadata = `-- name: UpdateProfileMetadata :exec
 UPDATE profiles SET
-    data = $1,
+    metadata   = $1,
     updated_at = CURRENT_TIMESTAMP
 WHERE user_id = $2
 `
 
-type UpdateProfileDataParams struct {
-	Data   types.JSONB `db:"data" json:"data"`
-	UserID pgtype.UUID `db:"user_id" json:"user_id"`
+type UpdateProfileMetadataParams struct {
+	Metadata types.JSONB `db:"metadata" json:"metadata"`
+	UserID   pgtype.UUID `db:"user_id" json:"user_id"`
 }
 
-func (q *Queries) UpdateProfileData(ctx context.Context, arg UpdateProfileDataParams) error {
-	_, err := q.db.Exec(ctx, updateProfileData, arg.Data, arg.UserID)
+func (q *Queries) UpdateProfileMetadata(ctx context.Context, arg UpdateProfileMetadataParams) error {
+	_, err := q.db.Exec(ctx, updateProfileMetadata, arg.Metadata, arg.UserID)
 	return err
 }

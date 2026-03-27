@@ -9,10 +9,14 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/Gooowan/matchup/modules/chat"
+	"github.com/Gooowan/matchup/modules/clubs"
 	"github.com/Gooowan/matchup/modules/feed/gen"
 	"github.com/Gooowan/matchup/modules/moderation"
 	"github.com/Gooowan/matchup/modules/recommendation"
 	recgen "github.com/Gooowan/matchup/modules/recommendation/gen"
+	recTier1 "github.com/Gooowan/matchup/modules/recommendation/tier1"
+	recTier2 "github.com/Gooowan/matchup/modules/recommendation/tier2"
+	recTier3 "github.com/Gooowan/matchup/modules/recommendation/tier3"
 )
 
 type FeedService struct {
@@ -21,12 +25,21 @@ type FeedService struct {
 	ChatSvc           *chat.ChatService
 	ModerationSvc     *moderation.ModerationService
 	RecommendationSvc *recommendation.RecommendationService
+	ClubSvc           *clubs.ClubService
 	Recommender       RecommendationProvider
 }
 
-func NewFeedService(db *pgxpool.Pool, chatSvc *chat.ChatService, moderationSvc *moderation.ModerationService, recommendationSvc *recommendation.RecommendationService) *FeedService {
-	primary := NewNearestCandidatesProvider(recommendationSvc)
-	fallback := NewRandomFallbackProvider(recommendationSvc)
+func NewFeedService(
+	db *pgxpool.Pool,
+	chatSvc *chat.ChatService,
+	moderationSvc *moderation.ModerationService,
+	recommendationSvc *recommendation.RecommendationService,
+	clubSvc *clubs.ClubService,
+) *FeedService {
+	tier1 := recTier1.NewProvider(recommendationSvc.Queries)
+	tier2 := recTier2.NewProvider()
+	tier3 := recTier3.NewProvider()
+	rec := recommendation.NewRecommender(tier1, tier2, tier3)
 
 	return &FeedService{
 		DB:                db,
@@ -34,10 +47,8 @@ func NewFeedService(db *pgxpool.Pool, chatSvc *chat.ChatService, moderationSvc *
 		ChatSvc:           chatSvc,
 		ModerationSvc:     moderationSvc,
 		RecommendationSvc: recommendationSvc,
-		Recommender: &FallbackProvider{
-			Primary:  primary,
-			Fallback: fallback,
-		},
+		ClubSvc:           clubSvc,
+		Recommender:       NewTierRecommendationProvider(rec, recommendationSvc),
 	}
 }
 
@@ -61,10 +72,16 @@ func (s *FeedService) GetFeed(ctx context.Context, userID pgtype.UUID, limit int
 
 	prefs, _ := s.RecommendationSvc.Queries.GetPreferences(ctx, userID)
 
+	country := ""
+	if profile.Country.Valid {
+		country = profile.Country.String
+	}
+
 	return s.Recommender.GetFeed(ctx, FeedParams{
 		UserID:     userID,
 		Latitude:   profile.Latitude.Float64,
 		Longitude:  profile.Longitude.Float64,
+		Country:    country,
 		Prefs:      &prefs,
 		ExcludeIDs: excludeIDs,
 		Limit:      limit,
@@ -76,7 +93,7 @@ type SwipeResult struct {
 	ChatID        *pgtype.UUID
 }
 
-func (s *FeedService) Swipe(ctx context.Context, fromUserID, toUserID pgtype.UUID, action string) (*SwipeResult, error) {
+func (s *FeedService) Swipe(ctx context.Context, fromUserID, toUserID pgtype.UUID, action, source string) (*SwipeResult, error) {
 	tx, err := s.DB.Begin(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("failed to start transaction: %w", err)
@@ -85,10 +102,16 @@ func (s *FeedService) Swipe(ctx context.Context, fromUserID, toUserID pgtype.UUI
 
 	qtx := s.Queries.WithTx(tx)
 
+	sourceVal := pgtype.Text{}
+	if source != "" {
+		sourceVal = pgtype.Text{String: source, Valid: true}
+	}
+
 	_, err = qtx.CreateMatch(ctx, gen.CreateMatchParams{
 		FromUserID: fromUserID,
 		ToUserID:   toUserID,
 		Action:     action,
+		Source:     sourceVal,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to save swipe: %w", err)

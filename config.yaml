@@ -10,3 +10,4 @@ modules:
   - map
   - moderation
   - subscriptions
+  - clubs

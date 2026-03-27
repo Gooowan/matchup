@@ -14,11 +14,14 @@ type Querier interface {
 	CreateProfile(ctx context.Context, arg CreateProfileParams) (Profile, error)
 	DeleteProfile(ctx context.Context, userID pgtype.UUID) error
 	FindNearbyVisibleProfiles(ctx context.Context, arg FindNearbyVisibleProfilesParams) ([]FindNearbyVisibleProfilesRow, error)
+	GetCountryWideProfiles(ctx context.Context, arg GetCountryWideProfilesParams) ([]GetCountryWideProfilesRow, error)
+	GetNearbyClubProfiles(ctx context.Context, arg GetNearbyClubProfilesParams) ([]GetNearbyClubProfilesRow, error)
 	GetPreferences(ctx context.Context, userID pgtype.UUID) (UserPreference, error)
 	GetProfileByUserID(ctx context.Context, userID pgtype.UUID) (Profile, error)
 	GetProfilePreview(ctx context.Context, userID pgtype.UUID) (GetProfilePreviewRow, error)
+	GetSameClubProfiles(ctx context.Context, arg GetSameClubProfilesParams) ([]GetSameClubProfilesRow, error)
 	UpdateProfile(ctx context.Context, arg UpdateProfileParams) error
-	UpdateProfileData(ctx context.Context, arg UpdateProfileDataParams) error
+	UpdateProfileMetadata(ctx context.Context, arg UpdateProfileMetadataParams) error
 	UpsertPreferences(ctx context.Context, arg UpsertPreferencesParams) (UserPreference, error)
 }
 

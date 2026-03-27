@@ -2,6 +2,7 @@ package recommendation
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -44,18 +45,22 @@ func (c *RecommendationController) CreateOrUpdateProfile(ctx *gin.Context) {
 	}
 
 	var req struct {
-		DanceStyles []string `json:"dance_styles"`
-		Latitude    float64  `json:"latitude"`
-		Longitude   float64  `json:"longitude"`
-		Visible     *bool    `json:"visible"`
-		// Fields stored in JSONB data
-		DanceRole  string `json:"dance_role"`
-		DanceLevel string `json:"dance_level"`
-		HeightCm   int32  `json:"height_cm"`
-		Bio        string `json:"bio"`
-		BirthDate  string `json:"birth_date"`
-		Gender     string `json:"gender"`
-		City       string `json:"city"`
+		DanceStyles     []string `json:"dance_styles"`
+		Latitude        float64  `json:"latitude"`
+		Longitude       float64  `json:"longitude"`
+		Visible         *bool    `json:"visible"`
+		Gender          string   `json:"gender"`
+		BirthDate       string   `json:"birth_date"`
+		HeightCm        *int16   `json:"height_cm"`
+		Goal            string   `json:"goal"`
+		Program         string   `json:"program"`
+		Categories      []string `json:"categories"`
+		Country         string   `json:"country"`
+		City            string   `json:"city"`
+		ReadyToRelocate *bool    `json:"ready_to_relocate"`
+		ReadyToFinance  string   `json:"ready_to_finance"`
+		// Non-filterable fields stored in metadata JSONB
+		Bio string `json:"bio"`
 	}
 	if err := ctx.ShouldBindJSON(&req); err != nil {
 		ctx.JSON(http.StatusBadRequest, types.Resp{Error: err.Error()})
@@ -67,42 +72,46 @@ func (c *RecommendationController) CreateOrUpdateProfile(ctx *gin.Context) {
 		visible = *req.Visible
 	}
 
-	// Build JSONB data from request fields
-	data := types.JSONB{}
-	if req.DanceRole != "" {
-		data["dance_role"] = req.DanceRole
-	}
-	if req.DanceLevel != "" {
-		data["dance_level"] = req.DanceLevel
-	}
-	if req.HeightCm > 0 {
-		data["height_cm"] = req.HeightCm
-	}
-	if req.Bio != "" {
-		data["bio"] = req.Bio
-	}
-	if req.BirthDate != "" {
-		data["birth_date"] = req.BirthDate
-	}
-	if req.Gender != "" {
-		data["gender"] = req.Gender
-	}
-	if req.City != "" {
-		data["city"] = req.City
-	}
-
-	// Try update first, create if not exists
 	existing, err := c.svc.Queries.GetProfileByUserID(ctx.Request.Context(), user.ID)
 	if err != nil {
 		// Create
-		profile, err := c.svc.Queries.CreateProfile(ctx.Request.Context(), gen.CreateProfileParams{
+		params := gen.CreateProfileParams{
 			UserID:      user.ID,
 			DanceStyles: req.DanceStyles,
 			Latitude:    pgtype.Float8{Float64: req.Latitude, Valid: req.Latitude != 0},
 			Longitude:   pgtype.Float8{Float64: req.Longitude, Valid: req.Longitude != 0},
 			Visible:     visible,
-			Data:        data,
-		})
+			Gender:      req.Gender,
+			Goal:        orDefault(req.Goal, "hobby"),
+			Program:     orDefault(req.Program, "standard"),
+			Categories:  req.Categories,
+			Metadata:    types.JSONB{},
+		}
+		if req.BirthDate != "" {
+			if t, err := time.Parse("2006-01-02", req.BirthDate); err == nil {
+				params.BirthDate = pgtype.Date{Time: t, Valid: true}
+			}
+		}
+		if req.HeightCm != nil {
+			params.HeightCm = pgtype.Int2{Int16: *req.HeightCm, Valid: true}
+		}
+		if req.Country != "" {
+			params.Country = pgtype.Text{String: req.Country, Valid: true}
+		}
+		if req.City != "" {
+			params.City = pgtype.Text{String: req.City, Valid: true}
+		}
+		if req.ReadyToRelocate != nil {
+			params.ReadyToRelocate = pgtype.Bool{Bool: *req.ReadyToRelocate, Valid: true}
+		}
+		if req.ReadyToFinance != "" {
+			params.ReadyToFinance = pgtype.Text{String: req.ReadyToFinance, Valid: true}
+		}
+		if req.Bio != "" {
+			params.Metadata = types.JSONB{"bio": req.Bio}
+		}
+
+		profile, err := c.svc.Queries.CreateProfile(ctx.Request.Context(), params)
 		if err != nil {
 			ctx.JSON(http.StatusInternalServerError, types.Resp{Error: "Failed to create profile"})
 			return
@@ -111,17 +120,11 @@ func (c *RecommendationController) CreateOrUpdateProfile(ctx *gin.Context) {
 		return
 	}
 
-	// Update — merge JSONB data with existing
-	existingData := getProfileData(existing.Data)
-	for k, v := range data {
-		existingData[k] = v
-	}
-
+	// Update — keep existing values where new request omits them
 	styles := req.DanceStyles
 	if styles == nil {
 		styles = existing.DanceStyles
 	}
-
 	lat := pgtype.Float8{Float64: req.Latitude, Valid: req.Latitude != 0}
 	if !lat.Valid {
 		lat = existing.Latitude
@@ -131,15 +134,62 @@ func (c *RecommendationController) CreateOrUpdateProfile(ctx *gin.Context) {
 		lon = existing.Longitude
 	}
 
-	err = c.svc.Queries.UpdateProfile(ctx.Request.Context(), gen.UpdateProfileParams{
+	// Merge bio into existing metadata
+	metadata := existing.Metadata
+	if metadata == nil {
+		metadata = types.JSONB{}
+	}
+	if req.Bio != "" {
+		metadata["bio"] = req.Bio
+	}
+
+	params := gen.UpdateProfileParams{
 		UserID:      user.ID,
 		DanceStyles: styles,
 		Latitude:    lat,
 		Longitude:   lon,
 		Visible:     visible,
-		Data:        existingData,
-	})
-	if err != nil {
+		Gender:      orDefault(req.Gender, existing.Gender),
+		Goal:        orDefault(req.Goal, existing.Goal),
+		Program:     orDefault(req.Program, existing.Program),
+		Categories:  orSlice(req.Categories, existing.Categories),
+		Metadata:    metadata,
+		Data:        existing.Data,
+	}
+	if req.BirthDate != "" {
+		if t, err := time.Parse("2006-01-02", req.BirthDate); err == nil {
+			params.BirthDate = pgtype.Date{Time: t, Valid: true}
+		}
+	} else {
+		params.BirthDate = existing.BirthDate
+	}
+	if req.HeightCm != nil {
+		params.HeightCm = pgtype.Int2{Int16: *req.HeightCm, Valid: true}
+	} else {
+		params.HeightCm = existing.HeightCm
+	}
+	if req.Country != "" {
+		params.Country = pgtype.Text{String: req.Country, Valid: true}
+	} else {
+		params.Country = existing.Country
+	}
+	if req.City != "" {
+		params.City = pgtype.Text{String: req.City, Valid: true}
+	} else {
+		params.City = existing.City
+	}
+	if req.ReadyToRelocate != nil {
+		params.ReadyToRelocate = pgtype.Bool{Bool: *req.ReadyToRelocate, Valid: true}
+	} else {
+		params.ReadyToRelocate = existing.ReadyToRelocate
+	}
+	if req.ReadyToFinance != "" {
+		params.ReadyToFinance = pgtype.Text{String: req.ReadyToFinance, Valid: true}
+	} else {
+		params.ReadyToFinance = existing.ReadyToFinance
+	}
+
+	if err := c.svc.Queries.UpdateProfile(ctx.Request.Context(), params); err != nil {
 		ctx.JSON(http.StatusInternalServerError, types.Resp{Error: "Failed to update profile"})
 		return
 	}
@@ -187,16 +237,65 @@ func (c *RecommendationController) UpdatePreferences(ctx *gin.Context) {
 		return
 	}
 
-	var req types.JSONB
+	var req struct {
+		PreferredGender        string   `json:"preferred_gender"`
+		AgeMin                 *int16   `json:"age_min"`
+		AgeMax                 *int16   `json:"age_max"`
+		HeightMin              *int16   `json:"height_min"`
+		HeightMax              *int16   `json:"height_max"`
+		PreferredGoal          string   `json:"preferred_goal"`
+		PreferredProgram       string   `json:"preferred_program"`
+		PreferredCategories    []string `json:"preferred_categories"`
+		PreferredCountry       string   `json:"preferred_country"`
+		PreferredCity          string   `json:"preferred_city"`
+		WantsPartnerToRelocate *bool    `json:"wants_partner_to_relocate"`
+		WantsPartnerToFinance  string   `json:"wants_partner_to_finance"`
+	}
 	if err := ctx.ShouldBindJSON(&req); err != nil {
 		ctx.JSON(http.StatusBadRequest, types.Resp{Error: err.Error()})
 		return
 	}
 
-	prefs, err := c.svc.Queries.UpsertPreferences(ctx.Request.Context(), gen.UpsertPreferencesParams{
-		UserID: user.ID,
-		Data:   req,
-	})
+	params := gen.UpsertPreferencesParams{
+		UserID:              user.ID,
+		PreferredCategories: req.PreferredCategories,
+		Metadata:            types.JSONB{},
+	}
+	if req.PreferredGender != "" {
+		params.PreferredGender = pgtype.Text{String: req.PreferredGender, Valid: true}
+	}
+	if req.AgeMin != nil {
+		params.AgeMin = pgtype.Int2{Int16: *req.AgeMin, Valid: true}
+	}
+	if req.AgeMax != nil {
+		params.AgeMax = pgtype.Int2{Int16: *req.AgeMax, Valid: true}
+	}
+	if req.HeightMin != nil {
+		params.HeightMin = pgtype.Int2{Int16: *req.HeightMin, Valid: true}
+	}
+	if req.HeightMax != nil {
+		params.HeightMax = pgtype.Int2{Int16: *req.HeightMax, Valid: true}
+	}
+	if req.PreferredGoal != "" {
+		params.PreferredGoal = pgtype.Text{String: req.PreferredGoal, Valid: true}
+	}
+	if req.PreferredProgram != "" {
+		params.PreferredProgram = pgtype.Text{String: req.PreferredProgram, Valid: true}
+	}
+	if req.PreferredCountry != "" {
+		params.PreferredCountry = pgtype.Text{String: req.PreferredCountry, Valid: true}
+	}
+	if req.PreferredCity != "" {
+		params.PreferredCity = pgtype.Text{String: req.PreferredCity, Valid: true}
+	}
+	if req.WantsPartnerToRelocate != nil {
+		params.WantsPartnerToRelocate = pgtype.Bool{Bool: *req.WantsPartnerToRelocate, Valid: true}
+	}
+	if req.WantsPartnerToFinance != "" {
+		params.WantsPartnerToFinance = pgtype.Text{String: req.WantsPartnerToFinance, Valid: true}
+	}
+
+	prefs, err := c.svc.Queries.UpsertPreferences(ctx.Request.Context(), params)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, types.Resp{Error: "Failed to update preferences"})
 		return
@@ -255,8 +354,25 @@ func (c *RecommendationController) RegisterRoutes(rg *gin.RouterGroup, userAuth 
 	rg.Use(userAuth)
 	rg.GET("/profile", c.GetProfile)
 	rg.PUT("/profile", c.CreateOrUpdateProfile)
+	rg.GET("/profile/:userId", c.GetProfilePreview)
 	rg.POST("/profile/media", c.AddMedia)
 	rg.DELETE("/profile/media", c.RemoveMedia)
 	rg.GET("/preferences", c.GetPreferences)
 	rg.PUT("/preferences", c.UpdatePreferences)
+}
+
+// orDefault returns val if non-empty, otherwise fallback.
+func orDefault(val, fallback string) string {
+	if val != "" {
+		return val
+	}
+	return fallback
+}
+
+// orSlice returns val if non-nil/non-empty, otherwise fallback.
+func orSlice(val, fallback []string) []string {
+	if len(val) > 0 {
+		return val
+	}
+	return fallback
 }

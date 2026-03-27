@@ -14,6 +14,7 @@ import (
 	"github.com/valkey-io/valkey-go"
 
 	"github.com/Gooowan/matchup/modules/chat"
+	"github.com/Gooowan/matchup/modules/clubs"
 	"github.com/Gooowan/matchup/modules/core/db"
 	"github.com/Gooowan/matchup/modules/email"
 	"github.com/Gooowan/matchup/modules/email/providers"
@@ -114,8 +115,9 @@ func main() {
 	// Initialize module services
 	moderationSvc := moderation.NewModerationService(dbpool)
 	recommendationSvc := recommendation.NewRecommendationService(dbpool)
+	clubSvc := clubs.NewClubService(dbpool)
 	chatSvc := chat.NewChatService(dbpool, moderationSvc)
-	feedSvc := feed.NewFeedService(dbpool, chatSvc, moderationSvc, recommendationSvc)
+	feedSvc := feed.NewFeedService(dbpool, chatSvc, moderationSvc, recommendationSvc, clubSvc)
 	mapSvc := mapmod.NewMapService(dbpool, recommendationSvc)
 	subscriptionSvc := subscriptions.NewSubscriptionService(dbpool)
 
@@ -132,6 +134,7 @@ func main() {
 	mapCtrl := mapmod.NewMapController(mapSvc)
 	moderationCtrl := moderation.NewModerationController(moderationSvc)
 	subscriptionCtrl := subscriptions.NewSubscriptionController(subscriptionSvc)
+	clubCtrl := clubs.NewClubController(clubSvc)
 
 	r := gin.Default()
 
@@ -190,6 +193,9 @@ func main() {
 	// Subscriptions: /subscriptions/...
 	subscriptionsGroup := r.Group("/subscriptions")
 	subscriptionCtrl.RegisterRoutes(subscriptionsGroup, adminAuth, userAuth)
+
+	// Clubs: /clubs/..., /me/clubs, /admin/clubs/...
+	clubCtrl.RegisterRoutes(r, meGroup, adminGroup, userAuth, adminAuth)
 
 	// Public marketing materials routes (no authentication required)
 	marketingGroup := r.Group("/media")

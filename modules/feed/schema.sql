@@ -6,6 +6,7 @@ CREATE TABLE matches(
     from_user_id uuid NOT NULL REFERENCES users(id),
     to_user_id uuid NOT NULL REFERENCES users(id),
     action varchar(10) NOT NULL,
+    source varchar(30),
     created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(from_user_id, to_user_id)
 );

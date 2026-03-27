@@ -21,7 +21,7 @@ func NewRecommendationService(db *pgxpool.Pool) *RecommendationService {
 	return &RecommendationService{DB: db, Queries: gen.New(db)}
 }
 
-// getProfileData extracts the data JSONB from a profile as a map
+// getProfileData extracts the data JSONB from a profile as a map (kept for backward compat)
 func getProfileData(data types.JSONB) types.JSONB {
 	if data == nil {
 		return types.JSONB{}
@@ -35,19 +35,19 @@ func (s *RecommendationService) AddMediaURL(ctx context.Context, userID pgtype.U
 		return fmt.Errorf("profile not found: %w", err)
 	}
 
-	data := getProfileData(profile.Data)
+	metadata := getProfileData(profile.Metadata)
 
 	var urls []string
-	if raw, ok := data["media_urls"]; ok {
+	if raw, ok := metadata["media_urls"]; ok {
 		b, _ := json.Marshal(raw)
 		json.Unmarshal(b, &urls)
 	}
 	urls = append(urls, url)
-	data["media_urls"] = urls
+	metadata["media_urls"] = urls
 
-	return s.Queries.UpdateProfileData(ctx, gen.UpdateProfileDataParams{
-		Data:   data,
-		UserID: userID,
+	return s.Queries.UpdateProfileMetadata(ctx, gen.UpdateProfileMetadataParams{
+		Metadata: metadata,
+		UserID:   userID,
 	})
 }
 
@@ -57,10 +57,10 @@ func (s *RecommendationService) RemoveMediaURL(ctx context.Context, userID pgtyp
 		return fmt.Errorf("profile not found: %w", err)
 	}
 
-	data := getProfileData(profile.Data)
+	metadata := getProfileData(profile.Metadata)
 
 	var urls []string
-	if raw, ok := data["media_urls"]; ok {
+	if raw, ok := metadata["media_urls"]; ok {
 		b, _ := json.Marshal(raw)
 		json.Unmarshal(b, &urls)
 	}
@@ -71,10 +71,10 @@ func (s *RecommendationService) RemoveMediaURL(ctx context.Context, userID pgtyp
 			filtered = append(filtered, u)
 		}
 	}
-	data["media_urls"] = filtered
+	metadata["media_urls"] = filtered
 
-	return s.Queries.UpdateProfileData(ctx, gen.UpdateProfileDataParams{
-		Data:   data,
-		UserID: userID,
+	return s.Queries.UpdateProfileMetadata(ctx, gen.UpdateProfileMetadataParams{
+		Metadata: metadata,
+		UserID:   userID,
 	})
 }

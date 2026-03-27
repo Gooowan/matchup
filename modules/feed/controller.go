@@ -58,6 +58,7 @@ func (c *FeedController) Swipe(ctx *gin.Context) {
 	var req struct {
 		TargetUserID string `json:"target_user_id" binding:"required"`
 		Action       string `json:"action" binding:"required,oneof=LIKE PASS"`
+		Source       string `json:"source"`
 	}
 	if err := ctx.ShouldBindJSON(&req); err != nil {
 		ctx.JSON(http.StatusBadRequest, types.Resp{Error: err.Error()})
@@ -70,7 +71,7 @@ func (c *FeedController) Swipe(ctx *gin.Context) {
 		return
 	}
 
-	result, err := c.svc.Swipe(ctx.Request.Context(), user.ID, targetID, req.Action)
+	result, err := c.svc.Swipe(ctx.Request.Context(), user.ID, targetID, req.Action, req.Source)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, types.Resp{Error: "Failed to process swipe"})
 		return
@@ -106,7 +107,7 @@ func (c *FeedController) Hide(ctx *gin.Context) {
 		return
 	}
 
-	_, err = c.svc.Swipe(ctx.Request.Context(), user.ID, targetID, "PASS")
+	_, err = c.svc.Swipe(ctx.Request.Context(), user.ID, targetID, "PASS", "")
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, types.Resp{Error: "Failed to hide user"})
 		return

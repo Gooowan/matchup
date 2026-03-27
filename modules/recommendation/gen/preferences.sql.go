@@ -13,7 +13,7 @@ import (
 )
 
 const getPreferences = `-- name: GetPreferences :one
-SELECT id, user_id, data, created_at, updated_at FROM user_preferences WHERE user_id = $1
+SELECT id, user_id, preferred_gender, age_min, age_max, height_min, height_max, preferred_goal, preferred_program, preferred_categories, preferred_country, preferred_city, wants_partner_to_relocate, wants_partner_to_finance, metadata, data, created_at, updated_at FROM user_preferences WHERE user_id = $1
 `
 
 func (q *Queries) GetPreferences(ctx context.Context, userID pgtype.UUID) (UserPreference, error) {
@@ -22,6 +22,19 @@ func (q *Queries) GetPreferences(ctx context.Context, userID pgtype.UUID) (UserP
 	err := row.Scan(
 		&i.ID,
 		&i.UserID,
+		&i.PreferredGender,
+		&i.AgeMin,
+		&i.AgeMax,
+		&i.HeightMin,
+		&i.HeightMax,
+		&i.PreferredGoal,
+		&i.PreferredProgram,
+		&i.PreferredCategories,
+		&i.PreferredCountry,
+		&i.PreferredCity,
+		&i.WantsPartnerToRelocate,
+		&i.WantsPartnerToFinance,
+		&i.Metadata,
 		&i.Data,
 		&i.CreatedAt,
 		&i.UpdatedAt,
@@ -30,26 +43,95 @@ func (q *Queries) GetPreferences(ctx context.Context, userID pgtype.UUID) (UserP
 }
 
 const upsertPreferences = `-- name: UpsertPreferences :one
-INSERT INTO user_preferences(user_id, data)
-    VALUES ($1, $2)
+INSERT INTO user_preferences(
+    user_id,
+    preferred_gender, age_min, age_max, height_min, height_max,
+    preferred_goal, preferred_program, preferred_categories,
+    preferred_country, preferred_city,
+    wants_partner_to_relocate, wants_partner_to_finance,
+    metadata, data
+)
+VALUES (
+    $1,
+    $2, $3, $4, $5, $6,
+    $7, $8, $9,
+    $10, $11,
+    $12, $13,
+    $14, $15
+)
 ON CONFLICT (user_id)
     DO UPDATE SET
-        data = EXCLUDED.data,
-        updated_at = CURRENT_TIMESTAMP
-RETURNING id, user_id, data, created_at, updated_at
+        preferred_gender          = EXCLUDED.preferred_gender,
+        age_min                   = EXCLUDED.age_min,
+        age_max                   = EXCLUDED.age_max,
+        height_min                = EXCLUDED.height_min,
+        height_max                = EXCLUDED.height_max,
+        preferred_goal            = EXCLUDED.preferred_goal,
+        preferred_program         = EXCLUDED.preferred_program,
+        preferred_categories      = EXCLUDED.preferred_categories,
+        preferred_country         = EXCLUDED.preferred_country,
+        preferred_city            = EXCLUDED.preferred_city,
+        wants_partner_to_relocate = EXCLUDED.wants_partner_to_relocate,
+        wants_partner_to_finance  = EXCLUDED.wants_partner_to_finance,
+        metadata                  = EXCLUDED.metadata,
+        data                      = EXCLUDED.data,
+        updated_at                = CURRENT_TIMESTAMP
+RETURNING id, user_id, preferred_gender, age_min, age_max, height_min, height_max, preferred_goal, preferred_program, preferred_categories, preferred_country, preferred_city, wants_partner_to_relocate, wants_partner_to_finance, metadata, data, created_at, updated_at
 `
 
 type UpsertPreferencesParams struct {
-	UserID pgtype.UUID `db:"user_id" json:"user_id"`
-	Data   types.JSONB `db:"data" json:"data"`
+	UserID                 pgtype.UUID `db:"user_id" json:"user_id"`
+	PreferredGender        pgtype.Text `db:"preferred_gender" json:"preferred_gender"`
+	AgeMin                 pgtype.Int2 `db:"age_min" json:"age_min"`
+	AgeMax                 pgtype.Int2 `db:"age_max" json:"age_max"`
+	HeightMin              pgtype.Int2 `db:"height_min" json:"height_min"`
+	HeightMax              pgtype.Int2 `db:"height_max" json:"height_max"`
+	PreferredGoal          pgtype.Text `db:"preferred_goal" json:"preferred_goal"`
+	PreferredProgram       pgtype.Text `db:"preferred_program" json:"preferred_program"`
+	PreferredCategories    []string    `db:"preferred_categories" json:"preferred_categories"`
+	PreferredCountry       pgtype.Text `db:"preferred_country" json:"preferred_country"`
+	PreferredCity          pgtype.Text `db:"preferred_city" json:"preferred_city"`
+	WantsPartnerToRelocate pgtype.Bool `db:"wants_partner_to_relocate" json:"wants_partner_to_relocate"`
+	WantsPartnerToFinance  pgtype.Text `db:"wants_partner_to_finance" json:"wants_partner_to_finance"`
+	Metadata               types.JSONB `db:"metadata" json:"metadata"`
+	Data                   types.JSONB `db:"data" json:"data"`
 }
 
 func (q *Queries) UpsertPreferences(ctx context.Context, arg UpsertPreferencesParams) (UserPreference, error) {
-	row := q.db.QueryRow(ctx, upsertPreferences, arg.UserID, arg.Data)
+	row := q.db.QueryRow(ctx, upsertPreferences,
+		arg.UserID,
+		arg.PreferredGender,
+		arg.AgeMin,
+		arg.AgeMax,
+		arg.HeightMin,
+		arg.HeightMax,
+		arg.PreferredGoal,
+		arg.PreferredProgram,
+		arg.PreferredCategories,
+		arg.PreferredCountry,
+		arg.PreferredCity,
+		arg.WantsPartnerToRelocate,
+		arg.WantsPartnerToFinance,
+		arg.Metadata,
+		arg.Data,
+	)
 	var i UserPreference
 	err := row.Scan(
 		&i.ID,
 		&i.UserID,
+		&i.PreferredGender,
+		&i.AgeMin,
+		&i.AgeMax,
+		&i.HeightMin,
+		&i.HeightMax,
+		&i.PreferredGoal,
+		&i.PreferredProgram,
+		&i.PreferredCategories,
+		&i.PreferredCountry,
+		&i.PreferredCity,
+		&i.WantsPartnerToRelocate,
+		&i.WantsPartnerToFinance,
+		&i.Metadata,
 		&i.Data,
 		&i.CreatedAt,
 		&i.UpdatedAt,
