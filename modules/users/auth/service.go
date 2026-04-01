@@ -112,13 +112,19 @@ func (s *AuthService) CheckEmailAvailability(ctx context.Context, email string) 
 func (s *AuthService) Register(ctx context.Context, req *RegistrationRequest) (*coregen.User, error) {
 	var err error
 
-	if req.InviterID == "" {
-		return nil, fmt.Errorf("inviter_id is required")
-	}
-
-	inviterUUID, err := utils.StringToUUID(req.InviterID)
-	if err != nil {
-		return nil, fmt.Errorf("invalid inviter_id format")
+	// inviter_id is optional for MatchUp
+	var inviterUUID pgtype.UUID
+	if req.InviterID != "" {
+		parsed, parseErr := utils.StringToUUID(req.InviterID)
+		if parseErr != nil {
+			return nil, fmt.Errorf("invalid inviter_id format")
+		}
+		// Validate inviter exists
+		_, findErr := s.core.Queries.GetUser(ctx, parsed)
+		if findErr != nil {
+			return nil, fmt.Errorf("inviter not found")
+		}
+		inviterUUID = parsed
 	}
 
 	tx, err := s.core.DB.Begin(ctx)
@@ -133,12 +139,6 @@ func (s *AuthService) Register(ctx context.Context, req *RegistrationRequest) (*
 		if err := hook.ValidateRegistration(qtx, ctx, req); err != nil {
 			return nil, fmt.Errorf("registration validation failed: %w", err)
 		}
-	}
-
-	// Validate inviter exists
-	_, err = s.core.Queries.GetUser(ctx, inviterUUID)
-	if err != nil {
-		return nil, fmt.Errorf("inviter not found")
 	}
 
 	var emailVerificationToken pgtype.Text
@@ -323,6 +323,28 @@ func (s *AuthService) RequestEmailVerification(ctx context.Context, address, tok
 			"VerifyLink": verificationLink,
 		},
 	})
+}
+
+// EmailVerifyByUserID marks a user's email as verified by clearing the verification token.
+func (s *AuthService) EmailVerifyByUserID(ctx context.Context, userIDStr string) (*coregen.User, error) {
+	userUUID, err := utils.StringToUUID(userIDStr)
+	if err != nil {
+		return nil, fmt.Errorf("invalid user ID: %w", err)
+	}
+
+	user, err := s.core.Queries.GetUser(ctx, userUUID)
+	if err != nil {
+		return nil, fmt.Errorf("user not found: %w", err)
+	}
+
+	if err := s.core.Queries.UpdateUserEmailVerificationToken(ctx, coregen.UpdateUserEmailVerificationTokenParams{
+		EmailVerificationToken: pgtype.Text{},
+		UserID:                 user.ID,
+	}); err != nil {
+		return nil, fmt.Errorf("failed to update verification token: %w", err)
+	}
+
+	return &user, nil
 }
 
 func (s *AuthService) EmailVerify(ctx context.Context, token string) (*coregen.User, error) {

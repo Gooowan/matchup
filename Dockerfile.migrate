@@ -25,6 +25,7 @@ RUN apk add --no-cache postgresql-client wget tar && \
 
 COPY --from=schema-builder /app/build/combined_schema.sql /schema.sql
 COPY --from=schema-builder /app/build/combined_views.sql* /views.sql
+COPY build/migrations/ /migrations/
 COPY cmd/schema-gen/migrations.sh /entrypoint.sh
 RUN chmod +x /entrypoint.sh
 

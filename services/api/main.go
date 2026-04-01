@@ -28,7 +28,7 @@ import (
 	"github.com/Gooowan/matchup/modules/users/auth"
 	"github.com/Gooowan/matchup/services/api/controllers"
 
-	// "github.com/Gooowan/matchup/modules/otp"
+	"github.com/Gooowan/matchup/modules/otp"
 	"github.com/Gooowan/matchup/modules/ratelimit"
 )
 
@@ -110,7 +110,7 @@ func main() {
 	defer valkeyClient.Close()
 
 	// Initialize OTP service
-	// otpService := otp.NewOTPService(valkeyClient, emailService)
+	otpService := otp.NewOTPService(valkeyClient, emailService)
 
 	// Initialize module services
 	moderationSvc := moderation.NewModerationService(dbpool)
@@ -160,8 +160,11 @@ func main() {
 	adminController.RegisterRoutes(adminGroup, adminAuth)
 	fileAdminController.RegisterRoutes(adminGroup, adminAuth)
 
+	otpAuthController := auth.NewOTPAuthController(authService, otpService)
+
 	authGroup := r.Group("/auth")
 	authController.RegisterRoutes(authGroup, rlService.LoginRateLimiter)
+	otpAuthController.RegisterRoutes(authGroup)
 
 	userGroup := r.Group("/user")
 	userController.RegisterRoutes(userGroup, userAuth, filesController, authController)

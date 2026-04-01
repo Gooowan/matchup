@@ -5,6 +5,7 @@ import svg from '@poppanator/sveltekit-svg';
 import { defineConfig } from 'vite';
 
 export default defineConfig({
+	envDir: '../../',
 	server: {
 		allowedHosts: [
 			'0.0.0.0',

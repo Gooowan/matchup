@@ -1,3 +1,4 @@
+import { goto } from '$app/navigation';
 import { authStore } from '$stores/auth.svelte';
 import toast from 'svelte-french-toast';
 
@@ -8,7 +9,9 @@ export async function authFetch(endpoint: string, init: RequestInit = {}): Promi
 
 	if (response.status === 401) {
 		toast.error('Session expired, please login again');
-		authStore.logout();
+		authStore.user = null;
+		authStore.isAuthenticated = false;
+		goto('/login');
 
 		return new Promise(() => {}) as Promise<Response>;
 	}

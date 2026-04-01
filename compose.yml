@@ -13,7 +13,7 @@ services:
       retries: 20
     networks:
       matchup-network:
-        ipv4_address: 172.3.0.5
+        ipv4_address: 172.71.0.5
 
   redis:
     image: valkey/valkey:8-alpine
@@ -26,7 +26,7 @@ services:
       retries: 20
     networks:
       matchup-network:
-        ipv4_address: 172.3.0.6
+        ipv4_address: 172.71.0.6
 
   migrate:
     build:
@@ -58,14 +58,13 @@ services:
       retries: 3
     networks:
       matchup-network:
-        ipv4_address: 172.3.0.7
+        ipv4_address: 172.71.0.7
 
   api:
     build:
       context: .
       args:
         SERVICE_NAME: api
-        ARCHITECTURE: amd64
     env_file: 
       - .env
     depends_on:
@@ -85,7 +84,7 @@ services:
       start_period: 10s
     networks:
       matchup-network:
-        ipv4_address: 172.3.0.10
+        ipv4_address: 172.71.0.10
 
   # cron:
   #   build:
@@ -109,23 +108,15 @@ services:
   #   networks:
   #     - matchup-network
 
-  # web:
-  #   image: node:24
-  #   working_dir: /app
-  #   volumes:
-  #     - .env:/app/.env
-  #     - ./services/frontend:/app
-  #     - /app/node_modules
-  #   command: >
-  #     sh -c "
-  #       export COREPACK_ENABLE_DOWNLOAD_PROMPT=0 &&
-  #       corepack enable pnpm &&
-  #       pnpm install &&
-  #       pnpm run dev
-  #     "
-  #   networks:
-  #     matchup-network:
-  #       ipv4_address: 172.3.0.20
+  web:
+    image: nginx:alpine
+    user: root
+    volumes:
+      - ./services/frontend/build:/usr/share/nginx/html:ro
+      - ./services/frontend/nginx.conf:/etc/nginx/nginx.conf:ro
+    networks:
+      matchup-network:
+        ipv4_address: 172.71.0.15
 
 volumes:
   postgres_data:
@@ -143,4 +134,4 @@ networks:
     ipam:
       driver: default
       config:
-        - subnet: 172.3.0.0/24
+        - subnet: 172.71.0.0/24

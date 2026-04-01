@@ -1,129 +1,97 @@
 <script lang="ts">
-	import { t } from '$lib/locale';
-	import toast from 'svelte-french-toast';
-
-	import * as Card from '$lib/components/ui/card/index.js';
-	import * as Form from '$lib/components/ui/form/index.js';
-	import { Input } from '$lib/components/ui/input/index.js';
-	import { valibot } from 'sveltekit-superforms/adapters';
-	import { superForm, defaults } from 'sveltekit-superforms';
-
-	import Button from '$components/ui/button/button.svelte';
-	import { authStore } from '$stores/auth.svelte';
 	import { authFetch } from '$lib/utils/authFetch';
+	import { authStore } from '$stores/auth.svelte';
 	import { goto } from '$app/navigation';
 	import { onMount } from 'svelte';
-	import * as v from 'valibot';
 
+	let email = $state('');
+	let password = $state('');
 	let isLoading = $state(false);
+	let errorMsg = $state('');
 
 	onMount(async () => {
 		await authStore.logout(false);
 	});
 
-	const loginFormSchema = v.object({
-		email: v.pipe(v.string(), v.email('auth.error.email')),
-		password: v.pipe(v.string(), v.minLength(8, 'auth.error.password-length')),
-	});
-
-	type FormData = v.InferInput<typeof loginFormSchema>;
-
-	const initialData: FormData = {
-		email: '',
-		password: '',
-	};
-
-	const form = superForm(defaults(initialData, valibot(loginFormSchema)), {
-		SPA: true,
-		dataType: 'json',
-		validators: valibot(loginFormSchema),
-		validationMethod: 'oninput',
-		onError: ({ result }) => {
-			toast.error(`${result.error}`);
-		},
-		async onUpdate({ form }) {
-			if (form.valid) {
-				isLoading = true;
-
-				const loginData = {
-					email: form.data.email,
-					password: form.data.password,
-				};
-
-				const resp = await authFetch('/auth/login', {
-					method: 'POST',
-					body: JSON.stringify(loginData),
-					headers: {
-						'Content-Type': 'application/json',
-					},
-				});
-				const response: ApiResponse<LoginData> = await resp.json();
-
-				if (resp.status === 200 && response.data) {
-					authStore.login(response.data.user);
-					await goto('/app');
-					isLoading = false;
-					return;
-				}
-
-				toast.error(response.error || $t('auth.toast.login-failed'));
-				isLoading = false;
+	async function handleLogin() {
+		errorMsg = '';
+		isLoading = true;
+		try {
+			const resp = await authFetch('/auth/login', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ email, password })
+			});
+			const response = await resp.json();
+			if (resp.ok && response.data) {
+				authStore.login(response.data.user);
+				await goto('/feed');
+			} else {
+				errorMsg = response.error || 'Login failed. Check your credentials.';
 			}
-		},
-	});
+		} catch {
+			errorMsg = 'Network error. Please try again.';
+		} finally {
+			isLoading = false;
+		}
+	}
 
-	const { form: formData, enhance } = form;
+	function handleKeydown(e: KeyboardEvent) {
+		if (e.key === 'Enter') handleLogin();
+	}
 </script>
 
-<div class="flex h-full flex-col items-center justify-center">
-	<Card.Root class="m-auto w-full max-w-md">
-		<Card.Header>
-			<Card.Title class="text-xl">{$t('auth.login.title')}</Card.Title>
-			<Card.Description>{$t('auth.login.description')}</Card.Description>
-		</Card.Header>
-		<Card.Content>
-			<form use:enhance method="POST" class="space-y-6">
-				<Form.Field {form} name="email">
-					<Form.Control>
-						{#snippet children({ props })}
-							<Form.Label>{$t('auth.email.label')}</Form.Label>
-							<Input
-								{...props}
-								bind:value={$formData.email}
-								type="email"
-								placeholder={$t('auth.email.placeholder')}
-							/>
-						{/snippet}
-					</Form.Control>
-					<Form.FieldErrors />
-				</Form.Field>
+<div class="flex min-h-[100dvh] flex-col items-center justify-center px-6 pt-safe pb-safe">
+	<!-- Logo -->
+	<img src="/match_icon.svg" alt="MatchUp" class="mb-2 h-16 w-16" />
+	<h1 class="mb-10 text-[28px] font-black" style="color: #171717;">Sign in</h1>
 
-				<Form.Field {form} name="password">
-					<Form.Control>
-						{#snippet children({ props })}
-							<Form.Label>{$t('auth.password.label')}</Form.Label>
-							<Input
-								{...props}
-								bind:value={$formData.password}
-								type="password"
-								placeholder={$t('auth.password.placeholder')}
-							/>
-						{/snippet}
-					</Form.Control>
-					<Form.FieldErrors />
-				</Form.Field>
+	<div class="flex w-full max-w-sm flex-col gap-4">
+		<input
+			type="email"
+			placeholder="Email"
+			bind:value={email}
+			onkeydown={handleKeydown}
+			autocomplete="email"
+			class="w-full px-5 py-3 text-[14px] font-medium outline-none"
+			style="border: 1.5px solid #171717; border-radius: 50px; background: transparent; color: #171717;"
+		/>
+		<input
+			type="password"
+			placeholder="Password"
+			bind:value={password}
+			onkeydown={handleKeydown}
+			autocomplete="current-password"
+			class="w-full px-5 py-3 text-[14px] font-medium outline-none"
+			style="border: 1.5px solid #171717; border-radius: 50px; background: transparent; color: #171717;"
+		/>
 
-				<Button class="pl-0" href="/forgotPassword" variant="link">
-					{$t('auth.login.forgot')}
-				</Button>
+		{#if errorMsg}
+			<p class="text-center text-[13px] font-medium text-red-500">{errorMsg}</p>
+		{/if}
 
-				<Form.Button class="w-full" disabled={isLoading}
-					>{isLoading ? $t('common.loading') : $t('auth.login.submit')}</Form.Button
-				>
-				<Button href="/register" class="w-full" variant="ghost">
-					{$t('auth.login.register')}
-				</Button>
-			</form>
-		</Card.Content>
-	</Card.Root>
+		<button
+			onclick={handleLogin}
+			disabled={isLoading || !email || !password}
+			class="mt-2 w-full py-3 text-[14px] font-semibold text-white transition-opacity disabled:opacity-60"
+			style="border-radius: 50px; background: #696969;"
+		>
+			{isLoading ? 'Signing in…' : 'Sign in'}
+		</button>
+
+		<a
+			href="/register"
+			class="text-center text-[13px] font-medium"
+			style="color: #696969;"
+		>
+			Create account
+		</a>
+		<a
+			href="/forgotPassword"
+			class="text-center text-[13px] font-medium"
+			style="color: #696969;"
+		>
+			Forgot password?
+		</a>
+	</div>
 </div>

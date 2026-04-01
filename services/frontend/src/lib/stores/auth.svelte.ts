@@ -1,9 +1,11 @@
 import { browser } from '$app/environment';
+import { goto } from '$app/navigation';
 import { authFetch } from '$utils/authFetch';
 
 function createAuthStore() {
 	let user = $state<UserDTO | null>(null);
 	let isAuthenticated = $state<boolean>(false);
+	let loggingOut = false;
 
 	return {
 		get user() {
@@ -43,14 +45,24 @@ function createAuthStore() {
 			return false;
 		},
 		async logout(redirect: boolean = true, redirectUrl: string = '/login') {
+			if (loggingOut) return;
+			loggingOut = true;
+
 			this.user = null;
 			this.isAuthenticated = false;
 
-			await authFetch('/auth/logout', { method: 'POST' });
+			try {
+				const apiUrl = import.meta.env.VITE_API_URL;
+				await fetch(`${apiUrl}/auth/logout`, { method: 'POST', credentials: 'include' });
+			} catch {
+				// Best-effort; ignore logout API errors
+			}
 
 			if (browser && redirect) {
-				window.location.href = redirectUrl;
+				await goto(redirectUrl);
 			}
+
+			loggingOut = false;
 		},
 		async updateProfile(firstName: string, lastName: string) {
 			const resp = await authFetch('/user/profile/update', {

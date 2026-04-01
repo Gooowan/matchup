@@ -165,3 +165,13 @@ func (s *OTPService) buildOTPKey(userID string, purpose string) string {
 func (s *OTPService) deleteOTP(ctx context.Context, key string) {
 	s.valkey.Do(ctx, s.valkey.B().Del().Key(key).Build())
 }
+
+// CreateAndSendEmailVerifyOTP is a convenience wrapper for email verification OTPs.
+func (s *OTPService) CreateAndSendEmailVerifyOTP(ctx context.Context, userID, userEmail string) error {
+	return s.CreateAndSendOTP(ctx, userID, userEmail, "email_verify", map[string]interface{}{})
+}
+
+// VerifyOTP validates an OTP code (alias for ValidateOTP).
+func (s *OTPService) VerifyOTP(ctx context.Context, userID, purpose, code string) error {
+	return s.ValidateOTP(ctx, userID, purpose, code)
+}

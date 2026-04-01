@@ -54,3 +54,7 @@ docker-compose.override.yml
 
 # Claude dev guide (local only)
 CLAUDE.md
+
+.pmpm-store/
+.svelte-kit/
+87000+167*500+51*200+11*100+5*50=

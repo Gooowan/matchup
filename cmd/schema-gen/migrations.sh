@@ -1,23 +1,51 @@
 #!/bin/sh
 set -e
 
-echo "running psqldef"
+PSQL="psql -h $POSTGRES_HOST -U $POSTGRES_USER -p $POSTGRES_PORT -d $POSTGRES_DB"
 
-# Check if database has any tables (fresh database detection)
-TABLE_COUNT=$(psql -h "$POSTGRES_HOST" -U "$POSTGRES_USER" -p "$POSTGRES_PORT" -d "$POSTGRES_DB" -tAc \
-  "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public' AND table_type = 'BASE TABLE';")
+# Ensure the migrations tracking table exists (idempotent)
+$PSQL -c "
+  CREATE TABLE IF NOT EXISTS schema_migrations (
+    filename  TEXT PRIMARY KEY,
+    applied_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+  );
+"
+
+# Detect fresh vs existing database (exclude schema_migrations itself)
+TABLE_COUNT=$($PSQL -tAc "
+  SELECT count(*) FROM information_schema.tables
+  WHERE table_schema = 'public'
+    AND table_type = 'BASE TABLE'
+    AND table_name != 'schema_migrations';
+")
 
 if [ "$TABLE_COUNT" = "0" ]; then
-  echo "fresh database detected, applying schema directly"
-  psql -h "$POSTGRES_HOST" -U "$POSTGRES_USER" -p "$POSTGRES_PORT" -d "$POSTGRES_DB" -f /schema.sql
+  echo "fresh database — applying combined schema"
+  $PSQL -f /schema.sql
+
+  # Mark all migration files as already applied (schema covers them)
+  for f in /migrations/*.sql; do
+    name=$(basename "$f")
+    $PSQL -c "INSERT INTO schema_migrations (filename) VALUES ('$name') ON CONFLICT DO NOTHING;"
+  done
 else
-  echo "existing database, running psqldef diff"
-  psqldef --enable-drop --skip-view -h $POSTGRES_HOST -U $POSTGRES_USER -p $POSTGRES_PORT $POSTGRES_DB < /schema.sql
+  echo "existing database — applying pending migrations"
+  for f in $(ls /migrations/*.sql | sort); do
+    name=$(basename "$f")
+    already=$($PSQL -tAc "SELECT count(*) FROM schema_migrations WHERE filename = '$name';")
+    if [ "$already" = "0" ]; then
+      echo "  applying $name"
+      $PSQL -v ON_ERROR_STOP=1 -f "$f"
+      $PSQL -c "INSERT INTO schema_migrations (filename) VALUES ('$name');"
+    else
+      echo "  skipping $name (already applied)"
+    fi
+  done
 fi
 
 if [ -f /views.sql ]; then
   echo "recreating views"
-  psql -h "$POSTGRES_HOST" -U "$POSTGRES_USER" -p "$POSTGRES_PORT" -d "$POSTGRES_DB" -f /views.sql
-else
-  echo "no views to apply"
+  $PSQL -f /views.sql
 fi
+
+echo "migrations complete"

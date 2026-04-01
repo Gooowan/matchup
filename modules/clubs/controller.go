@@ -89,13 +89,13 @@ func (c *ClubController) GetClub(ctx *gin.Context) {
 
 // GET /clubs/:id/members
 func (c *ClubController) ListMembers(ctx *gin.Context) {
-	clubID, err := utils.StringToUUID(ctx.Param("id"))
+	club, err := c.svc.GetClubBySlug(ctx.Request.Context(), ctx.Param("slug"))
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, types.Resp{Error: "Invalid club ID"})
+		ctx.JSON(http.StatusNotFound, types.Resp{Error: "Club not found"})
 		return
 	}
 	limit, offset := pageParams(ctx)
-	members, err := c.svc.ListClubMembers(ctx.Request.Context(), clubID, limit, offset)
+	members, err := c.svc.ListClubMembers(ctx.Request.Context(), club.ID, limit, offset)
 	if err != nil {
 		ctx.JSON(http.StatusInternalServerError, types.Resp{Error: "Failed to list members"})
 		return
@@ -127,31 +127,31 @@ func (c *ClubController) JoinClub(ctx *gin.Context) {
 		ctx.JSON(http.StatusUnauthorized, types.Resp{Error: "Unauthorized"})
 		return
 	}
-	clubID, err := utils.StringToUUID(ctx.Param("id"))
+	club, err := c.svc.GetClubBySlug(ctx.Request.Context(), ctx.Param("slug"))
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, types.Resp{Error: "Invalid club ID"})
+		ctx.JSON(http.StatusNotFound, types.Resp{Error: "Club not found"})
 		return
 	}
-	if err := c.svc.JoinClub(ctx.Request.Context(), clubID, user.ID); err != nil {
+	if err := c.svc.JoinClub(ctx.Request.Context(), club.ID, user.ID); err != nil {
 		ctx.JSON(http.StatusInternalServerError, types.Resp{Error: "Failed to join club"})
 		return
 	}
 	ctx.JSON(http.StatusOK, types.Resp{Data: "ok"})
 }
 
-// DELETE /clubs/:id/join
+// DELETE /clubs/:slug/join
 func (c *ClubController) LeaveClub(ctx *gin.Context) {
 	user, ok := auth.GetUserFromContext(ctx)
 	if !ok {
 		ctx.JSON(http.StatusUnauthorized, types.Resp{Error: "Unauthorized"})
 		return
 	}
-	clubID, err := utils.StringToUUID(ctx.Param("id"))
+	club, err := c.svc.GetClubBySlug(ctx.Request.Context(), ctx.Param("slug"))
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, types.Resp{Error: "Invalid club ID"})
+		ctx.JSON(http.StatusNotFound, types.Resp{Error: "Club not found"})
 		return
 	}
-	if err := c.svc.LeaveClub(ctx.Request.Context(), clubID, user.ID); err != nil {
+	if err := c.svc.LeaveClub(ctx.Request.Context(), club.ID, user.ID); err != nil {
 		ctx.JSON(http.StatusInternalServerError, types.Resp{Error: "Failed to leave club"})
 		return
 	}
@@ -260,14 +260,14 @@ func (c *ClubController) RegisterRoutes(
 	public := r.Group("/clubs")
 	public.GET("", c.ListClubs)
 	public.GET("/:slug", c.GetClub)
-	public.GET("/:id/members", c.ListMembers)
+	public.GET("/:slug/members", c.ListMembers)
 	public.POST("/register", c.RegisterClub)
 
 	// Authenticated user routes
 	auth := r.Group("/clubs")
 	auth.Use(userAuth)
-	auth.POST("/:id/join", c.JoinClub)
-	auth.DELETE("/:id/join", c.LeaveClub)
+	auth.POST("/:slug/join", c.JoinClub)
+	auth.DELETE("/:slug/join", c.LeaveClub)
 
 	// /me/clubs
 	meGroup.GET("/clubs", c.GetMyClubs)
