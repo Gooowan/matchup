@@ -135,7 +135,10 @@ func (s *OTPService) ValidateOTP(ctx context.Context, userID string, purpose str
 	otpData.Attempts++
 
 	if otpData.Code != code {
-		updatedData, _ := json.Marshal(otpData)
+		updatedData, err := json.Marshal(otpData)
+		if err != nil {
+			return fmt.Errorf("failed to marshal OTP data: %w", err)
+		}
 		remainingTTL := time.Until(otpData.ExpiresAt)
 		s.valkey.Do(ctx, s.valkey.B().Set().Key(key).Value(string(updatedData)).Ex(remainingTTL).Build())
 

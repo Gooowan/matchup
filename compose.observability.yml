@@ -1,0 +1,93 @@
+# Docker Compose overlay for local observability stack.
+# Run alongside the main compose.yml:
+#   docker compose -f compose.yml -f compose.observability.yml up -d
+#
+# Services:
+#   prometheus (172.71.0.20) — scrapes /metrics from API and cron
+#   grafana    (172.71.0.21) — dashboards at http://localhost:3001
+#   loki       (172.71.0.22) — log aggregation backend
+#   tempo      (172.71.0.23) — distributed tracing backend (OTLP HTTP :4318)
+#   promtail              — ships Docker container logs to Loki
+
+services:
+  prometheus:
+    image: prom/prometheus:v2.53.0
+    volumes:
+      - ./config/observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=15d'
+      - '--web.enable-lifecycle'
+    restart: unless-stopped
+    networks:
+      matchup-network:
+        ipv4_address: 172.71.0.20
+
+  grafana:
+    image: grafana/grafana:11.1.0
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_PASSWORD:-matchup_dev}
+      GF_USERS_ALLOW_SIGN_UP: 'false'
+      GF_AUTH_ANONYMOUS_ENABLED: 'false'
+    volumes:
+      - ./config/observability/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./config/observability/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - prometheus
+      - loki
+      - tempo
+    restart: unless-stopped
+    ports:
+      - '3001:3000'
+    networks:
+      matchup-network:
+        ipv4_address: 172.71.0.21
+
+  loki:
+    image: grafana/loki:3.0.0
+    volumes:
+      - ./config/observability/loki.yml:/etc/loki/local-config.yaml:ro
+      - loki_data:/loki
+    command: -config.file=/etc/loki/local-config.yaml
+    restart: unless-stopped
+    networks:
+      matchup-network:
+        ipv4_address: 172.71.0.22
+
+  tempo:
+    image: grafana/tempo:2.5.0
+    volumes:
+      - ./config/observability/tempo.yml:/etc/tempo.yaml:ro
+      - tempo_data:/var/tempo
+    command: -config.file=/etc/tempo.yaml
+    restart: unless-stopped
+    networks:
+      matchup-network:
+        ipv4_address: 172.71.0.23
+
+  promtail:
+    image: grafana/promtail:3.0.0
+    volumes:
+      - ./config/observability/promtail.yml:/etc/promtail/config.yml:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    command: -config.file=/etc/promtail/config.yml
+    depends_on:
+      - loki
+    restart: unless-stopped
+    networks:
+      - matchup-network
+
+volumes:
+  prometheus_data:
+  grafana_data:
+  loki_data:
+  tempo_data:
+
+networks:
+  matchup-network:
+    external: true

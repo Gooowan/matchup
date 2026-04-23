@@ -5,6 +5,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/Gooowan/matchup/modules/core/logging"
 	"github.com/Gooowan/matchup/modules/core/types"
 	"github.com/Gooowan/matchup/modules/core/utils"
 	gen "github.com/Gooowan/matchup/modules/moderation/gen"
@@ -36,6 +37,7 @@ func (c *ModerationController) BlockUser(ctx *gin.Context) {
 		BlockerID: user.ID,
 		BlockedID: targetID,
 	}); err != nil {
+		logging.FromContext(ctx.Request.Context()).Error("failed to block user", "error", err)
 		ctx.JSON(http.StatusInternalServerError, types.Resp{Error: "Failed to block user"})
 		return
 	}
@@ -60,6 +62,7 @@ func (c *ModerationController) UnblockUser(ctx *gin.Context) {
 		BlockerID: user.ID,
 		BlockedID: targetID,
 	}); err != nil {
+		logging.FromContext(ctx.Request.Context()).Error("failed to unblock user", "error", err)
 		ctx.JSON(http.StatusInternalServerError, types.Resp{Error: "Failed to unblock user"})
 		return
 	}
@@ -90,6 +93,7 @@ func (c *ModerationController) ReportUser(ctx *gin.Context) {
 	}
 
 	if err := c.svc.ReportUser(ctx.Request.Context(), user.ID, targetID, req.Category, req.Comment); err != nil {
+		logging.FromContext(ctx.Request.Context()).Error("failed to report user", "error", err)
 		ctx.JSON(http.StatusInternalServerError, types.Resp{Error: "Failed to report user"})
 		return
 	}

@@ -6,6 +6,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/Gooowan/matchup/modules/core/logging"
 	"github.com/Gooowan/matchup/modules/core/types"
 	"github.com/Gooowan/matchup/modules/core/utils"
 	gen "github.com/Gooowan/matchup/modules/subscriptions/gen"
@@ -58,6 +59,7 @@ func (c *SubscriptionController) CreatePlan(ctx *gin.Context) {
 		PriceCents:   req.PriceCents,
 	})
 	if err != nil {
+		logging.FromContext(ctx.Request.Context()).Error("failed to create subscription plan", "error", err)
 		ctx.JSON(http.StatusInternalServerError, types.Resp{Error: "Failed to create subscription plan"})
 		return
 	}
@@ -68,6 +70,7 @@ func (c *SubscriptionController) CreatePlan(ctx *gin.Context) {
 func (c *SubscriptionController) ListAllPlans(ctx *gin.Context) {
 	plans, err := c.svc.Queries.ListAllSubscriptions(ctx.Request.Context())
 	if err != nil {
+		logging.FromContext(ctx.Request.Context()).Error("failed to list all subscription plans", "error", err)
 		ctx.JSON(http.StatusInternalServerError, types.Resp{Error: "Failed to list plans"})
 		return
 	}
@@ -117,6 +120,7 @@ func (c *SubscriptionController) UpdatePlan(ctx *gin.Context) {
 		PriceCents:   req.PriceCents,
 		IsActive:     req.IsActive,
 	}); err != nil {
+		logging.FromContext(ctx.Request.Context()).Error("failed to update subscription plan", "error", err)
 		ctx.JSON(http.StatusInternalServerError, types.Resp{Error: "Failed to update plan"})
 		return
 	}
@@ -132,6 +136,7 @@ func (c *SubscriptionController) DeactivatePlan(ctx *gin.Context) {
 	}
 
 	if err := c.svc.Queries.DeactivateSubscription(ctx.Request.Context(), id); err != nil {
+		logging.FromContext(ctx.Request.Context()).Error("failed to deactivate subscription plan", "error", err)
 		ctx.JSON(http.StatusInternalServerError, types.Resp{Error: "Failed to deactivate plan"})
 		return
 	}
@@ -163,6 +168,7 @@ func (c *SubscriptionController) AssignSubscription(ctx *gin.Context) {
 
 	userSub, err := c.svc.AssignSubscription(ctx.Request.Context(), userID, subID)
 	if err != nil {
+		logging.FromContext(ctx.Request.Context()).Error("failed to assign subscription", "error", err, "user_id", req.UserID)
 		ctx.JSON(http.StatusInternalServerError, types.Resp{Error: "Failed to assign subscription"})
 		return
 	}
@@ -175,6 +181,7 @@ func (c *SubscriptionController) AssignSubscription(ctx *gin.Context) {
 func (c *SubscriptionController) ListActivePlans(ctx *gin.Context) {
 	plans, err := c.svc.Queries.ListSubscriptions(ctx.Request.Context())
 	if err != nil {
+		logging.FromContext(ctx.Request.Context()).Error("failed to list active subscription plans", "error", err)
 		ctx.JSON(http.StatusInternalServerError, types.Resp{Error: "Failed to list plans"})
 		return
 	}
@@ -190,6 +197,7 @@ func (c *SubscriptionController) GetMySubscriptions(ctx *gin.Context) {
 
 	subs, err := c.svc.Queries.ListUserSubscriptions(ctx.Request.Context(), user.ID)
 	if err != nil {
+		logging.FromContext(ctx.Request.Context()).Error("failed to get user subscriptions", "error", err)
 		ctx.JSON(http.StatusInternalServerError, types.Resp{Error: "Failed to get subscriptions"})
 		return
 	}

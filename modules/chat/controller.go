@@ -7,9 +7,10 @@ import (
 
 	"github.com/gin-gonic/gin"
 
-	"github.com/Gooowan/matchup/modules/users/auth"
+	"github.com/Gooowan/matchup/modules/core/logging"
 	"github.com/Gooowan/matchup/modules/core/types"
 	"github.com/Gooowan/matchup/modules/core/utils"
+	"github.com/Gooowan/matchup/modules/users/auth"
 )
 
 type ChatController struct {
@@ -29,6 +30,7 @@ func (c *ChatController) ListChats(ctx *gin.Context) {
 
 	chats, err := c.svc.ListChats(ctx.Request.Context(), user.ID)
 	if err != nil {
+		logging.FromContext(ctx.Request.Context()).Error("failed to list chats", "error", err)
 		ctx.JSON(http.StatusInternalServerError, types.Resp{Error: "Failed to list chats"})
 		return
 	}
@@ -74,6 +76,7 @@ func (c *ChatController) GetMessages(ctx *gin.Context) {
 			ctx.JSON(http.StatusForbidden, types.Resp{Error: "Access denied"})
 			return
 		}
+		logging.FromContext(ctx.Request.Context()).Error("failed to get messages", "error", err)
 		ctx.JSON(http.StatusInternalServerError, types.Resp{Error: "Failed to get messages"})
 		return
 	}
@@ -113,6 +116,7 @@ func (c *ChatController) SendMessage(ctx *gin.Context) {
 			ctx.JSON(http.StatusForbidden, types.Resp{Error: err.Error()})
 			return
 		}
+		logging.FromContext(ctx.Request.Context()).Error("failed to send message", "error", err)
 		ctx.JSON(http.StatusInternalServerError, types.Resp{Error: "Failed to send message"})
 		return
 	}

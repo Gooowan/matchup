@@ -6,6 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/Gooowan/matchup/modules/core/logging"
 	"github.com/Gooowan/matchup/modules/core/types"
 	"github.com/Gooowan/matchup/modules/core/utils"
 	recgen "github.com/Gooowan/matchup/modules/recommendation/gen"
@@ -73,6 +74,8 @@ func (c *FeedController) Swipe(ctx *gin.Context) {
 
 	result, err := c.svc.Swipe(ctx.Request.Context(), user.ID, targetID, req.Action, req.Source)
 	if err != nil {
+		logging.FromContext(ctx.Request.Context()).Error("failed to process swipe",
+			"error", err, "action", req.Action, "target_user_id", req.TargetUserID)
 		ctx.JSON(http.StatusInternalServerError, types.Resp{Error: "Failed to process swipe"})
 		return
 	}
@@ -109,6 +112,7 @@ func (c *FeedController) Hide(ctx *gin.Context) {
 
 	_, err = c.svc.Swipe(ctx.Request.Context(), user.ID, targetID, "PASS", "")
 	if err != nil {
+		logging.FromContext(ctx.Request.Context()).Error("failed to hide user", "error", err, "target_user_id", req.TargetUserID)
 		ctx.JSON(http.StatusInternalServerError, types.Resp{Error: "Failed to hide user"})
 		return
 	}

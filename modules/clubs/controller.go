@@ -6,6 +6,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/Gooowan/matchup/modules/core/logging"
 	"github.com/Gooowan/matchup/modules/core/types"
 	"github.com/Gooowan/matchup/modules/core/utils"
 	"github.com/Gooowan/matchup/modules/users/auth"
@@ -70,6 +71,7 @@ func (c *ClubController) ListClubs(ctx *gin.Context) {
 	clubs, err := c.svc.ListClubs(ctx.Request.Context(),
 		ctx.Query("country"), ctx.Query("city"), limit, offset)
 	if err != nil {
+		logging.FromContext(ctx.Request.Context()).Error("failed to list clubs", "error", err)
 		ctx.JSON(http.StatusInternalServerError, types.Resp{Error: "Failed to list clubs"})
 		return
 	}
@@ -97,6 +99,7 @@ func (c *ClubController) ListMembers(ctx *gin.Context) {
 	limit, offset := pageParams(ctx)
 	members, err := c.svc.ListClubMembers(ctx.Request.Context(), club.ID, limit, offset)
 	if err != nil {
+		logging.FromContext(ctx.Request.Context()).Error("failed to list club members", "error", err)
 		ctx.JSON(http.StatusInternalServerError, types.Resp{Error: "Failed to list members"})
 		return
 	}
@@ -112,6 +115,7 @@ func (c *ClubController) RegisterClub(ctx *gin.Context) {
 	}
 	club, err := c.svc.RegisterClub(ctx.Request.Context(), req.toParams(false))
 	if err != nil {
+		logging.FromContext(ctx.Request.Context()).Error("failed to register club", "error", err)
 		ctx.JSON(http.StatusInternalServerError, types.Resp{Error: "Failed to register club: " + err.Error()})
 		return
 	}
@@ -133,6 +137,7 @@ func (c *ClubController) JoinClub(ctx *gin.Context) {
 		return
 	}
 	if err := c.svc.JoinClub(ctx.Request.Context(), club.ID, user.ID); err != nil {
+		logging.FromContext(ctx.Request.Context()).Error("failed to join club", "error", err)
 		ctx.JSON(http.StatusInternalServerError, types.Resp{Error: "Failed to join club"})
 		return
 	}
@@ -152,6 +157,7 @@ func (c *ClubController) LeaveClub(ctx *gin.Context) {
 		return
 	}
 	if err := c.svc.LeaveClub(ctx.Request.Context(), club.ID, user.ID); err != nil {
+		logging.FromContext(ctx.Request.Context()).Error("failed to leave club", "error", err)
 		ctx.JSON(http.StatusInternalServerError, types.Resp{Error: "Failed to leave club"})
 		return
 	}
@@ -167,6 +173,7 @@ func (c *ClubController) GetMyClubs(ctx *gin.Context) {
 	}
 	clubs, err := c.svc.GetUserClubs(ctx.Request.Context(), user.ID)
 	if err != nil {
+		logging.FromContext(ctx.Request.Context()).Error("failed to get user clubs", "error", err)
 		ctx.JSON(http.StatusInternalServerError, types.Resp{Error: "Failed to get clubs"})
 		return
 	}
@@ -180,6 +187,7 @@ func (c *ClubController) AdminListClubs(ctx *gin.Context) {
 	limit, offset := pageParams(ctx)
 	clubs, err := c.svc.AdminListClubs(ctx.Request.Context(), limit, offset)
 	if err != nil {
+		logging.FromContext(ctx.Request.Context()).Error("admin: failed to list clubs", "error", err)
 		ctx.JSON(http.StatusInternalServerError, types.Resp{Error: "Failed to list clubs"})
 		return
 	}
@@ -195,6 +203,7 @@ func (c *ClubController) AdminCreateClub(ctx *gin.Context) {
 	}
 	club, err := c.svc.CreateClub(ctx.Request.Context(), req.toParams(true))
 	if err != nil {
+		logging.FromContext(ctx.Request.Context()).Error("admin: failed to create club", "error", err)
 		ctx.JSON(http.StatusInternalServerError, types.Resp{Error: "Failed to create club"})
 		return
 	}
@@ -214,6 +223,7 @@ func (c *ClubController) AdminUpdateClub(ctx *gin.Context) {
 		return
 	}
 	if err := c.svc.UpdateClub(ctx.Request.Context(), clubID, req.toParams(false)); err != nil {
+		logging.FromContext(ctx.Request.Context()).Error("admin: failed to update club", "error", err)
 		ctx.JSON(http.StatusInternalServerError, types.Resp{Error: "Failed to update club"})
 		return
 	}
@@ -228,6 +238,7 @@ func (c *ClubController) AdminVerifyClub(ctx *gin.Context) {
 		return
 	}
 	if err := c.svc.VerifyClub(ctx.Request.Context(), clubID); err != nil {
+		logging.FromContext(ctx.Request.Context()).Error("admin: failed to verify club", "error", err)
 		ctx.JSON(http.StatusInternalServerError, types.Resp{Error: "Failed to verify club"})
 		return
 	}
@@ -242,6 +253,7 @@ func (c *ClubController) AdminDeactivateClub(ctx *gin.Context) {
 		return
 	}
 	if err := c.svc.DeactivateClub(ctx.Request.Context(), clubID); err != nil {
+		logging.FromContext(ctx.Request.Context()).Error("admin: failed to deactivate club", "error", err)
 		ctx.JSON(http.StatusInternalServerError, types.Resp{Error: "Failed to deactivate club"})
 		return
 	}

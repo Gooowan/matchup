@@ -7,6 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/Gooowan/matchup/modules/core/logging"
 	"github.com/Gooowan/matchup/modules/core/types"
 	"github.com/Gooowan/matchup/modules/core/utils"
 	gen "github.com/Gooowan/matchup/modules/recommendation/gen"
@@ -113,6 +114,7 @@ func (c *RecommendationController) CreateOrUpdateProfile(ctx *gin.Context) {
 
 		profile, err := c.svc.Queries.CreateProfile(ctx.Request.Context(), params)
 		if err != nil {
+			logging.FromContext(ctx.Request.Context()).Error("failed to create profile", "error", err)
 			ctx.JSON(http.StatusInternalServerError, types.Resp{Error: "Failed to create profile"})
 			return
 		}
@@ -190,11 +192,17 @@ func (c *RecommendationController) CreateOrUpdateProfile(ctx *gin.Context) {
 	}
 
 	if err := c.svc.Queries.UpdateProfile(ctx.Request.Context(), params); err != nil {
+		logging.FromContext(ctx.Request.Context()).Error("failed to update profile", "error", err)
 		ctx.JSON(http.StatusInternalServerError, types.Resp{Error: "Failed to update profile"})
 		return
 	}
 
-	updated, _ := c.svc.Queries.GetProfileByUserID(ctx.Request.Context(), user.ID)
+	updated, err := c.svc.Queries.GetProfileByUserID(ctx.Request.Context(), user.ID)
+	if err != nil {
+		logging.FromContext(ctx.Request.Context()).Error("failed to fetch updated profile", "error", err)
+		ctx.JSON(http.StatusInternalServerError, types.Resp{Error: "Failed to fetch updated profile"})
+		return
+	}
 	ctx.JSON(http.StatusOK, types.Resp{Data: updated.ToDTO()})
 }
 
@@ -297,6 +305,7 @@ func (c *RecommendationController) UpdatePreferences(ctx *gin.Context) {
 
 	prefs, err := c.svc.Queries.UpsertPreferences(ctx.Request.Context(), params)
 	if err != nil {
+		logging.FromContext(ctx.Request.Context()).Error("failed to update preferences", "error", err)
 		ctx.JSON(http.StatusInternalServerError, types.Resp{Error: "Failed to update preferences"})
 		return
 	}
@@ -320,6 +329,7 @@ func (c *RecommendationController) AddMedia(ctx *gin.Context) {
 	}
 
 	if err := c.svc.AddMediaURL(ctx.Request.Context(), user.ID, req.URL); err != nil {
+		logging.FromContext(ctx.Request.Context()).Error("failed to add media URL", "error", err)
 		ctx.JSON(http.StatusInternalServerError, types.Resp{Error: "Failed to add media"})
 		return
 	}
@@ -343,6 +353,7 @@ func (c *RecommendationController) RemoveMedia(ctx *gin.Context) {
 	}
 
 	if err := c.svc.RemoveMediaURL(ctx.Request.Context(), user.ID, req.URL); err != nil {
+		logging.FromContext(ctx.Request.Context()).Error("failed to remove media URL", "error", err)
 		ctx.JSON(http.StatusInternalServerError, types.Resp{Error: "Failed to remove media"})
 		return
 	}

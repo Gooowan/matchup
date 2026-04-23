@@ -5,6 +5,7 @@ import (
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/Gooowan/matchup/modules/core/logging"
 	"github.com/Gooowan/matchup/modules/core/types"
 	"github.com/Gooowan/matchup/modules/core/utils"
 	gen "github.com/Gooowan/matchup/modules/map/gen"
@@ -41,6 +42,7 @@ func (c *MapController) UpdateLocation(ctx *gin.Context) {
 		Longitude: req.Longitude,
 	})
 	if err != nil {
+		logging.FromContext(ctx.Request.Context()).Error("failed to update user location", "error", err)
 		ctx.JSON(http.StatusInternalServerError, types.Resp{Error: "Failed to update location"})
 		return
 	}
@@ -72,6 +74,7 @@ func (c *MapController) DeleteLocation(ctx *gin.Context) {
 	}
 
 	if err := c.svc.Queries.DeleteUserLocation(ctx.Request.Context(), user.ID); err != nil {
+		logging.FromContext(ctx.Request.Context()).Error("failed to delete user location", "error", err)
 		ctx.JSON(http.StatusInternalServerError, types.Resp{Error: "Failed to delete location"})
 		return
 	}
@@ -103,6 +106,7 @@ func (c *MapController) FindNearbyByCount(ctx *gin.Context) {
 		MaxResults: req.MaxResults,
 	})
 	if err != nil {
+		logging.FromContext(ctx.Request.Context()).Error("failed to find nearby users by count", "error", err)
 		ctx.JSON(http.StatusInternalServerError, types.Resp{Error: "Failed to find nearby users"})
 		return
 	}
@@ -144,6 +148,7 @@ func (c *MapController) FindNearbyByRadius(ctx *gin.Context) {
 		RadiusKm:  req.RadiusKm,
 	})
 	if err != nil {
+		logging.FromContext(ctx.Request.Context()).Error("failed to find nearby users by radius", "error", err)
 		ctx.JSON(http.StatusInternalServerError, types.Resp{Error: "Failed to find nearby users"})
 		return
 	}

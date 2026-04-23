@@ -1,6 +1,7 @@
 import tailwindcss from '@tailwindcss/vite';
 import { sveltekit } from '@sveltejs/kit/vite';
 import svg from '@poppanator/sveltekit-svg';
+import { sentryVitePlugin } from '@sentry/vite-plugin';
 
 import { defineConfig } from 'vite';
 
@@ -17,6 +18,11 @@ export default defineConfig({
 			'.desim.network'
 		]
 	},
+	build: {
+		// Source maps are required for Sentry to display readable stack traces.
+		// They are uploaded to Sentry in CI and are NOT shipped to end users.
+		sourcemap: true
+	},
 	plugins: [
 		tailwindcss(),
 		sveltekit(),
@@ -32,6 +38,14 @@ export default defineConfig({
 					}
 				]
 			}
-		})
-	]
+		}),
+		// Upload source maps to Sentry during CI builds only.
+		// Requires SENTRY_AUTH_TOKEN, SENTRY_ORG, SENTRY_PROJECT env vars.
+		process.env.SENTRY_AUTH_TOKEN &&
+			sentryVitePlugin({
+				authToken: process.env.SENTRY_AUTH_TOKEN,
+				org: process.env.SENTRY_ORG,
+				project: process.env.SENTRY_PROJECT ?? 'matchup-frontend'
+			})
+	].filter(Boolean)
 });

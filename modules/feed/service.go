@@ -10,6 +10,9 @@ import (
 
 	"github.com/Gooowan/matchup/modules/chat"
 	"github.com/Gooowan/matchup/modules/clubs"
+	"github.com/Gooowan/matchup/modules/core/logging"
+	"github.com/Gooowan/matchup/modules/core/metrics"
+	"github.com/Gooowan/matchup/modules/core/tracing"
 	"github.com/Gooowan/matchup/modules/feed/gen"
 	"github.com/Gooowan/matchup/modules/moderation"
 	"github.com/Gooowan/matchup/modules/recommendation"
@@ -53,6 +56,9 @@ func NewFeedService(
 }
 
 func (s *FeedService) GetFeed(ctx context.Context, userID pgtype.UUID, limit int32) ([]recgen.FindNearbyVisibleProfilesRow, error) {
+	ctx, span := tracing.StartDBSpan(ctx, "GetFeed", "profiles")
+	defer span.End()
+
 	profile, err := s.RecommendationSvc.Queries.GetProfileByUserID(ctx, userID)
 	if err != nil {
 		return nil, fmt.Errorf("profile required to get feed: %w", err)
@@ -63,14 +69,25 @@ func (s *FeedService) GetFeed(ctx context.Context, userID pgtype.UUID, limit int
 	}
 
 	// build exclude list: swiped + blocked
-	swipedIDs, _ := s.Queries.GetSwipedUserIDs(ctx, userID)
-	blockedIDs, _ := s.ModerationSvc.Queries.GetBlockedUserIDs(ctx, userID)
+	swipedIDs, err := s.Queries.GetSwipedUserIDs(ctx, userID)
+	if err != nil {
+		logging.FromContext(ctx).Warn("failed to get swiped user IDs, proceeding without", "error", err)
+		swipedIDs = nil
+	}
+	blockedIDs, err := s.ModerationSvc.Queries.GetBlockedUserIDs(ctx, userID)
+	if err != nil {
+		logging.FromContext(ctx).Warn("failed to get blocked user IDs, proceeding without", "error", err)
+		blockedIDs = nil
+	}
 
 	excludeIDs := make([]pgtype.UUID, 0, len(swipedIDs)+len(blockedIDs))
 	excludeIDs = append(excludeIDs, swipedIDs...)
 	excludeIDs = append(excludeIDs, blockedIDs...)
 
-	prefs, _ := s.RecommendationSvc.Queries.GetPreferences(ctx, userID)
+	prefs, err := s.RecommendationSvc.Queries.GetPreferences(ctx, userID)
+	if err != nil {
+		logging.FromContext(ctx).Warn("no preferences found, using defaults", "error", err)
+	}
 
 	country := ""
 	if profile.Country.Valid {
@@ -141,6 +158,12 @@ func (s *FeedService) Swipe(ctx context.Context, fromUserID, toUserID pgtype.UUI
 			return nil, fmt.Errorf("failed to create chat: %w", err)
 		}
 		result.ChatID = &chatID
+	}
+
+	// Track swipe and match metrics
+	metrics.SwipeEventsTotal.WithLabelValues(action, source).Inc()
+	if result.IsMutualMatch {
+		metrics.MatchEventsTotal.Inc()
 	}
 
 	return result, nil

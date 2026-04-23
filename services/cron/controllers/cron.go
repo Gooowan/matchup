@@ -2,19 +2,22 @@ package controllers
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"time"
 
+	"github.com/Gooowan/matchup/modules/core/metrics"
 	"github.com/Gooowan/matchup/modules/subscriptions"
 )
 
 type CronController struct {
 	subscriptions *subscriptions.SubscriptionService
+	log           *slog.Logger
 }
 
-func NewCronController(subscriptionSvc *subscriptions.SubscriptionService) *CronController {
+func NewCronController(subscriptionSvc *subscriptions.SubscriptionService, logger *slog.Logger) *CronController {
 	return &CronController{
 		subscriptions: subscriptionSvc,
+		log:           logger,
 	}
 }
 
@@ -25,12 +28,14 @@ func (c *CronController) ExpireSubscriptions() {
 
 	count, err := c.subscriptions.Queries.FinishExpiredSubscriptions(ctx)
 	if err != nil {
-		log.Printf("[CRON] Failed to expire subscriptions: %v", err)
+		c.log.Error("failed to expire subscriptions", "error", err)
+		metrics.CronJobFailureTotal.WithLabelValues("expire_subscriptions").Inc()
 		return
 	}
 
+	metrics.CronJobSuccessTotal.WithLabelValues("expire_subscriptions").Inc()
 	if count > 0 {
-		log.Printf("[CRON] Expired %d subscriptions in %s", count, time.Since(start))
+		c.log.Info("subscriptions expired", "count", count, "duration_ms", time.Since(start).Milliseconds())
 	}
 }
 
@@ -41,12 +46,14 @@ func (c *CronController) NotifyExpiringSoon() {
 
 	expiring, err := c.subscriptions.Queries.ListSubscriptionsExpiring1Day(ctx)
 	if err != nil {
-		log.Printf("[CRON] Failed to fetch expiring subscriptions: %v", err)
+		c.log.Error("failed to fetch expiring subscriptions", "error", err)
+		metrics.CronJobFailureTotal.WithLabelValues("notify_expiring_soon").Inc()
 		return
 	}
 
+	metrics.CronJobSuccessTotal.WithLabelValues("notify_expiring_soon").Inc()
 	if len(expiring) > 0 {
-		log.Printf("[CRON] %d subscriptions expiring within 1 day", len(expiring))
-		// TODO: Send notifications to users
+		c.log.Info("subscriptions expiring within 1 day", "count", len(expiring))
+		// TODO: Send push notifications / emails to users
 	}
 }
