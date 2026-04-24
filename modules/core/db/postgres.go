@@ -31,7 +31,11 @@ func PostgresConnect() (*pgxpool.Pool, error) {
 		return nil, fmt.Errorf("POSTGRES_DB environment variable not set")
 	}
 
-	databaseURL := "postgres://" + user + ":" + password + "@" + host + ":" + port + "/" + dbname + "?sslmode=disable"
+	sslMode := os.Getenv("DB_SSL_MODE")
+	if sslMode == "" {
+		sslMode = "require"
+	}
+	databaseURL := "postgres://" + user + ":" + password + "@" + host + ":" + port + "/" + dbname + "?sslmode=" + sslMode
 
 	config, err := pgxpool.ParseConfig(databaseURL)
 	if err != nil {

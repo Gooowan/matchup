@@ -2,6 +2,10 @@ package recommendation
 
 import (
 	"context"
+	"fmt"
+
+	"github.com/Gooowan/matchup/modules/core/logging"
+	"github.com/Gooowan/matchup/modules/core/metrics"
 )
 
 // Recommender orchestrates the 3-tier recommendation pipeline.
@@ -19,24 +23,36 @@ func NewRecommender(t1, t2, t3 CandidateProvider) *Recommender {
 
 // GetCandidates runs the tier pipeline and returns up to params.Limit candidates.
 func (r *Recommender) GetCandidates(ctx context.Context, params FeedParams) ([]Candidate, error) {
+	logger := logging.FromContext(ctx)
 	seen := make(map[[16]byte]bool)
 	results := make([]Candidate, 0, params.Limit)
 
-	for _, provider := range []CandidateProvider{r.Tier1, r.Tier2, r.Tier3} {
+	tierNames := []string{"tier1", "tier2", "tier3"}
+	providers := []CandidateProvider{r.Tier1, r.Tier2, r.Tier3}
+
+	for i, provider := range providers {
 		if int32(len(results)) >= params.Limit {
 			break
 		}
-		// Adjust limit to request only what's still needed
+		tier := tierNames[i]
 		remaining := params.Limit - int32(len(results))
 		p := params
 		p.Limit = remaining
 
 		candidates, err := provider.GetCandidates(ctx, p)
 		if err != nil {
-			// Log but don't fail; try next tier
+			metrics.RecommendationTierErrors.WithLabelValues(tier).Inc()
+			logger.Warn("recommendation tier error", "tier", tier, "error", fmt.Sprintf("%v", err))
+			continue
+		}
+		if len(candidates) == 0 {
+			metrics.RecommendationTierEmpty.WithLabelValues(tier).Inc()
+			logger.Warn("recommendation tier returned empty", "tier", tier,
+				"country", params.Country, "has_filters", params.Filters.PreferredGender != nil)
 			continue
 		}
 
+		added := 0
 		for _, c := range candidates {
 			if int32(len(results)) >= params.Limit {
 				break
@@ -44,7 +60,11 @@ func (r *Recommender) GetCandidates(ctx context.Context, params FeedParams) ([]C
 			if !seen[c.UserID.Bytes] {
 				seen[c.UserID.Bytes] = true
 				results = append(results, c)
+				added++
 			}
+		}
+		if added > 0 {
+			metrics.RecommendationTierHits.WithLabelValues(tier).Add(float64(added))
 		}
 	}
 

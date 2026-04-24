@@ -3,7 +3,6 @@
 	import MobileSidebar from './AppMobileSidebar.svelte';
 	import Footer from './Footer.svelte';
 
-	import CopyReferralLink from '$lib/components/CopyReferralLink.svelte';
 	import { authStore } from '$stores/auth.svelte.js';
 	import { page } from '$app/stores';
 	import Logotype from '$lib/assets/svg/logotype.svg?component';
@@ -24,7 +23,6 @@
 	let {
 		children,
 		navItems,
-		showReferralLink = true,
 		showFooter = true,
 		showUserProfile = true,
 		basePath = '/app',
@@ -35,7 +33,6 @@
 		data?: any;
 		children?: any;
 		navItems: NavItem[];
-		showReferralLink?: boolean;
 		showFooter?: boolean;
 		showUserProfile?: boolean;
 		basePath?: string;
@@ -95,20 +92,6 @@
 							</Sidebar.MenuButton>
 						</Sidebar.MenuItem>
 					{/each}
-					{#if showReferralLink}
-						<div class="py-2">
-							<Separator />
-						</div>
-
-						<div class="space-y-2 group-data-[collapsible=icon]:hidden">
-							<p class="text-muted-foreground text-sm">Copy my referral link</p>
-							<CopyReferralLink referralId={authStore.user?.referral_id ?? 0} />
-						</div>
-
-						<div class="py-2 group-data-[collapsible=icon]:hidden">
-							<Separator />
-						</div>
-					{/if}
 				</Sidebar.Menu>
 			</Sidebar.Group>
 		</Sidebar.Content>

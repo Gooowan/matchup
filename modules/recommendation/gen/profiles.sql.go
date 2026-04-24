@@ -257,7 +257,7 @@ WHERE p.country = $1
   AND ($9::varchar IS NULL OR p.goal = $9)
   AND ($10::varchar IS NULL OR p.program = $10)
   AND ($11::text[] IS NULL OR p.categories && $11)
-ORDER BY RANDOM()
+ORDER BY md5(p.user_id::text || current_date::text)
 LIMIT $12
 `
 

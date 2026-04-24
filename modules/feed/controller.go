@@ -120,9 +120,13 @@ func (c *FeedController) Hide(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, types.Resp{Data: "ok"})
 }
 
-func (c *FeedController) RegisterRoutes(rg *gin.RouterGroup, userAuth gin.HandlerFunc) {
+func (c *FeedController) RegisterRoutes(rg *gin.RouterGroup, userAuth gin.HandlerFunc, swipeRL ...gin.HandlerFunc) {
 	rg.Use(userAuth)
 	rg.GET("/feed", c.GetFeed)
-	rg.POST("/swipe", c.Swipe)
+	swipeHandlers := []gin.HandlerFunc{c.Swipe}
+	if len(swipeRL) > 0 {
+		swipeHandlers = append([]gin.HandlerFunc{swipeRL[0]}, swipeHandlers...)
+	}
+	rg.POST("/swipe", swipeHandlers...)
 	rg.POST("/hide", c.Hide)
 }

@@ -1,6 +1,8 @@
 -- name: CreateChat :one
 INSERT INTO chats(user1_id, user2_id)
     VALUES (@user1_id, @user2_id)
+ON CONFLICT (user1_id, user2_id) DO UPDATE
+    SET user1_id = EXCLUDED.user1_id
 RETURNING *;
 
 -- name: GetChat :one

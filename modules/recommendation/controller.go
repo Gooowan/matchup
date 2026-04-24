@@ -68,6 +68,19 @@ func (c *RecommendationController) CreateOrUpdateProfile(ctx *gin.Context) {
 		return
 	}
 
+	if req.BirthDate != "" {
+		if dob, err := time.Parse("2006-01-02", req.BirthDate); err == nil {
+			age := time.Now().Year() - dob.Year()
+			if time.Now().YearDay() < dob.YearDay() {
+				age--
+			}
+			if age < 18 {
+				ctx.JSON(http.StatusBadRequest, types.Resp{Error: "You must be 18 or older to use MatchUp"})
+				return
+			}
+		}
+	}
+
 	visible := true
 	if req.Visible != nil {
 		visible = *req.Visible

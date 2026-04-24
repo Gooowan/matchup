@@ -124,9 +124,13 @@ func (c *ChatController) SendMessage(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, types.Resp{Data: msg})
 }
 
-func (c *ChatController) RegisterRoutes(rg *gin.RouterGroup, userAuth gin.HandlerFunc) {
+func (c *ChatController) RegisterRoutes(rg *gin.RouterGroup, userAuth gin.HandlerFunc, messageRL ...gin.HandlerFunc) {
 	rg.Use(userAuth)
 	rg.GET("", c.ListChats)
 	rg.GET("/:chatId/messages", c.GetMessages)
-	rg.POST("/:chatId/messages", c.SendMessage)
+	sendHandlers := []gin.HandlerFunc{c.SendMessage}
+	if len(messageRL) > 0 {
+		sendHandlers = append([]gin.HandlerFunc{messageRL[0]}, sendHandlers...)
+	}
+	rg.POST("/:chatId/messages", sendHandlers...)
 }

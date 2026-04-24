@@ -200,20 +200,20 @@ func main() {
 	otpAuthController := auth.NewOTPAuthController(authService, otpService)
 
 	authGroup := r.Group("/auth")
-	authController.RegisterRoutes(authGroup, rlService.LoginRateLimiter)
+	authController.RegisterRoutes(authGroup, rlService.LoginRateLimiter, rlService.RegisterRateLimiter)
 	otpAuthController.RegisterRoutes(authGroup)
 
 	userGroup := r.Group("/user")
-	userController.RegisterRoutes(userGroup, userAuth, filesController, authController)
+	userController.RegisterRoutes(userGroup, userAuth, filesController, authController, rlService.UploadRateLimiter)
 
 	meGroup := r.Group("/me")
 	recommendationCtrl.RegisterRoutes(meGroup, userAuth)
 
 	matchupGroup := r.Group("/matchup")
-	feedCtrl.RegisterRoutes(matchupGroup, userAuth)
+	feedCtrl.RegisterRoutes(matchupGroup, userAuth, rlService.SwipeRateLimiter)
 
 	chatsGroup := r.Group("/chats")
-	chatCtrl.RegisterRoutes(chatsGroup, userAuth)
+	chatCtrl.RegisterRoutes(chatsGroup, userAuth, rlService.MessageRateLimiter)
 
 	mapGroup := r.Group("/map")
 	mapCtrl.RegisterRoutes(mapGroup, userAuth)

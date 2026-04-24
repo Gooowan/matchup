@@ -1,6 +1,5 @@
 <script lang="ts">
 	import { Button } from '$components/ui/button/index.js';
-	import CopyReferralLink from '$lib/components/CopyReferralLink.svelte';
 	import { Separator } from '$lib/components/ui/separator/index.js';
 	import * as Avatar from '$lib/components/ui/avatar/index.js';
 	import HomeIcon from '@lucide/svelte/icons/home';
@@ -17,7 +16,6 @@
 
 	interface User {
 		email: string;
-		referral_id: number;
 		profile_data: Record<string, any>;
 	}
 
@@ -97,17 +95,6 @@
 					<Separator />
 				</div>
 
-				<!-- Referral Link -->
-				{#if user}
-					<div class="space-y-2">
-						<p class="text-muted-foreground text-sm">Copy my referral link</p>
-						<CopyReferralLink referralId={user.referral_id} />
-					</div>
-
-					<div class="py-2">
-						<Separator />
-					</div>
-				{/if}
 			</div>
 		</div>
 

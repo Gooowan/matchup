@@ -48,6 +48,22 @@ var (
 		[]string{"tier"},
 	)
 
+	RecommendationTierErrors = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "matchup_recommendation_tier_errors_total",
+			Help: "Errors returned by each recommendation tier",
+		},
+		[]string{"tier"},
+	)
+
+	RecommendationTierEmpty = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "matchup_recommendation_tier_empty_total",
+			Help: "Times a recommendation tier returned zero candidates",
+		},
+		[]string{"tier"},
+	)
+
 	// Database connection pool metrics
 	DBPoolAcquiredConns = promauto.NewGauge(prometheus.GaugeOpts{
 		Name: "matchup_db_pool_acquired_conns",

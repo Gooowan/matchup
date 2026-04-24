@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -168,7 +169,16 @@ func (s *FeedService) Swipe(ctx context.Context, fromUserID, toUserID pgtype.UUI
 
 	// Log liked profile features for Tier 2/3 recommendation learning.
 	if action == "LIKE" {
-		go s.logLike(context.Background(), fromUserID, toUserID)
+		go func() {
+			defer func() {
+				if r := recover(); r != nil {
+					logging.FromContext(ctx).Error("logLike goroutine panicked", "recover", r)
+				}
+			}()
+			logCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			s.logLike(logCtx, fromUserID, toUserID)
+		}()
 	}
 
 	return result, nil

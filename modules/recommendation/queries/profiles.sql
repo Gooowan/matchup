@@ -169,5 +169,5 @@ WHERE p.country = @country
   AND (sqlc.narg(preferred_goal)::varchar IS NULL OR p.goal = sqlc.narg(preferred_goal))
   AND (sqlc.narg(preferred_program)::varchar IS NULL OR p.program = sqlc.narg(preferred_program))
   AND (sqlc.narg(preferred_categories)::text[] IS NULL OR p.categories && sqlc.narg(preferred_categories))
-ORDER BY RANDOM()
+ORDER BY md5(p.user_id::text || current_date::text)
 LIMIT @limit_val;

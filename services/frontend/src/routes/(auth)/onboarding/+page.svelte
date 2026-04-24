@@ -54,6 +54,18 @@
 
 	let isSaving = $state(false);
 
+	function getAge(dateStr: string): number {
+		if (!dateStr) return 0;
+		const today = new Date();
+		const dob = new Date(dateStr);
+		let age = today.getFullYear() - dob.getFullYear();
+		const m = today.getMonth() - dob.getMonth();
+		if (m < 0 || (m === 0 && today.getDate() < dob.getDate())) age--;
+		return age;
+	}
+
+	let ageError = $derived(birthDate && getAge(birthDate) < 18 ? 'You must be 18 or older to use MatchUp.' : '');
+
 	function toggleStyle(s: string) {
 		selectedStyles = selectedStyles.includes(s)
 			? selectedStyles.filter((x) => x !== s)
@@ -68,7 +80,7 @@
 	}
 
 	function canAdvance(): boolean {
-		if (step === 1) return firstName.length >= 2 && lastName.length >= 2 && !!gender;
+		if (step === 1) return firstName.length >= 2 && lastName.length >= 2 && !!gender && !ageError;
 		if (step === 2) return selectedStyles.length > 0 && !!role;
 		return true;
 	}
@@ -189,6 +201,9 @@
 						style="color: #8984da;"
 					/>
 				</div>
+				{#if ageError}
+					<p class="text-[12px] font-medium" style="color: #e74c3c;">{ageError}</p>
+				{/if}
 				<div class="flex items-center justify-between" style="border-top: 1px solid #f0f0f0; padding-top: 12px;">
 					<span class="text-[14px] font-semibold" style="color: #171717;">Height (cm)</span>
 					<input

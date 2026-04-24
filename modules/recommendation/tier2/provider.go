@@ -94,7 +94,7 @@ func mostCommon(freq map[string]int) string {
 	return best
 }
 
-func score(row gen.GetProfilesByUserIDsRow, topCats []string, topGoal, topProgram string, meanHeight float64) float64 {
+func score(row gen.GetCountryWideProfilesRow, topCats []string, topGoal, topProgram string, meanHeight float64) float64 {
 	catSet := make(map[string]bool, len(row.Categories))
 	for _, c := range row.Categories {
 		catSet[c] = true
@@ -181,21 +181,12 @@ func (p *Provider) GetCandidates(ctx context.Context, params rec.FeedParams) ([]
 		return nil, nil
 	}
 
-	userIDs := make([]pgtype.UUID, 0, len(countryRows))
-	for _, row := range countryRows {
-		userIDs = append(userIDs, row.UserID)
-	}
-	profiles, err := p.queries.GetProfilesByUserIDs(ctx, userIDs)
-	if err != nil {
-		return nil, nil
-	}
-
 	type sc struct {
-		row   gen.GetProfilesByUserIDsRow
+		row   gen.GetCountryWideProfilesRow
 		score float64
 	}
-	scored := make([]sc, 0, len(profiles))
-	for _, row := range profiles {
+	scored := make([]sc, 0, len(countryRows))
+	for _, row := range countryRows {
 		if excludeSet[row.UserID.Bytes] {
 			continue
 		}

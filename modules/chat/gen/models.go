@@ -23,11 +23,40 @@ type Chat struct {
 	CreatedAt pgtype.Timestamp `db:"created_at" json:"created_at"`
 }
 
+type Club struct {
+	ID           pgtype.UUID      `db:"id" json:"id"`
+	Name         string           `db:"name" json:"name"`
+	Slug         string           `db:"slug" json:"slug"`
+	Description  pgtype.Text      `db:"description" json:"description"`
+	Country      string           `db:"country" json:"country"`
+	City         string           `db:"city" json:"city"`
+	Address      pgtype.Text      `db:"address" json:"address"`
+	Latitude     float64          `db:"latitude" json:"latitude"`
+	Longitude    float64          `db:"longitude" json:"longitude"`
+	Website      pgtype.Text      `db:"website" json:"website"`
+	Phone        pgtype.Text      `db:"phone" json:"phone"`
+	IsVerified   pgtype.Bool      `db:"is_verified" json:"is_verified"`
+	IsActive     pgtype.Bool      `db:"is_active" json:"is_active"`
+	Metadata     types.JSONB      `db:"metadata" json:"metadata"`
+	OwnerUserID  pgtype.UUID      `db:"owner_user_id" json:"owner_user_id"`
+	WorkingHours types.JSONB      `db:"working_hours" json:"working_hours"`
+	CreatedAt    pgtype.Timestamp `db:"created_at" json:"created_at"`
+	UpdatedAt    pgtype.Timestamp `db:"updated_at" json:"updated_at"`
+}
+
+type ClubMember struct {
+	ClubID   pgtype.UUID      `db:"club_id" json:"club_id"`
+	UserID   pgtype.UUID      `db:"user_id" json:"user_id"`
+	Role     pgtype.Text      `db:"role" json:"role"`
+	JoinedAt pgtype.Timestamp `db:"joined_at" json:"joined_at"`
+}
+
 type Match struct {
 	ID         pgtype.UUID      `db:"id" json:"id"`
 	FromUserID pgtype.UUID      `db:"from_user_id" json:"from_user_id"`
 	ToUserID   pgtype.UUID      `db:"to_user_id" json:"to_user_id"`
 	Action     string           `db:"action" json:"action"`
+	Source     pgtype.Text      `db:"source" json:"source"`
 	CreatedAt  pgtype.Timestamp `db:"created_at" json:"created_at"`
 }
 
@@ -53,15 +82,34 @@ type Message struct {
 }
 
 type Profile struct {
-	ID          pgtype.UUID      `db:"id" json:"id"`
-	UserID      pgtype.UUID      `db:"user_id" json:"user_id"`
-	DanceStyles []string         `db:"dance_styles" json:"dance_styles"`
-	Latitude    pgtype.Float8    `db:"latitude" json:"latitude"`
-	Longitude   pgtype.Float8    `db:"longitude" json:"longitude"`
-	Visible     bool             `db:"visible" json:"visible"`
-	Data        types.JSONB      `db:"data" json:"data"`
-	CreatedAt   pgtype.Timestamp `db:"created_at" json:"created_at"`
-	UpdatedAt   pgtype.Timestamp `db:"updated_at" json:"updated_at"`
+	ID              pgtype.UUID      `db:"id" json:"id"`
+	UserID          pgtype.UUID      `db:"user_id" json:"user_id"`
+	Latitude        pgtype.Float8    `db:"latitude" json:"latitude"`
+	Longitude       pgtype.Float8    `db:"longitude" json:"longitude"`
+	Visible         bool             `db:"visible" json:"visible"`
+	DanceStyles     []string         `db:"dance_styles" json:"dance_styles"`
+	Gender          string           `db:"gender" json:"gender"`
+	BirthDate       pgtype.Date      `db:"birth_date" json:"birth_date"`
+	HeightCm        pgtype.Int2      `db:"height_cm" json:"height_cm"`
+	Goal            string           `db:"goal" json:"goal"`
+	Program         string           `db:"program" json:"program"`
+	Categories      []string         `db:"categories" json:"categories"`
+	Country         pgtype.Text      `db:"country" json:"country"`
+	City            pgtype.Text      `db:"city" json:"city"`
+	ReadyToRelocate pgtype.Bool      `db:"ready_to_relocate" json:"ready_to_relocate"`
+	ReadyToFinance  pgtype.Text      `db:"ready_to_finance" json:"ready_to_finance"`
+	Metadata        types.JSONB      `db:"metadata" json:"metadata"`
+	Data            types.JSONB      `db:"data" json:"data"`
+	CreatedAt       pgtype.Timestamp `db:"created_at" json:"created_at"`
+	UpdatedAt       pgtype.Timestamp `db:"updated_at" json:"updated_at"`
+}
+
+type RecommendationLikesLog struct {
+	ID        int64            `db:"id" json:"id"`
+	UserID    pgtype.UUID      `db:"user_id" json:"user_id"`
+	LikedID   pgtype.UUID      `db:"liked_id" json:"liked_id"`
+	Features  types.JSONB      `db:"features" json:"features"`
+	CreatedAt pgtype.Timestamp `db:"created_at" json:"created_at"`
 }
 
 type Report struct {
@@ -107,11 +155,24 @@ type UserLocation struct {
 }
 
 type UserPreference struct {
-	ID        pgtype.UUID      `db:"id" json:"id"`
-	UserID    pgtype.UUID      `db:"user_id" json:"user_id"`
-	Data      types.JSONB      `db:"data" json:"data"`
-	CreatedAt pgtype.Timestamp `db:"created_at" json:"created_at"`
-	UpdatedAt pgtype.Timestamp `db:"updated_at" json:"updated_at"`
+	ID                     pgtype.UUID      `db:"id" json:"id"`
+	UserID                 pgtype.UUID      `db:"user_id" json:"user_id"`
+	PreferredGender        pgtype.Text      `db:"preferred_gender" json:"preferred_gender"`
+	AgeMin                 pgtype.Int2      `db:"age_min" json:"age_min"`
+	AgeMax                 pgtype.Int2      `db:"age_max" json:"age_max"`
+	HeightMin              pgtype.Int2      `db:"height_min" json:"height_min"`
+	HeightMax              pgtype.Int2      `db:"height_max" json:"height_max"`
+	PreferredGoal          pgtype.Text      `db:"preferred_goal" json:"preferred_goal"`
+	PreferredProgram       pgtype.Text      `db:"preferred_program" json:"preferred_program"`
+	PreferredCategories    []string         `db:"preferred_categories" json:"preferred_categories"`
+	PreferredCountry       pgtype.Text      `db:"preferred_country" json:"preferred_country"`
+	PreferredCity          pgtype.Text      `db:"preferred_city" json:"preferred_city"`
+	WantsPartnerToRelocate pgtype.Bool      `db:"wants_partner_to_relocate" json:"wants_partner_to_relocate"`
+	WantsPartnerToFinance  pgtype.Text      `db:"wants_partner_to_finance" json:"wants_partner_to_finance"`
+	Metadata               types.JSONB      `db:"metadata" json:"metadata"`
+	Data                   types.JSONB      `db:"data" json:"data"`
+	CreatedAt              pgtype.Timestamp `db:"created_at" json:"created_at"`
+	UpdatedAt              pgtype.Timestamp `db:"updated_at" json:"updated_at"`
 }
 
 type UserSubscription struct {

@@ -16,7 +16,11 @@ import (
 )
 
 type RLService struct {
-	LoginRateLimiter gin.HandlerFunc
+	LoginRateLimiter   gin.HandlerFunc
+	SwipeRateLimiter   gin.HandlerFunc
+	MessageRateLimiter gin.HandlerFunc
+	UploadRateLimiter  gin.HandlerFunc
+	RegisterRateLimiter gin.HandlerFunc
 }
 
 func NewRLService(redisClient *redis.Client) *RLService {
@@ -30,8 +34,54 @@ func NewRLService(redisClient *redis.Client) *RLService {
 		KeyFunc:      emailKeyFunc,
 	})
 
+	swipeStore := ratelimit.RedisStore(&ratelimit.RedisOptions{
+		RedisClient: redisClient,
+		Rate:        time.Minute,
+		Limit:       200,
+	})
+	swipeRateLimiter := ratelimit.RateLimiter(swipeStore, &ratelimit.Options{
+		ErrorHandler: errorHandler,
+		KeyFunc:      userKeyFunc,
+	})
+
+	messageStore := ratelimit.RedisStore(&ratelimit.RedisOptions{
+		RedisClient: redisClient,
+		Rate:        time.Minute,
+		Limit:       60,
+	})
+	messageRateLimiter := ratelimit.RateLimiter(messageStore, &ratelimit.Options{
+		ErrorHandler: errorHandler,
+		KeyFunc:      userKeyFunc,
+	})
+
+	uploadStore := ratelimit.RedisStore(&ratelimit.RedisOptions{
+		RedisClient: redisClient,
+		Rate:        24 * time.Hour,
+		Limit:       20,
+	})
+	uploadRateLimiter := ratelimit.RateLimiter(uploadStore, &ratelimit.Options{
+		ErrorHandler: errorHandler,
+		KeyFunc:      userKeyFunc,
+	})
+
+	registerStore := ratelimit.RedisStore(&ratelimit.RedisOptions{
+		RedisClient: redisClient,
+		Rate:        time.Hour,
+		Limit:       5,
+	})
+	registerRateLimiter := ratelimit.RateLimiter(registerStore, &ratelimit.Options{
+		ErrorHandler: errorHandler,
+		KeyFunc: func(c *gin.Context) string {
+			return fmt.Sprintf("rl:register:%s", c.ClientIP())
+		},
+	})
+
 	return &RLService{
-		LoginRateLimiter: loginRateLimiter,
+		LoginRateLimiter:    loginRateLimiter,
+		SwipeRateLimiter:    swipeRateLimiter,
+		MessageRateLimiter:  messageRateLimiter,
+		UploadRateLimiter:   uploadRateLimiter,
+		RegisterRateLimiter: registerRateLimiter,
 	}
 }
 

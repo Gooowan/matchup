@@ -1,6 +1,8 @@
 -- name: CreateMatch :one
 INSERT INTO matches(from_user_id, to_user_id, action, source)
     VALUES (@from_user_id, @to_user_id, @action, @source)
+ON CONFLICT (from_user_id, to_user_id) DO UPDATE
+    SET action = EXCLUDED.action, source = EXCLUDED.source
 RETURNING *;
 
 -- name: GetMatch :one

@@ -35,6 +35,8 @@ func (q *Queries) CheckMutualMatch(ctx context.Context, arg CheckMutualMatchPara
 const createMatch = `-- name: CreateMatch :one
 INSERT INTO matches(from_user_id, to_user_id, action, source)
     VALUES ($1, $2, $3, $4)
+ON CONFLICT (from_user_id, to_user_id) DO UPDATE
+    SET action = EXCLUDED.action, source = EXCLUDED.source
 RETURNING id, from_user_id, to_user_id, action, source, created_at
 `
 

@@ -14,6 +14,8 @@ import (
 const createChat = `-- name: CreateChat :one
 INSERT INTO chats(user1_id, user2_id)
     VALUES ($1, $2)
+ON CONFLICT (user1_id, user2_id) DO UPDATE
+    SET user1_id = EXCLUDED.user1_id
 RETURNING id, user1_id, user2_id, created_at
 `
 

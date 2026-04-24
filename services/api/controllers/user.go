@@ -135,11 +135,15 @@ func (c *UserController) UpdateUserProfile(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, types.Resp{Data: gin.H{"user": updatedUser.ToDTO()}})
 }
 
-func (c *UserController) RegisterRoutes(rg *gin.RouterGroup, userAuthMiddleware gin.HandlerFunc, filesController *files.FilesController, authController *auth.AuthController) {
+func (c *UserController) RegisterRoutes(rg *gin.RouterGroup, userAuthMiddleware gin.HandlerFunc, filesController *files.FilesController, authController *auth.AuthController, uploadRL ...gin.HandlerFunc) {
 	rg.Use(userAuthMiddleware)
 
 	rg.POST("/password/change", authController.ChangePassword)
-	rg.POST("/files/avatar", filesController.UploadAvatar)
+	avatarHandlers := []gin.HandlerFunc{filesController.UploadAvatar}
+	if len(uploadRL) > 0 {
+		avatarHandlers = append([]gin.HandlerFunc{uploadRL[0]}, avatarHandlers...)
+	}
+	rg.POST("/files/avatar", avatarHandlers...)
 	rg.POST("/locale", c.SetUserLocale)
 	rg.POST("/profile/update", c.UpdateUserProfile)
 

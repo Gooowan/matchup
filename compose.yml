@@ -1,6 +1,6 @@
 services:
   db:
-    image: postgres:18
+    image: postgres:18.1-alpine
     hostname: db
     env_file: 
       - .env 
@@ -43,7 +43,7 @@ services:
       - matchup-network
 
   minio:
-    image: minio/minio:latest
+    image: minio/minio:RELEASE.2024-10-02T17-50-41Z
     env_file:
       - .env
     volumes:
@@ -65,8 +65,10 @@ services:
       context: .
       args:
         SERVICE_NAME: api
-    env_file: 
+    env_file:
       - .env
+    environment:
+      DB_SSL_MODE: disable
     depends_on:
       redis:
         condition: service_healthy
@@ -109,7 +111,7 @@ services:
   #     - matchup-network
 
   web:
-    image: nginx:alpine
+    image: nginx:1.27-alpine
     user: root
     volumes:
       - ./services/frontend/build:/usr/share/nginx/html:ro

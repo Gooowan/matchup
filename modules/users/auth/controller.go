@@ -242,9 +242,13 @@ func (c *AuthController) Logout(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, types.Resp{Data: "ok"})
 }
 
-func (c *AuthController) RegisterRoutes(rg *gin.RouterGroup, authRateLimit gin.HandlerFunc) {
+func (c *AuthController) RegisterRoutes(rg *gin.RouterGroup, authRateLimit gin.HandlerFunc, registerRateLimit ...gin.HandlerFunc) {
 	rg.POST("/login", authRateLimit, c.Login)
-	rg.POST("/register", c.Register)
+	regHandlers := []gin.HandlerFunc{c.Register}
+	if len(registerRateLimit) > 0 {
+		regHandlers = append([]gin.HandlerFunc{registerRateLimit[0]}, regHandlers...)
+	}
+	rg.POST("/register", regHandlers...)
 	rg.POST("/logout", c.Logout)
 
 	rg.POST("/check/email", c.CheckEmail)
