@@ -7,6 +7,7 @@ package gen
 import (
 	"context"
 
+	types "github.com/Gooowan/matchup/modules/core/types"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -15,11 +16,16 @@ type Querier interface {
 	DeleteProfile(ctx context.Context, userID pgtype.UUID) error
 	FindNearbyVisibleProfiles(ctx context.Context, arg FindNearbyVisibleProfilesParams) ([]FindNearbyVisibleProfilesRow, error)
 	GetCountryWideProfiles(ctx context.Context, arg GetCountryWideProfilesParams) ([]GetCountryWideProfilesRow, error)
+	GetLikeHistory(ctx context.Context, userID pgtype.UUID) ([]types.JSONB, error)
 	GetNearbyClubProfiles(ctx context.Context, arg GetNearbyClubProfilesParams) ([]GetNearbyClubProfilesRow, error)
 	GetPreferences(ctx context.Context, userID pgtype.UUID) (UserPreference, error)
 	GetProfileByUserID(ctx context.Context, userID pgtype.UUID) (Profile, error)
 	GetProfilePreview(ctx context.Context, userID pgtype.UUID) (GetProfilePreviewRow, error)
+	GetProfilesByUserIDs(ctx context.Context, userIds []pgtype.UUID) ([]GetProfilesByUserIDsRow, error)
+	GetProfilesLikedBySimilarUsers(ctx context.Context, arg GetProfilesLikedBySimilarUsersParams) ([]pgtype.UUID, error)
 	GetSameClubProfiles(ctx context.Context, arg GetSameClubProfilesParams) ([]GetSameClubProfilesRow, error)
+	GetSimilarUsers(ctx context.Context, userID pgtype.UUID) ([]GetSimilarUsersRow, error)
+	InsertLikeLog(ctx context.Context, arg InsertLikeLogParams) error
 	UpdateProfile(ctx context.Context, arg UpdateProfileParams) error
 	UpdateProfileMetadata(ctx context.Context, arg UpdateProfileMetadataParams) error
 	UpsertPreferences(ctx context.Context, arg UpsertPreferencesParams) (UserPreference, error)

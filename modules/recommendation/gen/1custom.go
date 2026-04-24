@@ -5,6 +5,30 @@ import (
 	"github.com/Gooowan/matchup/modules/core/utils"
 )
 
+// ProfileToFeatures converts a Profile into a JSONB feature snapshot for
+// recommendation_likes_log. Only stores filterable fields needed by Tier 2/3.
+func ProfileToFeatures(p Profile) types.JSONB {
+	f := types.JSONB{
+		"categories": p.Categories,
+		"goal":       p.Goal,
+		"program":    p.Program,
+		"gender":     p.Gender,
+	}
+	if p.BirthDate.Valid {
+		f["birth_date"] = p.BirthDate.Time.Format("2006-01-02")
+	}
+	if p.HeightCm.Valid {
+		f["height_cm"] = p.HeightCm.Int16
+	}
+	if p.Country.Valid {
+		f["country"] = p.Country.String
+	}
+	if p.City.Valid {
+		f["city"] = p.City.String
+	}
+	return f
+}
+
 // ProfileDTO returns the full profile with all filter columns as flat fields.
 type ProfileDTO struct {
 	ID              string      `json:"id"`

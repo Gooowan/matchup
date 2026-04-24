@@ -164,3 +164,42 @@ func (s *ClubService) RegisterClub(ctx context.Context, p CreateClubParams) (gen
 	p.IsVerified = false
 	return s.CreateClub(ctx, p)
 }
+
+// ClaimClub sets the owner_user_id for a club if it has no owner yet.
+// Returns the updated club or an error if already claimed.
+func (s *ClubService) ClaimClub(ctx context.Context, clubID, userID pgtype.UUID) (gen.Club, error) {
+	club, err := s.Queries.ClaimClub(ctx, gen.ClaimClubParams{
+		ID:          clubID,
+		OwnerUserID: userID,
+	})
+	if err != nil {
+		return gen.Club{}, fmt.Errorf("already claimed or not found")
+	}
+	return club, nil
+}
+
+type ManageClubParams struct {
+	Description  string
+	Address      string
+	Phone        string
+	Website      string
+	WorkingHours types.JSONB
+}
+
+// ManageClub lets the owner update their club's business details.
+func (s *ClubService) ManageClub(ctx context.Context, clubID, ownerID pgtype.UUID, p ManageClubParams) error {
+	return s.Queries.ManageClub(ctx, gen.ManageClubParams{
+		ID:           clubID,
+		OwnerUserID:  ownerID,
+		Description:  pgtype.Text{String: p.Description, Valid: p.Description != ""},
+		Address:      pgtype.Text{String: p.Address, Valid: p.Address != ""},
+		Phone:        pgtype.Text{String: p.Phone, Valid: p.Phone != ""},
+		Website:      pgtype.Text{String: p.Website, Valid: p.Website != ""},
+		WorkingHours: p.WorkingHours,
+	})
+}
+
+// ListOwnedClubs returns all active clubs owned by the given user.
+func (s *ClubService) ListOwnedClubs(ctx context.Context, userID pgtype.UUID) ([]gen.Club, error) {
+	return s.Queries.ListOwnedClubs(ctx, userID)
+}

@@ -96,3 +96,25 @@ SELECT COUNT(*)::int FROM club_members WHERE club_id = @club_id;
 SELECT EXISTS(
     SELECT 1 FROM club_members WHERE club_id = @club_id AND user_id = @user_id
 ) AS is_member;
+
+-- name: GetClubOwner :one
+SELECT owner_user_id FROM clubs WHERE id = @id;
+
+-- name: ClaimClub :one
+UPDATE clubs
+SET owner_user_id = @owner_user_id, updated_at = CURRENT_TIMESTAMP
+WHERE id = @id AND owner_user_id IS NULL
+RETURNING *;
+
+-- name: ManageClub :exec
+UPDATE clubs
+SET description   = @description,
+    address       = @address,
+    phone         = @phone,
+    website       = @website,
+    working_hours = @working_hours,
+    updated_at    = CURRENT_TIMESTAMP
+WHERE id = @id AND owner_user_id = @owner_user_id;
+
+-- name: ListOwnedClubs :many
+SELECT * FROM clubs WHERE owner_user_id = @owner_user_id AND is_active = true ORDER BY name ASC;

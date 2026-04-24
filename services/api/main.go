@@ -163,7 +163,7 @@ func main() {
 	mapCtrl := mapmod.NewMapController(mapSvc)
 	moderationCtrl := moderation.NewModerationController(moderationSvc)
 	subscriptionCtrl := subscriptions.NewSubscriptionController(subscriptionSvc)
-	clubCtrl := clubs.NewClubController(clubSvc)
+	clubCtrl := clubs.NewClubController(clubSvc, chatSvc)
 
 	r := gin.New()
 	r.Use(gin.Recovery())

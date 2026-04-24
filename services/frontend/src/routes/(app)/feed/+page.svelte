@@ -1,136 +1,147 @@
 <script lang="ts">
+	import { onMount } from 'svelte';
+	import { goto } from '$app/navigation';
 	import SwipeCard, { type DancerProfile } from '$lib/components/matchup/SwipeCard.svelte';
 	import MatchPopup from '$lib/components/matchup/MatchPopup.svelte';
-	import FilterSheet from '$lib/components/matchup/FilterSheet.svelte';
+	import FilterSheet, { type FilterState } from '$lib/components/matchup/FilterSheet.svelte';
 	import CardActionMenu from '$lib/components/matchup/CardActionMenu.svelte';
+	import { authFetch } from '$lib/utils/authFetch';
 	import { unreadStore } from '$stores/unread.svelte';
+	import toast from 'svelte-french-toast';
 
-	let profiles = $state<DancerProfile[]>([
-		{
-			id: '1',
-			name: 'Maria',
-			age: 24,
-			photoUrl: 'https://images.unsplash.com/photo-1518611012118-696072aa579a?w=800&fit=crop',
-			tags: ['Ballroom', 'Pro', '175 cm'],
-			location: 'New York, NY',
-			school: 'Ballroom Dance Academy',
-			goals: 'Competition-ready, Open to relocation'
-		},
-		{
-			id: '2',
-			name: 'Alex',
-			age: 27,
-			photoUrl: 'https://images.unsplash.com/photo-1547380236-48c58a1cd64f?w=800&fit=crop',
-			tags: ['Latin', 'Leader', '182 cm'],
-			location: 'New York, NY',
-			school: 'Latin Dance Studio',
-			goals: 'Social dancing, Competitions'
-		},
-		{
-			id: '3',
-			name: 'Sofia',
-			age: 22,
-			photoUrl: 'https://images.unsplash.com/photo-1508700929628-666bc8bd84ea?w=800&fit=crop',
-			tags: ['Salsa', 'Follower', '168 cm'],
-			location: 'Brooklyn, NY',
-			goals: 'Social dancing'
-		},
-		{
-			id: '4',
-			name: 'Dmitri',
-			age: 29,
-			photoUrl: 'https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?w=800&fit=crop',
-			tags: ['Bachata', 'Leader', '185 cm'],
-			location: 'Manhattan, NY',
-			school: 'NYC Dance Academy',
-			goals: 'Competitions, Teaching'
-		},
-		{
-			id: '5',
-			name: 'Elena',
-			age: 25,
-			photoUrl: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=800&fit=crop',
-			tags: ['Contemporary', 'Follower', '170 cm'],
-			location: 'Queens, NY',
-			goals: 'Stage performances'
-		},
-		{
-			id: '6',
-			name: 'Carlos',
-			age: 31,
-			photoUrl: 'https://images.unsplash.com/photo-1531746020798-e6953c6e8e04?w=800&fit=crop',
-			tags: ['Tango', 'Leader', '178 cm'],
-			location: 'Bronx, NY',
-			school: 'Tango Buenos Aires Studio',
-			goals: 'Milonga, Social dancing'
-		},
-		{
-			id: '7',
-			name: 'Anastasia',
-			age: 23,
-			photoUrl: 'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=800&fit=crop',
-			tags: ['Jazz', 'Follower', '165 cm'],
-			location: 'New York, NY',
-			goals: 'Broadway-style, Competitions'
-		},
-		{
-			id: '8',
-			name: 'Miguel',
-			age: 26,
-			photoUrl: 'https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=800&fit=crop',
-			tags: ['Salsa', 'Leader', '180 cm'],
-			location: 'Staten Island, NY',
-			school: 'Salsa Caliente Studio',
-			goals: 'Social dancing, Performances'
-		},
-		{
-			id: '9',
-			name: 'Natalia',
-			age: 28,
-			photoUrl: 'https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=800&fit=crop',
-			tags: ['Swing', 'Follower', '162 cm'],
-			location: 'New York, NY',
-			goals: 'Lindy Hop, Competitions'
-		},
-		{
-			id: '10',
-			name: 'Lucas',
-			age: 24,
-			photoUrl: 'https://images.unsplash.com/photo-1506794778202-cad84cf45f1d?w=800&fit=crop',
-			tags: ['Ballroom', 'Leader', '183 cm'],
-			location: 'New York, NY',
-			school: 'Imperial Dance Academy',
-			goals: 'Amateur competitions, Latin'
-		},
-		{
-			id: '11',
-			name: 'Valentina',
-			age: 21,
-			photoUrl: 'https://images.unsplash.com/photo-1502323703975-b32a7b4be31f?w=800&fit=crop',
-			tags: ['Latin', 'Follower', '167 cm'],
-			location: 'New York, NY',
-			goals: 'Professional path, Competitions'
-		}
-	]);
+	interface FeedCandidate {
+		user_id: string;
+		dance_styles: string[];
+		gender: string;
+		birth_date?: string;
+		height_cm?: number;
+		goal: string;
+		program: string;
+		categories: string[];
+		country?: string;
+		city?: string;
+		metadata: Record<string, unknown>;
+		profile_data: Record<string, unknown>;
+		distance_km: number;
+		source?: string;
+	}
+
+	let profiles = $state<DancerProfile[]>([]);
+	let isLoading = $state(true);
+	let isLoadingMore = $state(false);
+	let exhausted = $state(false);
 
 	let showMatch = $state(false);
 	let matchedProfile = $state<DancerProfile | null>(null);
+	let matchedChatId = $state<string | null>(null);
 	let showFilter = $state(false);
 	let menuProfileId = $state<string | null>(null);
-	let hasNotification = $state(true);
+	let hasNotification = $state(false);
+	let activeFilters = $state<FilterState>({});
 
-	function handleLike(id: string) {
-		const matched = Math.random() > 0.5;
-		if (matched) {
-			matchedProfile = profiles.find((p) => p.id === id) ?? null;
-			showMatch = true;
-			unreadStore.increment();
-		}
-		removeTopCard();
+	function calcAge(birthDate: string): number {
+		const dob = new Date(birthDate);
+		const diff = Date.now() - dob.getTime();
+		return Math.floor(diff / (365.25 * 24 * 3600 * 1000));
 	}
 
-	function handlePass(_id: string) {
+	function mapCandidate(c: FeedCandidate): DancerProfile {
+		const pd = c.profile_data as Record<string, string> ?? {};
+		const tags: string[] = [];
+		const style = (c.categories?.[0] ?? c.dance_styles?.[0] ?? '').trim();
+		if (style) tags.push(style);
+		if (c.program && c.program !== 'standard') tags.push(c.program);
+		if (c.height_cm) tags.push(`${c.height_cm} cm`);
+		return {
+			id: c.user_id,
+			name: pd.first_name ?? 'Dancer',
+			age: c.birth_date ? calcAge(c.birth_date) : 0,
+			photoUrl: (pd.avatar as string) ?? '',
+			tags,
+			location: [c.city, c.country].filter(Boolean).join(', '),
+			school: undefined,
+			goals: c.goal
+		};
+	}
+
+	async function loadFeed(replace = false) {
+		if (exhausted && !replace) return;
+		if (isLoadingMore) return;
+		isLoadingMore = !replace;
+		isLoading = replace;
+
+		try {
+			const params = new URLSearchParams({ limit: '20' });
+			if (activeFilters.danceStyles?.length) params.set('categories', activeFilters.danceStyles.join(','));
+			if (activeFilters.ageMin != null) params.set('age_min', String(activeFilters.ageMin));
+			if (activeFilters.ageMax != null) params.set('age_max', String(activeFilters.ageMax));
+			if (activeFilters.heightMin != null) params.set('height_min', String(activeFilters.heightMin));
+			if (activeFilters.heightMax != null) params.set('height_max', String(activeFilters.heightMax));
+			if (activeFilters.skillLevel) params.set('program', activeFilters.skillLevel);
+			if (activeFilters.role) params.set('role', activeFilters.role);
+
+			const resp = await authFetch(`/matchup/feed?${params}`);
+			if (resp.ok) {
+				const body = await resp.json();
+				const candidates: FeedCandidate[] = body.data?.candidates ?? [];
+				const mapped = candidates.map(mapCandidate);
+				if (replace) {
+					profiles = mapped;
+				} else {
+					profiles = [...profiles, ...mapped];
+				}
+				if (mapped.length === 0) exhausted = true;
+			}
+		} catch {
+			// keep existing cards
+		} finally {
+			isLoading = false;
+			isLoadingMore = false;
+		}
+	}
+
+	onMount(() => loadFeed(true));
+
+	async function handleLike(id: string) {
 		removeTopCard();
+		try {
+			const resp = await authFetch('/matchup/swipe', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ target_user_id: id, action: 'LIKE', source: 'feed' })
+			});
+			if (resp.ok) {
+				const body = await resp.json();
+				if (body.data?.is_mutual_match) {
+					matchedProfile = profiles.find((p) => p.id === id) ?? null;
+					matchedChatId = body.data?.chat_id ?? null;
+					showMatch = true;
+					unreadStore.increment();
+				}
+			}
+		} catch {
+			// silently ignore
+		}
+		if (profiles.length < 3 && !exhausted) loadFeed();
+	}
+
+	async function handlePass(id: string) {
+		removeTopCard();
+		authFetch('/matchup/swipe', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ target_user_id: id, action: 'PASS', source: 'feed' })
+		}).catch(() => {});
+		if (profiles.length < 3 && !exhausted) loadFeed();
+	}
+
+	async function handleHide(id: string) {
+		profiles = profiles.filter((p) => p.id !== id);
+		authFetch('/matchup/hide', {
+			method: 'POST',
+			headers: { 'Content-Type': 'application/json' },
+			body: JSON.stringify({ target_user_id: id, reason: 'hide' })
+		}).catch(() => {});
 	}
 
 	function removeTopCard() {
@@ -139,12 +150,39 @@
 
 	function handleChatNow() {
 		showMatch = false;
+		if (matchedChatId) goto(`/chats/${matchedChatId}`);
+	}
+
+	function handleApplyFilters(filters: FilterState) {
+		activeFilters = filters;
+		exhausted = false;
+		loadFeed(true);
+	}
+
+	async function handleReport(id: string) {
+		try {
+			await authFetch(`/users/${id}/report`, {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ reason: 'inappropriate' })
+			});
+			toast.success('Reported');
+		} catch {
+			toast.error('Failed to report');
+		}
 	}
 </script>
 
 <!-- Full-screen wrapper -->
 <div class="relative h-[100dvh] overflow-hidden bg-black">
-	{#if profiles.length > 0}
+	{#if isLoading}
+		<div class="absolute inset-0 flex items-center justify-center">
+			<div
+				class="h-10 w-10 animate-spin rounded-full border-4 border-white/20"
+				style="border-top-color: white;"
+			></div>
+		</div>
+	{:else if profiles.length > 0}
 		<!-- Card stack: background cards + top interactive card -->
 		{#each profiles.slice(0, 3).reverse() as profile, i}
 			{@const stackLen = Math.min(profiles.length, 3)}
@@ -165,7 +203,7 @@
 						{isTop}
 						onlike={handleLike}
 						onpass={handlePass}
-						onviewprofile={(id) => console.log('view profile', id)}
+						onviewprofile={(id) => goto(`/profiles/${id}`)}
 						onmenu={(id) => (menuProfileId = id)}
 						zIndex={0}
 						fullScreen={true}
@@ -195,10 +233,15 @@
 		></div>
 	{:else}
 		<!-- Empty state -->
-		<div class="mu-screen absolute inset-0 flex flex-col items-center justify-center">
+		<div class="mu-screen absolute inset-0 flex flex-col items-center justify-center px-8">
 			<i class="fi fi-rr-heart" style="font-size: 64px; color: #aeb4bc;"></i>
-			<p class="mt-4 text-[18px] font-bold" style="color: #7d7d7d;">No more profiles</p>
-			<p class="mt-1 text-[14px] font-medium" style="color: #b1b1b1;">Check back later</p>
+			<p class="mt-4 text-[20px] font-black text-center" style="color: #7d7d7d;">No Matches for Now</p>
+			<p class="mt-2 text-[14px] font-medium text-center" style="color: #b1b1b1;">You've seen everyone nearby. Try expanding your filters or check back later.</p>
+			<button
+				onclick={() => loadFeed(true)}
+				class="mt-6 rounded-[50px] px-6 py-2.5 text-[14px] font-semibold text-white"
+				style="background: #8984da;"
+			>Refresh</button>
 		</div>
 	{/if}
 
@@ -246,7 +289,7 @@
 	</div>
 </div>
 
-<!-- Match popup (outside main div, no z-index conflict) -->
+<!-- Match popup -->
 <MatchPopup
 	open={showMatch}
 	theirProfile={matchedProfile}
@@ -258,14 +301,17 @@
 <FilterSheet
 	open={showFilter}
 	onclose={() => (showFilter = false)}
-	onclear={() => console.log('clear filters')}
+	onclear={() => { activeFilters = {}; exhausted = false; loadFeed(true); }}
+	onapply={handleApplyFilters}
+	initialFilters={activeFilters}
 />
 
 <!-- 3-dot action menu -->
 <CardActionMenu
 	open={!!menuProfileId}
+	profileId={menuProfileId}
 	onclose={() => (menuProfileId = null)}
-	onclear={() => (profiles = [])}
-	onhide={() => removeTopCard()}
-	onreport={() => console.log('report', menuProfileId)}
+	onclear={() => { profiles = []; exhausted = false; loadFeed(true); }}
+	onhide={() => menuProfileId && handleHide(menuProfileId)}
+	onreport={() => menuProfileId && handleReport(menuProfileId)}
 />

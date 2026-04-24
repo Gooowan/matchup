@@ -13,7 +13,7 @@ import (
 )
 
 const adminListClubs = `-- name: AdminListClubs :many
-SELECT id, name, slug, description, country, city, address, latitude, longitude, website, phone, is_verified, is_active, metadata, created_at, updated_at FROM clubs
+SELECT id, name, slug, description, country, city, address, latitude, longitude, website, phone, is_verified, is_active, metadata, owner_user_id, working_hours, created_at, updated_at FROM clubs
 ORDER BY created_at DESC
 LIMIT $2 OFFSET $1
 `
@@ -47,6 +47,8 @@ func (q *Queries) AdminListClubs(ctx context.Context, arg AdminListClubsParams) 
 			&i.IsVerified,
 			&i.IsActive,
 			&i.Metadata,
+			&i.OwnerUserID,
+			&i.WorkingHours,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -60,10 +62,48 @@ func (q *Queries) AdminListClubs(ctx context.Context, arg AdminListClubsParams) 
 	return items, nil
 }
 
+const claimClub = `-- name: ClaimClub :one
+UPDATE clubs
+SET owner_user_id = $1, updated_at = CURRENT_TIMESTAMP
+WHERE id = $2 AND owner_user_id IS NULL
+RETURNING id, name, slug, description, country, city, address, latitude, longitude, website, phone, is_verified, is_active, metadata, owner_user_id, working_hours, created_at, updated_at
+`
+
+type ClaimClubParams struct {
+	OwnerUserID pgtype.UUID `db:"owner_user_id" json:"owner_user_id"`
+	ID          pgtype.UUID `db:"id" json:"id"`
+}
+
+func (q *Queries) ClaimClub(ctx context.Context, arg ClaimClubParams) (Club, error) {
+	row := q.db.QueryRow(ctx, claimClub, arg.OwnerUserID, arg.ID)
+	var i Club
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Slug,
+		&i.Description,
+		&i.Country,
+		&i.City,
+		&i.Address,
+		&i.Latitude,
+		&i.Longitude,
+		&i.Website,
+		&i.Phone,
+		&i.IsVerified,
+		&i.IsActive,
+		&i.Metadata,
+		&i.OwnerUserID,
+		&i.WorkingHours,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+	)
+	return i, err
+}
+
 const createClub = `-- name: CreateClub :one
 INSERT INTO clubs (name, slug, description, country, city, address, latitude, longitude, website, phone, is_verified, metadata)
 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-RETURNING id, name, slug, description, country, city, address, latitude, longitude, website, phone, is_verified, is_active, metadata, created_at, updated_at
+RETURNING id, name, slug, description, country, city, address, latitude, longitude, website, phone, is_verified, is_active, metadata, owner_user_id, working_hours, created_at, updated_at
 `
 
 type CreateClubParams struct {
@@ -112,6 +152,8 @@ func (q *Queries) CreateClub(ctx context.Context, arg CreateClubParams) (Club, e
 		&i.IsVerified,
 		&i.IsActive,
 		&i.Metadata,
+		&i.OwnerUserID,
+		&i.WorkingHours,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -128,7 +170,7 @@ func (q *Queries) DeactivateClub(ctx context.Context, id pgtype.UUID) error {
 }
 
 const getClubByID = `-- name: GetClubByID :one
-SELECT id, name, slug, description, country, city, address, latitude, longitude, website, phone, is_verified, is_active, metadata, created_at, updated_at FROM clubs WHERE id = $1
+SELECT id, name, slug, description, country, city, address, latitude, longitude, website, phone, is_verified, is_active, metadata, owner_user_id, working_hours, created_at, updated_at FROM clubs WHERE id = $1
 `
 
 func (q *Queries) GetClubByID(ctx context.Context, id pgtype.UUID) (Club, error) {
@@ -149,6 +191,8 @@ func (q *Queries) GetClubByID(ctx context.Context, id pgtype.UUID) (Club, error)
 		&i.IsVerified,
 		&i.IsActive,
 		&i.Metadata,
+		&i.OwnerUserID,
+		&i.WorkingHours,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -156,7 +200,7 @@ func (q *Queries) GetClubByID(ctx context.Context, id pgtype.UUID) (Club, error)
 }
 
 const getClubBySlug = `-- name: GetClubBySlug :one
-SELECT id, name, slug, description, country, city, address, latitude, longitude, website, phone, is_verified, is_active, metadata, created_at, updated_at FROM clubs WHERE slug = $1 AND is_active = true
+SELECT id, name, slug, description, country, city, address, latitude, longitude, website, phone, is_verified, is_active, metadata, owner_user_id, working_hours, created_at, updated_at FROM clubs WHERE slug = $1 AND is_active = true
 `
 
 func (q *Queries) GetClubBySlug(ctx context.Context, slug string) (Club, error) {
@@ -177,6 +221,8 @@ func (q *Queries) GetClubBySlug(ctx context.Context, slug string) (Club, error) 
 		&i.IsVerified,
 		&i.IsActive,
 		&i.Metadata,
+		&i.OwnerUserID,
+		&i.WorkingHours,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -194,8 +240,19 @@ func (q *Queries) GetClubMemberCount(ctx context.Context, clubID pgtype.UUID) (i
 	return column_1, err
 }
 
+const getClubOwner = `-- name: GetClubOwner :one
+SELECT owner_user_id FROM clubs WHERE id = $1
+`
+
+func (q *Queries) GetClubOwner(ctx context.Context, id pgtype.UUID) (pgtype.UUID, error) {
+	row := q.db.QueryRow(ctx, getClubOwner, id)
+	var owner_user_id pgtype.UUID
+	err := row.Scan(&owner_user_id)
+	return owner_user_id, err
+}
+
 const getUserClubs = `-- name: GetUserClubs :many
-SELECT c.id, c.name, c.slug, c.description, c.country, c.city, c.address, c.latitude, c.longitude, c.website, c.phone, c.is_verified, c.is_active, c.metadata, c.created_at, c.updated_at FROM clubs c
+SELECT c.id, c.name, c.slug, c.description, c.country, c.city, c.address, c.latitude, c.longitude, c.website, c.phone, c.is_verified, c.is_active, c.metadata, c.owner_user_id, c.working_hours, c.created_at, c.updated_at FROM clubs c
 JOIN club_members cm ON cm.club_id = c.id
 WHERE cm.user_id = $1 AND c.is_active = true
 ORDER BY cm.joined_at ASC
@@ -225,6 +282,8 @@ func (q *Queries) GetUserClubs(ctx context.Context, userID pgtype.UUID) ([]Club,
 			&i.IsVerified,
 			&i.IsActive,
 			&i.Metadata,
+			&i.OwnerUserID,
+			&i.WorkingHours,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -356,7 +415,7 @@ func (q *Queries) ListClubMembers(ctx context.Context, arg ListClubMembersParams
 }
 
 const listClubs = `-- name: ListClubs :many
-SELECT id, name, slug, description, country, city, address, latitude, longitude, website, phone, is_verified, is_active, metadata, created_at, updated_at FROM clubs
+SELECT id, name, slug, description, country, city, address, latitude, longitude, website, phone, is_verified, is_active, metadata, owner_user_id, working_hours, created_at, updated_at FROM clubs
 WHERE is_active = true
   AND ($1::varchar IS NULL OR country = $1)
   AND ($2::varchar IS NULL OR city = $2)
@@ -400,6 +459,8 @@ func (q *Queries) ListClubs(ctx context.Context, arg ListClubsParams) ([]Club, e
 			&i.IsVerified,
 			&i.IsActive,
 			&i.Metadata,
+			&i.OwnerUserID,
+			&i.WorkingHours,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -414,7 +475,7 @@ func (q *Queries) ListClubs(ctx context.Context, arg ListClubsParams) ([]Club, e
 }
 
 const listClubsNearby = `-- name: ListClubsNearby :many
-SELECT id, name, slug, description, country, city, address, latitude, longitude, website, phone, is_verified, is_active, metadata, created_at, updated_at,
+SELECT id, name, slug, description, country, city, address, latitude, longitude, website, phone, is_verified, is_active, metadata, owner_user_id, working_hours, created_at, updated_at,
     (6371 * acos(
         cos(radians($1::double precision)) *
         cos(radians(latitude)) *
@@ -435,23 +496,25 @@ type ListClubsNearbyParams struct {
 }
 
 type ListClubsNearbyRow struct {
-	ID          pgtype.UUID      `db:"id" json:"id"`
-	Name        string           `db:"name" json:"name"`
-	Slug        string           `db:"slug" json:"slug"`
-	Description pgtype.Text      `db:"description" json:"description"`
-	Country     string           `db:"country" json:"country"`
-	City        string           `db:"city" json:"city"`
-	Address     pgtype.Text      `db:"address" json:"address"`
-	Latitude    float64          `db:"latitude" json:"latitude"`
-	Longitude   float64          `db:"longitude" json:"longitude"`
-	Website     pgtype.Text      `db:"website" json:"website"`
-	Phone       pgtype.Text      `db:"phone" json:"phone"`
-	IsVerified  pgtype.Bool      `db:"is_verified" json:"is_verified"`
-	IsActive    pgtype.Bool      `db:"is_active" json:"is_active"`
-	Metadata    types.JSONB      `db:"metadata" json:"metadata"`
-	CreatedAt   pgtype.Timestamp `db:"created_at" json:"created_at"`
-	UpdatedAt   pgtype.Timestamp `db:"updated_at" json:"updated_at"`
-	DistanceKm  float64          `db:"distance_km" json:"distance_km"`
+	ID           pgtype.UUID      `db:"id" json:"id"`
+	Name         string           `db:"name" json:"name"`
+	Slug         string           `db:"slug" json:"slug"`
+	Description  pgtype.Text      `db:"description" json:"description"`
+	Country      string           `db:"country" json:"country"`
+	City         string           `db:"city" json:"city"`
+	Address      pgtype.Text      `db:"address" json:"address"`
+	Latitude     float64          `db:"latitude" json:"latitude"`
+	Longitude    float64          `db:"longitude" json:"longitude"`
+	Website      pgtype.Text      `db:"website" json:"website"`
+	Phone        pgtype.Text      `db:"phone" json:"phone"`
+	IsVerified   pgtype.Bool      `db:"is_verified" json:"is_verified"`
+	IsActive     pgtype.Bool      `db:"is_active" json:"is_active"`
+	Metadata     types.JSONB      `db:"metadata" json:"metadata"`
+	OwnerUserID  pgtype.UUID      `db:"owner_user_id" json:"owner_user_id"`
+	WorkingHours types.JSONB      `db:"working_hours" json:"working_hours"`
+	CreatedAt    pgtype.Timestamp `db:"created_at" json:"created_at"`
+	UpdatedAt    pgtype.Timestamp `db:"updated_at" json:"updated_at"`
+	DistanceKm   float64          `db:"distance_km" json:"distance_km"`
 }
 
 func (q *Queries) ListClubsNearby(ctx context.Context, arg ListClubsNearbyParams) ([]ListClubsNearbyRow, error) {
@@ -478,6 +541,8 @@ func (q *Queries) ListClubsNearby(ctx context.Context, arg ListClubsNearbyParams
 			&i.IsVerified,
 			&i.IsActive,
 			&i.Metadata,
+			&i.OwnerUserID,
+			&i.WorkingHours,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DistanceKm,
@@ -490,6 +555,83 @@ func (q *Queries) ListClubsNearby(ctx context.Context, arg ListClubsNearbyParams
 		return nil, err
 	}
 	return items, nil
+}
+
+const listOwnedClubs = `-- name: ListOwnedClubs :many
+SELECT id, name, slug, description, country, city, address, latitude, longitude, website, phone, is_verified, is_active, metadata, owner_user_id, working_hours, created_at, updated_at FROM clubs WHERE owner_user_id = $1 AND is_active = true ORDER BY name ASC
+`
+
+func (q *Queries) ListOwnedClubs(ctx context.Context, ownerUserID pgtype.UUID) ([]Club, error) {
+	rows, err := q.db.Query(ctx, listOwnedClubs, ownerUserID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Club
+	for rows.Next() {
+		var i Club
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Slug,
+			&i.Description,
+			&i.Country,
+			&i.City,
+			&i.Address,
+			&i.Latitude,
+			&i.Longitude,
+			&i.Website,
+			&i.Phone,
+			&i.IsVerified,
+			&i.IsActive,
+			&i.Metadata,
+			&i.OwnerUserID,
+			&i.WorkingHours,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const manageClub = `-- name: ManageClub :exec
+UPDATE clubs
+SET description   = $1,
+    address       = $2,
+    phone         = $3,
+    website       = $4,
+    working_hours = $5,
+    updated_at    = CURRENT_TIMESTAMP
+WHERE id = $6 AND owner_user_id = $7
+`
+
+type ManageClubParams struct {
+	Description  pgtype.Text `db:"description" json:"description"`
+	Address      pgtype.Text `db:"address" json:"address"`
+	Phone        pgtype.Text `db:"phone" json:"phone"`
+	Website      pgtype.Text `db:"website" json:"website"`
+	WorkingHours types.JSONB `db:"working_hours" json:"working_hours"`
+	ID           pgtype.UUID `db:"id" json:"id"`
+	OwnerUserID  pgtype.UUID `db:"owner_user_id" json:"owner_user_id"`
+}
+
+func (q *Queries) ManageClub(ctx context.Context, arg ManageClubParams) error {
+	_, err := q.db.Exec(ctx, manageClub,
+		arg.Description,
+		arg.Address,
+		arg.Phone,
+		arg.Website,
+		arg.WorkingHours,
+		arg.ID,
+		arg.OwnerUserID,
+	)
+	return err
 }
 
 const updateClub = `-- name: UpdateClub :exec

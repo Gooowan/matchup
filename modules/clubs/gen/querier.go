@@ -12,11 +12,13 @@ import (
 
 type Querier interface {
 	AdminListClubs(ctx context.Context, arg AdminListClubsParams) ([]Club, error)
+	ClaimClub(ctx context.Context, arg ClaimClubParams) (Club, error)
 	CreateClub(ctx context.Context, arg CreateClubParams) (Club, error)
 	DeactivateClub(ctx context.Context, id pgtype.UUID) error
 	GetClubByID(ctx context.Context, id pgtype.UUID) (Club, error)
 	GetClubBySlug(ctx context.Context, slug string) (Club, error)
 	GetClubMemberCount(ctx context.Context, clubID pgtype.UUID) (int32, error)
+	GetClubOwner(ctx context.Context, id pgtype.UUID) (pgtype.UUID, error)
 	GetUserClubs(ctx context.Context, userID pgtype.UUID) ([]Club, error)
 	IsClubMember(ctx context.Context, arg IsClubMemberParams) (bool, error)
 	JoinClub(ctx context.Context, arg JoinClubParams) error
@@ -24,6 +26,8 @@ type Querier interface {
 	ListClubMembers(ctx context.Context, arg ListClubMembersParams) ([]ListClubMembersRow, error)
 	ListClubs(ctx context.Context, arg ListClubsParams) ([]Club, error)
 	ListClubsNearby(ctx context.Context, arg ListClubsNearbyParams) ([]ListClubsNearbyRow, error)
+	ListOwnedClubs(ctx context.Context, ownerUserID pgtype.UUID) ([]Club, error)
+	ManageClub(ctx context.Context, arg ManageClubParams) error
 	UpdateClub(ctx context.Context, arg UpdateClubParams) error
 	VerifyClub(ctx context.Context, id pgtype.UUID) error
 }

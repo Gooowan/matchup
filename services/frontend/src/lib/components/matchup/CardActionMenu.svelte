@@ -3,13 +3,14 @@
 
 	interface Props {
 		open?: boolean;
+		profileId?: string | null;
 		onclose?: () => void;
 		onclear?: () => void;
 		onhide?: () => void;
 		onreport?: () => void;
 	}
 
-	let { open = false, onclose, onclear, onhide, onreport }: Props = $props();
+	let { open = false, profileId = null, onclose, onclear, onhide, onreport }: Props = $props();
 </script>
 
 <BottomSheet {open} {onclose}>

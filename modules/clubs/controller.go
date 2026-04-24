@@ -1,11 +1,13 @@
 package clubs
 
 import (
+	"bytes"
 	"net/http"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/Gooowan/matchup/modules/chat"
 	"github.com/Gooowan/matchup/modules/core/logging"
 	"github.com/Gooowan/matchup/modules/core/types"
 	"github.com/Gooowan/matchup/modules/core/utils"
@@ -13,11 +15,12 @@ import (
 )
 
 type ClubController struct {
-	svc *ClubService
+	svc     *ClubService
+	chatSvc *chat.ChatService
 }
 
-func NewClubController(svc *ClubService) *ClubController {
-	return &ClubController{svc: svc}
+func NewClubController(svc *ClubService, chatSvc *chat.ChatService) *ClubController {
+	return &ClubController{svc: svc, chatSvc: chatSvc}
 }
 
 // --- Request types ---
@@ -180,6 +183,120 @@ func (c *ClubController) GetMyClubs(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, types.Resp{Data: clubs})
 }
 
+// --- Business owner endpoints ---
+
+// POST /clubs/:id/claim
+func (c *ClubController) ClaimClub(ctx *gin.Context) {
+	user, ok := auth.GetUserFromContext(ctx)
+	if !ok {
+		ctx.JSON(http.StatusUnauthorized, types.Resp{Error: "Unauthorized"})
+		return
+	}
+	clubID, err := utils.StringToUUID(ctx.Param("id"))
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, types.Resp{Error: "Invalid club ID"})
+		return
+	}
+	club, err := c.svc.ClaimClub(ctx.Request.Context(), clubID, user.ID)
+	if err != nil {
+		ctx.JSON(http.StatusConflict, types.Resp{Error: "Club is already claimed or not found"})
+		return
+	}
+	ctx.JSON(http.StatusOK, types.Resp{Data: club})
+}
+
+type manageClubRequest struct {
+	Description  string         `json:"description"`
+	Address      string         `json:"address"`
+	Phone        string         `json:"phone"`
+	Website      string         `json:"website"`
+	WorkingHours map[string]any `json:"working_hours"`
+}
+
+// PUT /clubs/:id/manage
+func (c *ClubController) ManageClub(ctx *gin.Context) {
+	user, ok := auth.GetUserFromContext(ctx)
+	if !ok {
+		ctx.JSON(http.StatusUnauthorized, types.Resp{Error: "Unauthorized"})
+		return
+	}
+	clubID, err := utils.StringToUUID(ctx.Param("id"))
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, types.Resp{Error: "Invalid club ID"})
+		return
+	}
+	var req manageClubRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		ctx.JSON(http.StatusBadRequest, types.Resp{Error: err.Error()})
+		return
+	}
+	if err := c.svc.ManageClub(ctx.Request.Context(), clubID, user.ID, ManageClubParams{
+		Description:  req.Description,
+		Address:      req.Address,
+		Phone:        req.Phone,
+		Website:      req.Website,
+		WorkingHours: types.JSONB(req.WorkingHours),
+	}); err != nil {
+		logging.FromContext(ctx.Request.Context()).Error("failed to manage club", "error", err)
+		ctx.JSON(http.StatusForbidden, types.Resp{Error: "Not the club owner or club not found"})
+		return
+	}
+	ctx.JSON(http.StatusOK, types.Resp{Data: "ok"})
+}
+
+// GET /me/owned-clubs
+func (c *ClubController) GetOwnedClubs(ctx *gin.Context) {
+	user, ok := auth.GetUserFromContext(ctx)
+	if !ok {
+		ctx.JSON(http.StatusUnauthorized, types.Resp{Error: "Unauthorized"})
+		return
+	}
+	clubs, err := c.svc.ListOwnedClubs(ctx.Request.Context(), user.ID)
+	if err != nil {
+		logging.FromContext(ctx.Request.Context()).Error("failed to list owned clubs", "error", err)
+		ctx.JSON(http.StatusInternalServerError, types.Resp{Error: "Failed to get owned clubs"})
+		return
+	}
+	ctx.JSON(http.StatusOK, types.Resp{Data: clubs})
+}
+
+// POST /clubs/:id/chat — create or find a DM between current user and club owner.
+func (c *ClubController) ChatWithClub(ctx *gin.Context) {
+	user, ok := auth.GetUserFromContext(ctx)
+	if !ok {
+		ctx.JSON(http.StatusUnauthorized, types.Resp{Error: "Unauthorized"})
+		return
+	}
+	clubID, err := utils.StringToUUID(ctx.Param("id"))
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, types.Resp{Error: "Invalid club ID"})
+		return
+	}
+	club, err := c.svc.GetClubByID(ctx.Request.Context(), clubID)
+	if err != nil {
+		ctx.JSON(http.StatusNotFound, types.Resp{Error: "Club not found"})
+		return
+	}
+	if !club.OwnerUserID.Valid {
+		ctx.JSON(http.StatusUnprocessableEntity, types.Resp{Error: "This club has no business owner yet"})
+		return
+	}
+
+	// Order UUIDs to match the UNIQUE(user1_id, user2_id) constraint in chats
+	u1, u2 := club.OwnerUserID, user.ID
+	if bytes.Compare(u1.Bytes[:], u2.Bytes[:]) > 0 {
+		u1, u2 = u2, u1
+	}
+	chatID, err := c.chatSvc.CreateChat(ctx.Request.Context(), u1, u2)
+	if err != nil {
+		// Chat may already exist — fetch it
+		logging.FromContext(ctx.Request.Context()).Info("club chat already exists or error creating", "error", err)
+		ctx.JSON(http.StatusInternalServerError, types.Resp{Error: "Failed to create business chat"})
+		return
+	}
+	ctx.JSON(http.StatusOK, types.Resp{Data: map[string]string{"chat_id": utils.UUIDToString(chatID)}})
+}
+
 // --- Admin endpoints ---
 
 // GET /admin/clubs
@@ -280,9 +397,13 @@ func (c *ClubController) RegisterRoutes(
 	auth.Use(userAuth)
 	auth.POST("/:slug/join", c.JoinClub)
 	auth.DELETE("/:slug/join", c.LeaveClub)
+	auth.POST("/:id/claim", c.ClaimClub)
+	auth.PUT("/:id/manage", c.ManageClub)
+	auth.POST("/:id/chat", c.ChatWithClub)
 
-	// /me/clubs
+	// /me/clubs and /me/owned-clubs
 	meGroup.GET("/clubs", c.GetMyClubs)
+	meGroup.GET("/owned-clubs", c.GetOwnedClubs)
 
 	// Admin routes
 	adminGroup.GET("/clubs", c.AdminListClubs)

@@ -106,6 +106,17 @@
 					<i class="fi fi-rr-angle-right" style="font-size: 14px; color: #aeb4bc;"></i>
 				</a>
 				<a
+					href="/business"
+					class="mu-divider flex items-center justify-between px-4 py-3"
+					style="border-top-width: 1px; border-top-style: solid;"
+				>
+					<div class="flex items-center gap-3">
+						<i class="fi fi-rr-store-alt mu-text-primary" style="font-size: 18px;"></i>
+						<span class="mu-text-primary text-[14px] font-semibold">Business Panel</span>
+					</div>
+					<i class="fi fi-rr-angle-right" style="font-size: 14px; color: #aeb4bc;"></i>
+				</a>
+				<a
 					href="/forgotPassword"
 					class="mu-divider flex items-center justify-between px-4 py-3"
 					style="border-top-width: 1px; border-top-style: solid;"

@@ -48,6 +48,7 @@
 			});
 			const response = await resp.json();
 			if (resp.ok) {
+				// Go to login; onboarding check happens after login in the app layout
 				await goto('/login');
 			} else {
 				errorMsg = response.error || 'Invalid verification code';

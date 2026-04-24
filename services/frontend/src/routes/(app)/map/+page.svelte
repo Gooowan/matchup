@@ -4,13 +4,14 @@
 	import { browser } from '$app/environment';
 	import FilterSheet, { type FilterState } from '$lib/components/matchup/FilterSheet.svelte';
 	import BottomSheet from '$lib/components/matchup/BottomSheet.svelte';
+	import { authFetch } from '$lib/utils/authFetch';
 
 	type Category = 'schools' | 'dancers' | 'tailoring' | 'events';
 
 	let activeCategory = $state<Category>('schools');
 	let showFilter = $state(false);
 	let selectedEntity = $state<MapEntity | null>(null);
-	let activeFilters = $state<FilterState>({ danceStyles: [], role: '', distanceKm: 50, city: '' });
+	let activeFilters = $state<FilterState>({});
 	let isDark = $state(browser && document.documentElement.classList.contains('dark'));
 
 	// Leaflet map refs
@@ -33,6 +34,7 @@
 		website?: string;
 		hours?: string;
 		address?: string;
+		slug?: string;
 		// Event-specific
 		date?: string;
 		description?: string;
@@ -40,55 +42,68 @@
 		bannerUrl?: string;
 	}
 
-	// Mock entities
-	const entities: MapEntity[] = [
-		{
-			type: 'schools',
-			id: 's1',
-			name: 'BUTA Dance School',
-			location: 'New York, NY',
-			lat: 40.7128,
-			lng: -74.006,
-			rating: 4.5,
-			ratingCount: 29,
-			hours: '9:00 - 18:00',
-			address: 'Fisherton St 9A, 306',
-			phone: '+44 378 389 347',
-			website: 'butadance.com',
-			photos: [
-				'https://images.unsplash.com/photo-1504609773096-104ff2c73ba4?w=300',
-				'https://images.unsplash.com/photo-1558618666-fcd25c85cd64?w=300'
-			]
-		},
-		{
-			type: 'dancers',
-			id: 'd1',
-			name: 'Maria, 24',
-			location: 'New York, NY',
-			lat: 40.718,
-			lng: -74.001,
-			rating: 4.8,
-			ratingCount: 29
-		},
-		{
-			type: 'events',
-			id: 'e1',
-			name: 'IDSU Grand Prix Adult',
-			location: 'New York, Fisherton St 9A, 306',
-			lat: 40.715,
-			lng: -74.01,
-			date: 'FRI, 24 July 2026, 19:00',
-			website: 'grandprix.com',
-			ticketsUrl: 'tickets.com',
-			description: 'International dance competition for adult dancers across all styles.',
-			bannerUrl: 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=400'
-		}
-	];
+	let entities = $state<MapEntity[]>([]);
+	let userLat = $state(0);
+	let userLng = $state(0);
+
+	async function loadClubs() {
+		try {
+			const resp = await fetch(`${import.meta.env.VITE_API_URL}/clubs`);
+			if (resp.ok) {
+				const body = await resp.json();
+				const clubs = body.data ?? [];
+				const schoolEntities: MapEntity[] = clubs
+					.filter((c: any) => c.latitude && c.longitude)
+					.map((c: any) => ({
+						type: 'schools' as Category,
+						id: c.id ?? c.slug,
+						slug: c.slug,
+						name: c.name,
+						location: [c.city, c.country].filter(Boolean).join(', '),
+						lat: c.latitude,
+						lng: c.longitude,
+						address: c.address?.String ?? c.address ?? '',
+						phone: c.phone?.String ?? c.phone ?? '',
+						website: c.website?.String ?? c.website ?? ''
+					}));
+				entities = [...entities.filter((e) => e.type !== 'schools'), ...schoolEntities];
+			}
+		} catch {}
+	}
+
+	async function loadNearbyDancers(lat: number, lng: number) {
+		try {
+			const resp = await authFetch('/map/nearby/radius', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ latitude: lat, longitude: lng, radius_km: activeFilters.distanceKm ?? 20 })
+			});
+			if (resp.ok) {
+				const body = await resp.json();
+				const nearby = body.data?.users ?? body.data ?? [];
+				const dancerEntities: MapEntity[] = nearby
+					.filter((u: any) => u.latitude && u.longitude)
+					.map((u: any) => {
+						const pd = u.profile_data ?? {};
+						return {
+							type: 'dancers' as Category,
+							id: u.user_id ?? u.id,
+							name: [pd.first_name, pd.last_name].filter(Boolean).join(' ') || 'Dancer',
+							location: [u.city, u.country].filter(Boolean).join(', '),
+							lat: u.latitude,
+							lng: u.longitude,
+							logoUrl: pd.avatar ?? ''
+						};
+					});
+				entities = [...entities.filter((e) => e.type !== 'dancers'), ...dancerEntities];
+			}
+		} catch {}
+	}
 
 	let filtered = $derived(
 		entities.filter((e) => {
 			if (e.type !== activeCategory) return false;
-			if (activeFilters.city && e.location && !e.location.toLowerCase().includes(activeFilters.city.toLowerCase())) return false;
+			if (activeFilters.city && e.location && !e.location.toLowerCase().includes((activeFilters.city ?? '').toLowerCase())) return false;
 			return true;
 		})
 	);
@@ -117,6 +132,19 @@
 			maxZoom: 19
 		}).addTo(map);
 
+		// Try to get user location, fall back to default
+		navigator.geolocation.getCurrentPosition(
+			async (pos) => {
+				userLat = pos.coords.latitude;
+				userLng = pos.coords.longitude;
+				map.setView([userLat, userLng], 14);
+				await loadNearbyDancers(userLat, userLng);
+				addMarkers();
+			},
+			() => {}
+		);
+
+		await loadClubs();
 		addMarkers();
 	});
 
@@ -158,16 +186,35 @@
 		}
 	});
 
-	function nearMe() {
+	async function nearMe() {
 		if (!browser || !map) return;
 		navigator.geolocation.getCurrentPosition(
-			(pos) => map.setView([pos.coords.latitude, pos.coords.longitude], 15),
+			async (pos) => {
+				userLat = pos.coords.latitude;
+				userLng = pos.coords.longitude;
+				map.setView([userLat, userLng], 15);
+				await loadNearbyDancers(userLat, userLng);
+				addMarkers();
+			},
 			() => {}
 		);
 	}
 
-	function openChat(entity: MapEntity) {
+	async function openChat(entity: MapEntity) {
 		selectedEntity = null;
+		if (entity.type === 'schools' && entity.id) {
+			try {
+				const resp = await authFetch(`/clubs/${entity.id}/chat`, { method: 'POST' });
+				if (resp.ok) {
+					const body = await resp.json();
+					const chatId = body.data?.chat_id ?? body.chat_id;
+					if (chatId) {
+						goto(`/chats/${chatId}`);
+						return;
+					}
+				}
+			} catch {}
+		}
 		goto('/chats');
 	}
 </script>

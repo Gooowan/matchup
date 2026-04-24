@@ -4,7 +4,7 @@
 	import { authFetch } from '$lib/utils/authFetch';
 	import { unreadStore } from '$stores/unread.svelte';
 
-	type ChatTab = 'chats' | 'marketplace';
+	type ChatTab = 'chats' | 'business' | 'marketplace';
 	let activeTab = $state<ChatTab>('chats');
 
 	interface ChatItem {
@@ -16,36 +16,13 @@
 		unread: boolean;
 		online?: boolean;
 		productThumb?: string;
+		isBusiness?: boolean;
 	}
 
-	let regularChats = $state<ChatItem[]>([
-		{
-			id: 'c1',
-			name: 'Maria',
-			avatarUrl: 'https://images.unsplash.com/photo-1518611012118-696072aa579a?w=80',
-			lastMessage: 'Hey! When are you free to practice?',
-			timestamp: '18:24',
-			unread: true,
-			online: true
-		},
-		{
-			id: 'c2',
-			name: 'Alex',
-			avatarUrl: 'https://images.unsplash.com/photo-1547380236-48c58a1cd64f?w=80',
-			lastMessage: 'Great session today!',
-			timestamp: '02 Jun',
-			unread: false
-		},
-		{
-			id: 'c3',
-			name: 'Sofia',
-			lastMessage: 'See you at the competition 👋',
-			timestamp: '14.06.25',
-			unread: false
-		}
-	]);
+	let regularChats = $state<ChatItem[]>([]);
+	let businessChats = $state<ChatItem[]>([]);
 
-	let chats = $derived(regularChats);
+	let chats = $derived(activeTab === 'business' ? businessChats : regularChats);
 
 	onMount(async () => {
 		unreadStore.reset();
@@ -55,7 +32,7 @@
 			if (resp.ok) {
 				const response = await resp.json();
 				if (response.data && Array.isArray(response.data)) {
-					regularChats = response.data.map((c: any) => ({
+					const all: ChatItem[] = response.data.map((c: any) => ({
 						id: c.id,
 						name: c.other_user?.profile_data?.first_name ?? c.other_user_id ?? 'Match',
 						avatarUrl: c.other_user?.profile_data?.avatar,
@@ -67,12 +44,15 @@
 								})
 							: '',
 						unread: c.unread_count > 0,
-						online: false
+						online: false,
+						isBusiness: !!c.other_user?.is_club_owner
 					}));
+					businessChats = all.filter((c: any) => c.isBusiness);
+					regularChats = all.filter((c: any) => !c.isBusiness);
 				}
 			}
 		} catch {
-			// Keep mock data on error
+			// keep empty state on error
 		}
 	});
 </script>
@@ -90,22 +70,29 @@
 	<!-- Tab switcher -->
 	<div class="glass-pill mx-4 mt-3 flex items-center" style="height: 36px; padding: 4px;">
 		<button
-			class="flex flex-1 items-center justify-center rounded-[20px] text-[14px] font-semibold transition-colors"
+			class="flex flex-1 items-center justify-center rounded-[20px] text-[13px] font-semibold transition-colors"
 			style="height: 28px; background: {activeTab === 'chats' ? 'white' : 'transparent'}; color: {activeTab === 'chats' ? '#3a3a3a' : 'white'};"
 			onclick={() => (activeTab = 'chats')}
 		>
 			Chats
 		</button>
 		<button
-			class="flex flex-1 items-center justify-center rounded-[20px] text-[14px] font-semibold transition-colors"
+			class="flex flex-1 items-center justify-center rounded-[20px] text-[13px] font-semibold transition-colors"
+			style="height: 28px; background: {activeTab === 'business' ? 'white' : 'transparent'}; color: {activeTab === 'business' ? '#3a3a3a' : 'white'};"
+			onclick={() => (activeTab = 'business')}
+		>
+			Business
+		</button>
+		<button
+			class="flex flex-1 items-center justify-center rounded-[20px] text-[13px] font-semibold transition-colors"
 			style="height: 28px; background: {activeTab === 'marketplace' ? 'white' : 'transparent'}; color: {activeTab === 'marketplace' ? '#3a3a3a' : 'white'};"
 			onclick={() => (activeTab = 'marketplace')}
 		>
-			Marketplace
+			Market
 		</button>
 	</div>
 
-	<!-- Chat list / Marketplace coming soon -->
+	<!-- Chat list / Business / Marketplace -->
 	{#if activeTab === 'marketplace'}
 		<div class="flex flex-1 flex-col items-center justify-center gap-4">
 			<i class="fi fi-rr-shopping-bag" style="font-size: 48px; color: #313131;"></i>
@@ -160,9 +147,15 @@
 
 			{#if chats.length === 0}
 				<div class="flex flex-col items-center justify-center py-16">
-					<i class="fi fi-rr-comment-heart" style="font-size: 48px; color: #313131;"></i>
-					<p class="mt-4 text-[16px] font-semibold" style="color: #696969;">No chats yet</p>
-					<p class="mt-1 text-[13px] font-medium" style="color: #484848;">Match with someone to start chatting</p>
+					{#if activeTab === 'business'}
+						<i class="fi fi-rr-store-alt" style="font-size: 48px; color: #313131;"></i>
+						<p class="mt-4 text-[16px] font-semibold" style="color: #696969;">No business conversations</p>
+						<p class="mt-1 text-[13px] font-medium text-center" style="color: #484848;">Find a dance school on the map and start chatting</p>
+					{:else}
+						<i class="fi fi-rr-comment-heart" style="font-size: 48px; color: #313131;"></i>
+						<p class="mt-4 text-[16px] font-semibold" style="color: #696969;">No chats yet</p>
+						<p class="mt-1 text-[13px] font-medium" style="color: #484848;">Match with someone to start chatting</p>
+					{/if}
 				</div>
 			{/if}
 		</div>

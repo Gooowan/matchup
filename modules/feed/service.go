@@ -40,8 +40,8 @@ func NewFeedService(
 	clubSvc *clubs.ClubService,
 ) *FeedService {
 	tier1 := recTier1.NewProvider(recommendationSvc.Queries)
-	tier2 := recTier2.NewProvider()
-	tier3 := recTier3.NewProvider()
+	tier2 := recTier2.NewProvider(recommendationSvc.Queries)
+	tier3 := recTier3.NewProvider(recommendationSvc.Queries)
 	rec := recommendation.NewRecommender(tier1, tier2, tier3)
 
 	return &FeedService{
@@ -166,7 +166,25 @@ func (s *FeedService) Swipe(ctx context.Context, fromUserID, toUserID pgtype.UUI
 		metrics.MatchEventsTotal.Inc()
 	}
 
+	// Log liked profile features for Tier 2/3 recommendation learning.
+	if action == "LIKE" {
+		go s.logLike(context.Background(), fromUserID, toUserID)
+	}
+
 	return result, nil
+}
+
+func (s *FeedService) logLike(ctx context.Context, fromUserID, toUserID pgtype.UUID) {
+	profile, err := s.RecommendationSvc.Queries.GetProfileByUserID(ctx, toUserID)
+	if err != nil {
+		return
+	}
+	features := recgen.ProfileToFeatures(profile)
+	_ = s.RecommendationSvc.Queries.InsertLikeLog(ctx, recgen.InsertLikeLogParams{
+		UserID:   fromUserID,
+		LikedID:  toUserID,
+		Features: features,
+	})
 }
 
 func orderUUIDs(a, b pgtype.UUID) (pgtype.UUID, pgtype.UUID) {
