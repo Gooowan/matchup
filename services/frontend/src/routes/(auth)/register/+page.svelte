@@ -27,11 +27,6 @@
 			});
 			const response = await resp.json();
 			if (resp.ok || resp.status === 201) {
-				await authFetch('/auth/otp/send', {
-					method: 'POST',
-					headers: { 'Content-Type': 'application/json' },
-					body: JSON.stringify({ email })
-				});
 				await goto(`/verify-email?email=${encodeURIComponent(email)}`);
 			} else {
 				errorMsg = response.error || 'Реєстрація не вдалась. Спробуй інший email.';
