@@ -25,7 +25,7 @@
 	let displayName = $derived(
 		user?.profile_data?.first_name
 			? `${user.profile_data.first_name} ${user.profile_data.last_name ?? ''}`.trim()
-			: 'Your Name'
+			: 'Твій профіль'
 	);
 	let avatarUrl = $derived(user?.profile_data?.avatar as string | undefined);
 </script>
@@ -35,7 +35,7 @@
 
 	<!-- Header -->
 	<div class="px-4 pt-4 pb-2">
-		<h1 class="mu-text-primary text-[24px] font-black">Settings</h1>
+		<h1 class="mu-text-primary text-[24px] font-black">Налаштування</h1>
 	</div>
 
 	<!-- Scrollable content -->
@@ -64,26 +64,26 @@
 				class="px-4 pt-4 pb-2 text-[11px] font-semibold uppercase tracking-wider"
 				style="color: #aeb4bc;"
 			>
-				Appearance
+				ВИГЛЯД
 			</p>
 			<div class="flex items-center justify-between px-4 pb-4">
 				<div class="flex items-center gap-3">
 					<i class="fi fi-rr-moon mu-text-primary" style="font-size: 18px;"></i>
-					<span class="mu-text-primary text-[14px] font-semibold">Dark mode</span>
+					<span class="mu-text-primary text-[14px] font-semibold">Темний режим</span>
 				</div>
 				<button
 					onclick={toggleTheme}
-					class="relative flex items-center transition-colors"
-					style="width: 50px; height: 28px; border-radius: 50px; background: {isDark
+					class="relative flex flex-shrink-0 items-center transition-colors"
+					style="width: 51px; height: 31px; border-radius: 50px; background: {isDark
 						? '#8984da'
 						: '#d1d5db'};"
-					aria-label="Toggle dark mode"
+					aria-label="Увімкнути темний режим"
 					role="switch"
 					aria-checked={isDark}
 				>
 					<div
-						class="absolute h-[22px] w-[22px] rounded-full bg-white shadow-sm transition-transform"
-						style="transform: translateX({isDark ? '25px' : '3px'});"
+						class="absolute h-[27px] w-[27px] rounded-full bg-white shadow-sm transition-transform"
+						style="transform: translateX({isDark ? '22px' : '2px'});"
 					></div>
 				</button>
 			</div>
@@ -95,13 +95,13 @@
 				class="px-4 pt-4 pb-2 text-[11px] font-semibold uppercase tracking-wider"
 				style="color: #aeb4bc;"
 			>
-				Account
+				АКАУНТ
 			</p>
 			<div class="mu-divider flex flex-col" style="border-top-width: 1px; border-top-style: solid;">
 				<a href="/settings/profile" class="flex items-center justify-between px-4 py-3">
 					<div class="flex items-center gap-3">
 						<i class="fi fi-rr-user-pen mu-text-primary" style="font-size: 18px;"></i>
-						<span class="mu-text-primary text-[14px] font-semibold">Edit profile</span>
+						<span class="mu-text-primary text-[14px] font-semibold">Редагувати профіль</span>
 					</div>
 					<i class="fi fi-rr-angle-right" style="font-size: 14px; color: #aeb4bc;"></i>
 				</a>
@@ -112,7 +112,7 @@
 				>
 					<div class="flex items-center gap-3">
 						<i class="fi fi-rr-store-alt mu-text-primary" style="font-size: 18px;"></i>
-						<span class="mu-text-primary text-[14px] font-semibold">Business Panel</span>
+						<span class="mu-text-primary text-[14px] font-semibold">Бізнес-панель</span>
 					</div>
 					<i class="fi fi-rr-angle-right" style="font-size: 14px; color: #aeb4bc;"></i>
 				</a>
@@ -123,7 +123,7 @@
 				>
 					<div class="flex items-center gap-3">
 						<i class="fi fi-rr-lock mu-text-primary" style="font-size: 18px;"></i>
-						<span class="mu-text-primary text-[14px] font-semibold">Change password</span>
+						<span class="mu-text-primary text-[14px] font-semibold">Змінити пароль</span>
 					</div>
 					<i class="fi fi-rr-angle-right" style="font-size: 14px; color: #aeb4bc;"></i>
 				</a>
@@ -136,26 +136,27 @@
 				class="px-4 pt-4 pb-2 text-[11px] font-semibold uppercase tracking-wider"
 				style="color: #aeb4bc;"
 			>
-				Billing
+				ПІДПИСКА
 			</p>
 			<div class="mu-divider flex flex-col" style="border-top-width: 1px; border-top-style: solid;">
 				<div class="flex items-center justify-between px-4 py-3">
 					<div class="flex items-center gap-3">
 						<i class="fi fi-rr-diamond" style="font-size: 18px; color: #8984da;"></i>
-						<span class="mu-text-primary text-[14px] font-semibold">Subscription</span>
+						<span class="mu-text-primary text-[14px] font-semibold">Підписка</span>
 					</div>
-					<span class="text-[13px] font-medium" style="color: #aeb4bc;">Free</span>
+					<span class="text-[13px] font-medium" style="color: #aeb4bc;">Безкоштовна</span>
 				</div>
-				<button
+				<a
+					href="/settings/subscription"
 					class="mu-divider flex items-center justify-between px-4 py-3"
 					style="border-top-width: 1px; border-top-style: solid;"
 				>
 					<div class="flex items-center gap-3">
 						<i class="fi fi-rr-credit-card mu-text-primary" style="font-size: 18px;"></i>
-						<span class="mu-text-primary text-[14px] font-semibold">Manage subscription</span>
+						<span class="mu-text-primary text-[14px] font-semibold">Керувати підпискою</span>
 					</div>
 					<i class="fi fi-rr-angle-right" style="font-size: 14px; color: #aeb4bc;"></i>
-				</button>
+				</a>
 			</div>
 		</div>
 
@@ -166,7 +167,7 @@
 				onclick={() => authStore.logout()}
 			>
 				<i class="fi fi-rr-exit" style="font-size: 18px; color: #e74c3c;"></i>
-				<span class="text-[14px] font-semibold" style="color: #e74c3c;">Log out</span>
+				<span class="text-[14px] font-semibold" style="color: #e74c3c;">Вийти</span>
 			</button>
 		</div>
 	</div>

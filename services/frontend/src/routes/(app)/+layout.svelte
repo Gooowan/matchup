@@ -4,6 +4,7 @@
 	import { page } from '$app/state';
 	import { authStore } from '$stores/auth.svelte';
 	import BottomNav from '$lib/components/matchup/BottomNav.svelte';
+	import { registerPushNotifications } from '$lib/utils/pushNotifications';
 
 	let { children } = $props();
 
@@ -22,7 +23,9 @@
 		const pd = user?.profile_data as Record<string, string> | undefined;
 		if (!pd?.first_name && !page.url.pathname.startsWith('/onboarding')) {
 			await goto('/onboarding');
+			return;
 		}
+		registerPushNotifications();
 	});
 </script>
 

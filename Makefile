@@ -6,6 +6,7 @@ gen:
 	go run cmd/schema-gen/main.go
 
 up: gen
+	pnpm --filter matchup build
 	docker compose up -d --build
 
 down:

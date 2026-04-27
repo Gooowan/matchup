@@ -16,6 +16,7 @@ import (
 	"github.com/Gooowan/matchup/modules/core/types"
 	"github.com/Gooowan/matchup/modules/core/utils"
 	"github.com/Gooowan/matchup/modules/email"
+	"github.com/Gooowan/matchup/modules/otp"
 	core "github.com/Gooowan/matchup/modules/users"
 	coregen "github.com/Gooowan/matchup/modules/users/gen"
 )
@@ -35,6 +36,11 @@ type AuthService struct {
 	audience     string
 	expiration   time.Duration
 	emailService *email.EmailService
+	otpService   *otp.OTPService
+}
+
+func (s *AuthService) SetOTPService(svc *otp.OTPService) {
+	s.otpService = svc
 }
 
 type JWTClaims struct {
@@ -178,9 +184,9 @@ func (s *AuthService) Register(ctx context.Context, req *RegistrationRequest) (*
 		}
 	}
 
-	if s.emailService != nil {
-		if err := s.RequestEmailVerification(ctx, req.Email, emailVerificationToken.String); err != nil {
-			return nil, fmt.Errorf("failed to send email verification: %w", err)
+	if s.emailService != nil && s.otpService != nil && !s.emailService.IsMockProvider() {
+		if err := s.otpService.CreateAndSendEmailVerifyOTP(ctx, user.ID.String(), req.Email); err != nil {
+			return nil, fmt.Errorf("failed to send verification code: %w", err)
 		}
 	}
 
@@ -302,29 +308,6 @@ func (s *AuthService) PasswordReset(ctx context.Context, token, newPassword stri
 	return nil
 }
 
-func (s *AuthService) RequestEmailVerification(ctx context.Context, address, token string) error {
-	if s.emailService == nil {
-		return fmt.Errorf("email service not available")
-	}
-
-	frontendURL := os.Getenv("FRONTEND_URL")
-	if frontendURL == "" {
-		return fmt.Errorf("FRONTEND_URL environment variable is required")
-	}
-
-	verificationLink := fmt.Sprintf("%s/emailVerify?token=%s", frontendURL, token)
-
-	return s.emailService.SendEmail(ctx, email.EmailRequest{
-		To:         address,
-		From:       fmt.Sprintf("%s <noreply@%s>", s.emailService.GetSender(), s.emailService.GetDomain()),
-		Subject:    "Verify Your Email",
-		TemplateID: email.EmailVerifyTemplate,
-		TemplateData: types.JSONB{
-			"VerifyLink": verificationLink,
-		},
-	})
-}
-
 // EmailVerifyByUserID marks a user's email as verified by clearing the verification token.
 func (s *AuthService) EmailVerifyByUserID(ctx context.Context, userIDStr string) (*coregen.User, error) {
 	userUUID, err := utils.StringToUUID(userIDStr)
@@ -347,19 +330,3 @@ func (s *AuthService) EmailVerifyByUserID(ctx context.Context, userIDStr string)
 	return &user, nil
 }
 
-func (s *AuthService) EmailVerify(ctx context.Context, token string) (*coregen.User, error) {
-	user, err := s.core.Queries.GetUserByEmailVerificationToken(ctx, pgtype.Text{String: token, Valid: true})
-	if err != nil {
-		return nil, fmt.Errorf("invalid verification token: %w", err)
-	}
-
-	err = s.core.Queries.UpdateUserEmailVerificationToken(ctx, coregen.UpdateUserEmailVerificationTokenParams{
-		EmailVerificationToken: pgtype.Text{},
-		UserID:                 user.ID,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to update verification token: %w", err)
-	}
-
-	return &user, nil
-}

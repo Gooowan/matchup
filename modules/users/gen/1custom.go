@@ -1,9 +1,30 @@
 package gen
 
 import (
+	"os"
+	"strings"
+
 	"github.com/Gooowan/matchup/modules/core/types"
 	"github.com/Gooowan/matchup/modules/core/utils"
 )
+
+// normalizeAvatarURL rewrites legacy http://localhost:9000 avatar URLs to the
+// current MINIO_PUBLIC_ENDPOINT so avatars stored before the env-var fix load correctly.
+func normalizeAvatarURL(url string) string {
+	if url == "" {
+		return url
+	}
+	pub := os.Getenv("MINIO_PUBLIC_ENDPOINT")
+	if pub == "" || strings.HasPrefix(url, pub) {
+		return url
+	}
+	for _, legacy := range []string{"http://localhost:9000", "http://minio:9000"} {
+		if strings.HasPrefix(url, legacy) {
+			return pub + url[len(legacy):]
+		}
+	}
+	return url
+}
 
 type UserDTO struct {
 	ID          string      `json:"id"`
@@ -29,12 +50,20 @@ func (users Users) ToDTO() []*UserDTO {
 }
 
 func (user User) ToDTO() *UserDTO {
+	pd := user.ProfileData
+	if avatar, ok := pd["avatar"].(string); ok && avatar != "" {
+		pd = make(types.JSONB, len(user.ProfileData))
+		for k, v := range user.ProfileData {
+			pd[k] = v
+		}
+		pd["avatar"] = normalizeAvatarURL(avatar)
+	}
 	return &UserDTO{
 		ID:          utils.UUIDToString(user.ID),
 		Role:        user.Role,
 		Email:       user.Email.String,
 		InviterID:   utils.UUIDToString(user.InviterID),
-		ProfileData: user.ProfileData,
+		ProfileData: pd,
 		CreatedAt:   user.CreatedAt.Time.UnixMilli(),
 	}
 }

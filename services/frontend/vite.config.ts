@@ -21,7 +21,12 @@ export default defineConfig({
 	build: {
 		// Source maps are required for Sentry to display readable stack traces.
 		// They are uploaded to Sentry in CI and are NOT shipped to end users.
-		sourcemap: true
+		sourcemap: true,
+		rollupOptions: {
+			// Capacitor native plugins are not available in the browser build;
+			// they are resolved at runtime by the Capacitor iOS/Android bridge.
+			external: ['@capacitor/push-notifications']
+		}
 	},
 	plugins: [
 		tailwindcss(),

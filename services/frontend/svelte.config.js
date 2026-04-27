@@ -16,7 +16,7 @@ const config = {
 			$types: './src/lib/types',
 		},
 		csrf: {
-			checkOrigin: false, // Temporarily disable origin checking before we figure out how to handle it
+			trustedOrigins: ['*'],
 		},
 	},
 	compilerOptions: {

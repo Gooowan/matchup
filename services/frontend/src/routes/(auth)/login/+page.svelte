@@ -25,12 +25,20 @@
 			const response = await resp.json();
 			if (resp.ok && response.data) {
 				authStore.login(response.data.user);
-				await goto('/feed');
+				const firstName = response.data.user?.profile_data?.first_name;
+				await goto(firstName ? '/feed' : '/onboarding');
+			} else if (resp.status === 403) {
+				authFetch('/auth/otp/send', {
+					method: 'POST',
+					headers: { 'Content-Type': 'application/json' },
+					body: JSON.stringify({ email })
+				}).catch(() => {});
+				await goto('/verify-email?email=' + encodeURIComponent(email));
 			} else {
-				errorMsg = response.error || 'Login failed. Check your credentials.';
+				errorMsg = response.error || 'Невірний email або пароль.';
 			}
 		} catch {
-			errorMsg = 'Network error. Please try again.';
+			errorMsg = 'Помилка мережі. Спробуй ще раз.';
 		} finally {
 			isLoading = false;
 		}
@@ -44,12 +52,12 @@
 <div class="flex min-h-[100dvh] flex-col items-center justify-center px-6 pt-safe pb-safe">
 	<!-- Logo -->
 	<img src="/match_icon.svg" alt="MatchUp" class="mb-2 h-16 w-16" />
-	<h1 class="mb-10 text-[28px] font-black" style="color: #171717;">Sign in</h1>
+	<h1 class="mb-10 text-[28px] font-black" style="color: #171717;">Увійти</h1>
 
 	<div class="flex w-full max-w-sm flex-col gap-4">
 		<input
 			type="email"
-			placeholder="Email"
+			placeholder="Ел. пошта"
 			bind:value={email}
 			onkeydown={handleKeydown}
 			autocomplete="email"
@@ -58,7 +66,7 @@
 		/>
 		<input
 			type="password"
-			placeholder="Password"
+			placeholder="Пароль"
 			bind:value={password}
 			onkeydown={handleKeydown}
 			autocomplete="current-password"
@@ -76,22 +84,14 @@
 			class="mt-2 w-full py-3 text-[14px] font-semibold text-white transition-opacity disabled:opacity-60"
 			style="border-radius: 50px; background: #696969;"
 		>
-			{isLoading ? 'Signing in…' : 'Sign in'}
+			{isLoading ? 'Вхід…' : 'Увійти'}
 		</button>
 
-		<a
-			href="/register"
-			class="text-center text-[13px] font-medium"
-			style="color: #696969;"
-		>
-			Create account
+		<a href="/register" class="text-center text-[13px] font-medium" style="color: #696969;">
+			Створити акаунт
 		</a>
-		<a
-			href="/forgotPassword"
-			class="text-center text-[13px] font-medium"
-			style="color: #696969;"
-		>
-			Forgot password?
+		<a href="/forgotPassword" class="text-center text-[13px] font-medium" style="color: #696969;">
+			Забули пароль?
 		</a>
 	</div>
 </div>

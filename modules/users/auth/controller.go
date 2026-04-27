@@ -91,25 +91,6 @@ func (c *AuthController) Register(ctx *gin.Context) {
 	ctx.JSON(http.StatusCreated, types.Resp{Data: gin.H{"user": user.ToDTO()}})
 }
 
-func (c *AuthController) VerifyEmail(ctx *gin.Context) {
-	var req struct {
-		Token string `json:"token" binding:"required"`
-	}
-
-	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, types.Resp{Error: err.Error()})
-		return
-	}
-
-	user, err := c.authService.EmailVerify(ctx.Request.Context(), req.Token)
-	if err != nil {
-		ctx.JSON(http.StatusBadRequest, types.Resp{Error: "Invalid verification token"})
-		return
-	}
-
-	ctx.JSON(http.StatusOK, types.Resp{Data: gin.H{"user": user.ToDTO()}})
-}
-
 func (c *AuthController) CheckEmail(ctx *gin.Context) {
 	var req struct {
 		Email string `json:"email" binding:"required,email"`
@@ -253,8 +234,6 @@ func (c *AuthController) RegisterRoutes(rg *gin.RouterGroup, authRateLimit gin.H
 
 	rg.POST("/check/email", c.CheckEmail)
 	rg.POST("/check/inviter", c.CheckInviter)
-
-	rg.POST("/verify/email", c.VerifyEmail)
 
 	rg.POST("/password/forgot", c.ForgotPassword)
 	rg.POST("/password/reset", c.ResetPassword)

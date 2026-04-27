@@ -144,6 +144,7 @@ func (c *UserController) RegisterRoutes(rg *gin.RouterGroup, userAuthMiddleware 
 		avatarHandlers = append([]gin.HandlerFunc{uploadRL[0]}, avatarHandlers...)
 	}
 	rg.POST("/files/avatar", avatarHandlers...)
+	rg.POST("/files/photo", filesController.UploadPhoto)
 	rg.POST("/locale", c.SetUserLocale)
 	rg.POST("/profile/update", c.UpdateUserProfile)
 

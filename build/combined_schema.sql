@@ -59,30 +59,30 @@ CREATE INDEX idx_media_visible ON media(owner_id, visible);
 
 -- Dancer profiles (1:1 with users)
 CREATE TABLE profiles(
-    id                uuid             PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id           uuid             NOT NULL REFERENCES users(id) UNIQUE,
+    id                 uuid          PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id            uuid          NOT NULL REFERENCES users(id) UNIQUE,
     -- Geo location
-    latitude          double precision,
-    longitude         double precision,
-    visible           boolean          NOT NULL DEFAULT true,
+    latitude           double precision,
+    longitude          double precision,
+    visible            boolean       NOT NULL DEFAULT true,
     -- Dance filters (indexed, queryable)
-    dance_styles      text[],
-    gender            varchar(10)      NOT NULL DEFAULT '',
-    birth_date        date,
-    height_cm         smallint,
-    goal              varchar(20)      NOT NULL DEFAULT 'hobby',
-    program           varchar(20)      NOT NULL DEFAULT 'standard',
-    categories        text[]           NOT NULL DEFAULT '{}',
-    country           varchar(3),
-    city              varchar(100),
-    ready_to_relocate boolean          DEFAULT false,
-    ready_to_finance  varchar(20)      DEFAULT 'no',
+    dance_styles       text[],
+    gender             varchar(10)   NOT NULL DEFAULT '',
+    birth_date         date,
+    height_cm          smallint,
+    goal               varchar(20)   NOT NULL DEFAULT 'hobby',
+    program            varchar(20)   NOT NULL DEFAULT 'standard',
+    categories         text[]        NOT NULL DEFAULT '{}',
+    country            varchar(100),
+    city               varchar(100),
+    ready_to_relocate  boolean       DEFAULT false,
+    ready_to_finance   varchar(20)   DEFAULT 'no',
     -- Non-queryable data (bio, media_urls, social links, etc.)
-    metadata          jsonb            NOT NULL DEFAULT '{}',
-    -- Legacy JSONB kept for rollback safety
-    data              jsonb            NOT NULL DEFAULT '{}',
-    created_at        timestamp        NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at        timestamp        NOT NULL DEFAULT CURRENT_TIMESTAMP
+    metadata           jsonb         NOT NULL DEFAULT '{}',
+    -- Legacy JSONB kept for rollback safety; drop after migration verified
+    data               jsonb         NOT NULL DEFAULT '{}',
+    created_at         timestamp     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at         timestamp     NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX idx_profiles_user_id      ON profiles(user_id);
@@ -100,9 +100,9 @@ CREATE INDEX idx_profiles_relocate     ON profiles(ready_to_relocate) WHERE read
 
 -- User matching preferences (dedicated columns for SQL-level filtering)
 CREATE TABLE user_preferences(
-    id                         uuid      PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id                    uuid      NOT NULL REFERENCES users(id) UNIQUE,
-    -- Filter preferences
+    id                         uuid          PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id                    uuid          NOT NULL REFERENCES users(id) UNIQUE,
+    -- Filter preferences (mirror profile filter fields)
     preferred_gender           varchar(10),
     age_min                    smallint,
     age_max                    smallint,
@@ -111,42 +111,183 @@ CREATE TABLE user_preferences(
     preferred_goal             varchar(20),
     preferred_program          varchar(20),
     preferred_categories       text[],
-    preferred_country          varchar(3),
+    preferred_country          varchar(100),
     preferred_city             varchar(100),
     wants_partner_to_relocate  boolean,
     wants_partner_to_finance   varchar(20),
-    -- Algo metadata for Tier 2/3
-    metadata                   jsonb     NOT NULL DEFAULT '{}',
+    -- Algo metadata for Tier 2/3 (future use)
+    metadata                   jsonb         NOT NULL DEFAULT '{}',
     -- Legacy JSONB kept for rollback safety
-    data                       jsonb     NOT NULL DEFAULT '{}',
-    created_at                 timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at                 timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+    data                       jsonb         NOT NULL DEFAULT '{}',
+    created_at                 timestamp     NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at                 timestamp     NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX idx_user_preferences_user_id ON user_preferences(user_id);
 
--- Recommendation likes log (Tier 2 & 3 data)
+-- Recommendation likes log (for Tier 2 preference model + Tier 3 collaborative filtering)
 CREATE TABLE recommendation_likes_log (
-    id         bigserial PRIMARY KEY,
-    user_id    uuid      NOT NULL REFERENCES users(id),
-    liked_id   uuid      NOT NULL REFERENCES users(id),
-    features   jsonb     NOT NULL,
-    created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+    id         bigserial    PRIMARY KEY,
+    user_id    uuid         NOT NULL REFERENCES users(id),
+    liked_id   uuid         NOT NULL REFERENCES users(id),
+    features   jsonb        NOT NULL,
+    created_at timestamp    NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX idx_rec_likes_user  ON recommendation_likes_log(user_id);
 CREATE INDEX idx_rec_likes_liked ON recommendation_likes_log(liked_id);
 
 
--- Module: modules/clubs
--- Club system schema
+-- Module: modules/feed
+-- Feed module schema
 
+-- Swipe actions (LIKE/PASS)
+CREATE TABLE matches(
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    from_user_id uuid NOT NULL REFERENCES users(id),
+    to_user_id uuid NOT NULL REFERENCES users(id),
+    action varchar(10) NOT NULL,
+    source varchar(30),
+    created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(from_user_id, to_user_id)
+);
+
+CREATE INDEX idx_matches_from_user ON matches(from_user_id);
+
+CREATE INDEX idx_matches_to_user ON matches(to_user_id);
+
+CREATE INDEX idx_matches_mutual ON matches(to_user_id, from_user_id)
+WHERE
+    action = 'LIKE';
+
+
+-- Module: modules/chat
+-- Chat module schema
+
+-- Chats (created on mutual match)
+CREATE TABLE chats(
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    user1_id uuid NOT NULL REFERENCES users(id),
+    user2_id uuid NOT NULL REFERENCES users(id),
+    created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(user1_id, user2_id)
+);
+
+CREATE INDEX idx_chats_user1 ON chats(user1_id);
+
+CREATE INDEX idx_chats_user2 ON chats(user2_id);
+
+-- Messages
+CREATE TABLE messages(
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    chat_id uuid NOT NULL REFERENCES chats(id),
+    sender_id uuid NOT NULL REFERENCES users(id),
+    type varchar(20) NOT NULL DEFAULT 'TEXT',
+    content text NOT NULL,
+    created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_messages_chat_created ON messages(chat_id, created_at);
+
+
+-- Module: modules/map
+-- Map module schema
+
+-- User locations (migrated from shared/map)
+CREATE TABLE user_locations(
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id uuid NOT NULL REFERENCES users(id) UNIQUE,
+    latitude double precision NOT NULL,
+    longitude double precision NOT NULL,
+    updated_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_user_locations_user_id ON user_locations(user_id);
+
+CREATE INDEX idx_user_locations_coords ON user_locations(latitude, longitude);
+
+
+-- Module: modules/moderation
+CREATE TABLE blocks(
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    blocker_id uuid NOT NULL REFERENCES users(id),
+    blocked_id uuid NOT NULL REFERENCES users(id),
+    created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(blocker_id, blocked_id)
+);
+
+CREATE INDEX idx_blocks_blocker ON blocks(blocker_id);
+CREATE INDEX idx_blocks_blocked ON blocks(blocked_id);
+
+CREATE TABLE reports(
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    reporter_id uuid NOT NULL REFERENCES users(id),
+    reported_id uuid NOT NULL REFERENCES users(id),
+    category varchar(50) NOT NULL,
+    comment text,
+    created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_reports_reporter ON reports(reporter_id);
+CREATE INDEX idx_reports_reported ON reports(reported_id);
+
+-- Module: modules/subscriptions
+CREATE TABLE subscriptions (
+    id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    name          varchar(100) NOT NULL UNIQUE,
+    description   text,
+    duration_days int NOT NULL,
+    price_cents   bigint NOT NULL DEFAULT 0,
+    is_active     boolean NOT NULL DEFAULT true,
+    created_at    timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at    timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE user_subscriptions (
+    id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id         uuid NOT NULL REFERENCES users(id),
+    subscription_id uuid NOT NULL REFERENCES subscriptions(id),
+    status          varchar(20) NOT NULL DEFAULT 'active',
+    started_at      timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    expired_at      timestamp NOT NULL
+);
+
+CREATE INDEX idx_user_subscriptions_user ON user_subscriptions(user_id);
+CREATE INDEX idx_user_subscriptions_status ON user_subscriptions(status);
+CREATE INDEX idx_user_subscriptions_expired ON user_subscriptions(expired_at);
+CREATE INDEX idx_user_subscriptions_status_expired ON user_subscriptions(status, expired_at);
+
+
+-- Views for module: modules/subscriptions
+CREATE OR REPLACE VIEW user_subscriptions_expiring_1d AS
+SELECT us.id, us.user_id, us.subscription_id, us.status,
+       us.started_at, us.expired_at, s.name AS subscription_name
+FROM user_subscriptions us
+JOIN subscriptions s ON s.id = us.subscription_id
+WHERE us.status = 'active'
+  AND us.expired_at > NOW()
+  AND us.expired_at <= NOW() + INTERVAL '1 day';
+
+CREATE OR REPLACE VIEW user_subscriptions_expiring_1w AS
+SELECT us.id, us.user_id, us.subscription_id, us.status,
+       us.started_at, us.expired_at, s.name AS subscription_name
+FROM user_subscriptions us
+JOIN subscriptions s ON s.id = us.subscription_id
+WHERE us.status = 'active'
+  AND us.expired_at > NOW()
+  AND us.expired_at <= NOW() + INTERVAL '7 days';
+
+
+-- Module: modules/clubs
+-- Clubs module schema
+
+-- Dance clubs / venues (first-class entities — location anchor + SEO surface)
 CREATE TABLE clubs (
     id             uuid         PRIMARY KEY DEFAULT gen_random_uuid(),
     name           varchar(255) NOT NULL,
     slug           varchar(255) UNIQUE NOT NULL,
     description    text,
-    country        varchar(3)   NOT NULL,
+    country        varchar(100)   NOT NULL,
     city           varchar(100) NOT NULL,
     address        varchar(500),
     latitude       double precision NOT NULL,
@@ -171,9 +312,10 @@ CREATE INDEX idx_clubs_active       ON clubs(is_active) WHERE is_active = true;
 CREATE INDEX idx_clubs_verified     ON clubs(is_verified) WHERE is_verified = true;
 CREATE INDEX idx_clubs_owner        ON clubs(owner_user_id) WHERE owner_user_id IS NOT NULL;
 
+-- Club membership (many-to-many: user <-> club)
 CREATE TABLE club_members (
-    club_id   uuid        NOT NULL REFERENCES clubs(id)  ON DELETE CASCADE,
-    user_id   uuid        NOT NULL REFERENCES users(id)  ON DELETE CASCADE,
+    club_id   uuid        NOT NULL REFERENCES clubs(id) ON DELETE CASCADE,
+    user_id   uuid        NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     role      varchar(20) DEFAULT 'member',
     joined_at timestamp   NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (club_id, user_id)
@@ -183,135 +325,3 @@ CREATE INDEX idx_club_members_user ON club_members(user_id);
 CREATE INDEX idx_club_members_club ON club_members(club_id);
 
 
--- Module: modules/feed
--- Feed module schema
-
--- Swipe actions (LIKE/PASS)
-CREATE TABLE matches(
-    id           uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
-    from_user_id uuid        NOT NULL REFERENCES users(id),
-    to_user_id   uuid        NOT NULL REFERENCES users(id),
-    action       varchar(10) NOT NULL,
-    source       varchar(30),
-    created_at   timestamp   NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(from_user_id, to_user_id)
-);
-
-CREATE INDEX idx_matches_from_user ON matches(from_user_id);
-CREATE INDEX idx_matches_to_user   ON matches(to_user_id);
-CREATE INDEX idx_matches_mutual    ON matches(to_user_id, from_user_id) WHERE action = 'LIKE';
-
-
--- Module: modules/chat
--- Chat module schema
-
--- Chats (created on mutual match)
-CREATE TABLE chats(
-    id        uuid      PRIMARY KEY DEFAULT gen_random_uuid(),
-    user1_id  uuid      NOT NULL REFERENCES users(id),
-    user2_id  uuid      NOT NULL REFERENCES users(id),
-    created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(user1_id, user2_id)
-);
-
-CREATE INDEX idx_chats_user1 ON chats(user1_id);
-CREATE INDEX idx_chats_user2 ON chats(user2_id);
-
--- Messages
-CREATE TABLE messages(
-    id         uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
-    chat_id    uuid        NOT NULL REFERENCES chats(id),
-    sender_id  uuid        NOT NULL REFERENCES users(id),
-    type       varchar(20) NOT NULL DEFAULT 'TEXT',
-    content    text        NOT NULL,
-    created_at timestamp   NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE INDEX idx_messages_chat_created ON messages(chat_id, created_at);
-
-
--- Module: modules/map
--- Map module schema
-
--- User locations (migrated from shared/map)
-CREATE TABLE user_locations(
-    id         uuid             PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id    uuid             NOT NULL REFERENCES users(id) UNIQUE,
-    latitude   double precision NOT NULL,
-    longitude  double precision NOT NULL,
-    updated_at timestamp        NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE INDEX idx_user_locations_user_id ON user_locations(user_id);
-CREATE INDEX idx_user_locations_coords  ON user_locations(latitude, longitude);
-
-
--- Module: modules/moderation
-CREATE TABLE blocks(
-    id         uuid      PRIMARY KEY DEFAULT gen_random_uuid(),
-    blocker_id uuid      NOT NULL REFERENCES users(id),
-    blocked_id uuid      NOT NULL REFERENCES users(id),
-    created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(blocker_id, blocked_id)
-);
-
-CREATE INDEX idx_blocks_blocker ON blocks(blocker_id);
-CREATE INDEX idx_blocks_blocked ON blocks(blocked_id);
-
-CREATE TABLE reports(
-    id          uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
-    reporter_id uuid        NOT NULL REFERENCES users(id),
-    reported_id uuid        NOT NULL REFERENCES users(id),
-    category    varchar(50) NOT NULL,
-    comment     text,
-    created_at  timestamp   NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE INDEX idx_reports_reporter ON reports(reporter_id);
-CREATE INDEX idx_reports_reported ON reports(reported_id);
-
--- Module: modules/subscriptions
-CREATE TABLE subscriptions (
-    id            uuid         PRIMARY KEY DEFAULT gen_random_uuid(),
-    name          varchar(100) NOT NULL UNIQUE,
-    description   text,
-    duration_days int          NOT NULL,
-    price_cents   bigint       NOT NULL DEFAULT 0,
-    is_active     boolean      NOT NULL DEFAULT true,
-    created_at    timestamp    NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    updated_at    timestamp    NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE TABLE user_subscriptions (
-    id              uuid        PRIMARY KEY DEFAULT gen_random_uuid(),
-    user_id         uuid        NOT NULL REFERENCES users(id),
-    subscription_id uuid        NOT NULL REFERENCES subscriptions(id),
-    status          varchar(20) NOT NULL DEFAULT 'active',
-    started_at      timestamp   NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    expired_at      timestamp   NOT NULL
-);
-
-CREATE INDEX idx_user_subscriptions_user           ON user_subscriptions(user_id);
-CREATE INDEX idx_user_subscriptions_status         ON user_subscriptions(status);
-CREATE INDEX idx_user_subscriptions_expired        ON user_subscriptions(expired_at);
-CREATE INDEX idx_user_subscriptions_status_expired ON user_subscriptions(status, expired_at);
-
-
--- Views for module: modules/subscriptions
-CREATE OR REPLACE VIEW user_subscriptions_expiring_1d AS
-SELECT us.id, us.user_id, us.subscription_id, us.status,
-       us.started_at, us.expired_at, s.name AS subscription_name
-FROM user_subscriptions us
-JOIN subscriptions s ON s.id = us.subscription_id
-WHERE us.status = 'active'
-  AND us.expired_at > NOW()
-  AND us.expired_at <= NOW() + INTERVAL '1 day';
-
-CREATE OR REPLACE VIEW user_subscriptions_expiring_1w AS
-SELECT us.id, us.user_id, us.subscription_id, us.status,
-       us.started_at, us.expired_at, s.name AS subscription_name
-FROM user_subscriptions us
-JOIN subscriptions s ON s.id = us.subscription_id
-WHERE us.status = 'active'
-  AND us.expired_at > NOW()
-  AND us.expired_at <= NOW() + INTERVAL '7 days';

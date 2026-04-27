@@ -7,6 +7,8 @@
 	import CardActionMenu from '$lib/components/matchup/CardActionMenu.svelte';
 	import { authFetch } from '$lib/utils/authFetch';
 	import { unreadStore } from '$stores/unread.svelte';
+	import { filterStore } from '$stores/filters.svelte';
+	import { captureSwipe, captureMatch } from '$lib/analytics/posthog';
 	import toast from 'svelte-french-toast';
 
 	interface FeedCandidate {
@@ -37,7 +39,7 @@
 	let showFilter = $state(false);
 	let menuProfileId = $state<string | null>(null);
 	let hasNotification = $state(false);
-	let activeFilters = $state<FilterState>({});
+	let noProfile = $state(false);
 
 	function calcAge(birthDate: string): number {
 		const dob = new Date(birthDate);
@@ -54,7 +56,7 @@
 		if (c.height_cm) tags.push(`${c.height_cm} cm`);
 		return {
 			id: c.user_id,
-			name: pd.first_name ?? 'Dancer',
+			name: pd.first_name ?? 'Танцівник',
 			age: c.birth_date ? calcAge(c.birth_date) : 0,
 			photoUrl: (pd.avatar as string) ?? '',
 			tags,
@@ -71,16 +73,7 @@
 		isLoading = replace;
 
 		try {
-			const params = new URLSearchParams({ limit: '20' });
-			if (activeFilters.danceStyles?.length) params.set('categories', activeFilters.danceStyles.join(','));
-			if (activeFilters.ageMin != null) params.set('age_min', String(activeFilters.ageMin));
-			if (activeFilters.ageMax != null) params.set('age_max', String(activeFilters.ageMax));
-			if (activeFilters.heightMin != null) params.set('height_min', String(activeFilters.heightMin));
-			if (activeFilters.heightMax != null) params.set('height_max', String(activeFilters.heightMax));
-			if (activeFilters.skillLevel) params.set('program', activeFilters.skillLevel);
-			if (activeFilters.role) params.set('role', activeFilters.role);
-
-			const resp = await authFetch(`/matchup/feed?${params}`);
+			const resp = await authFetch('/matchup/feed?limit=20');
 			if (resp.ok) {
 				const body = await resp.json();
 				const candidates: FeedCandidate[] = body.data?.candidates ?? [];
@@ -100,9 +93,21 @@
 		}
 	}
 
-	onMount(() => loadFeed(true));
+	onMount(async () => {
+		await filterStore.load();
+		try {
+			const resp = await authFetch('/me/profile');
+			if (resp.status === 404) {
+				noProfile = true;
+			}
+		} catch {
+			// leave noProfile as false
+		}
+		loadFeed(true);
+	});
 
 	async function handleLike(id: string) {
+		captureSwipe('LIKE', 'feed');
 		removeTopCard();
 		try {
 			const resp = await authFetch('/matchup/swipe', {
@@ -116,6 +121,7 @@
 					matchedProfile = profiles.find((p) => p.id === id) ?? null;
 					matchedChatId = body.data?.chat_id ?? null;
 					showMatch = true;
+					captureMatch();
 					unreadStore.increment();
 				}
 			}
@@ -126,6 +132,7 @@
 	}
 
 	async function handlePass(id: string) {
+		captureSwipe('PASS', 'feed');
 		removeTopCard();
 		authFetch('/matchup/swipe', {
 			method: 'POST',
@@ -154,7 +161,7 @@
 	}
 
 	function handleApplyFilters(filters: FilterState) {
-		activeFilters = filters;
+		filterStore.apply(filters);
 		exhausted = false;
 		loadFeed(true);
 	}
@@ -166,9 +173,9 @@
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ reason: 'inappropriate' })
 			});
-			toast.success('Reported');
+			toast.success('Скаргу надіслано');
 		} catch {
-			toast.error('Failed to report');
+			toast.error('Помилка. Спробуй ще раз.');
 		}
 	}
 </script>
@@ -235,13 +242,23 @@
 		<!-- Empty state -->
 		<div class="mu-screen absolute inset-0 flex flex-col items-center justify-center px-8">
 			<i class="fi fi-rr-heart" style="font-size: 64px; color: #aeb4bc;"></i>
-			<p class="mt-4 text-[20px] font-black text-center" style="color: #7d7d7d;">No Matches for Now</p>
-			<p class="mt-2 text-[14px] font-medium text-center" style="color: #b1b1b1;">You've seen everyone nearby. Try expanding your filters or check back later.</p>
-			<button
-				onclick={() => loadFeed(true)}
-				class="mt-6 rounded-[50px] px-6 py-2.5 text-[14px] font-semibold text-white"
-				style="background: #8984da;"
-			>Refresh</button>
+			{#if noProfile}
+				<p class="mt-4 text-[20px] font-black text-center" style="color: #7d7d7d;">Налаштуй профіль щоб знаходити партнерів</p>
+				<p class="mt-2 text-[14px] font-medium text-center" style="color: #b1b1b1;">Додай дані в профіль і вкажи місто, щоб ми могли знайти людей поруч.</p>
+				<a
+					href="/settings/profile"
+					class="mt-6 flex items-center justify-center rounded-[50px] px-6 py-2.5 text-[14px] font-semibold text-white no-underline"
+					style="background: #8984da;"
+				>Редагувати профіль</a>
+			{:else}
+				<p class="mt-4 text-[20px] font-black text-center" style="color: #7d7d7d;">No Matches for Now</p>
+				<p class="mt-2 text-[14px] font-medium text-center" style="color: #b1b1b1;">You've seen everyone nearby. Try expanding your filters or check back later.</p>
+				<button
+					onclick={() => loadFeed(true)}
+					class="mt-6 rounded-[50px] px-6 py-2.5 text-[14px] font-semibold text-white"
+					style="background: #8984da;"
+				>Оновити</button>
+			{/if}
 		</div>
 	{/if}
 
@@ -301,9 +318,9 @@
 <FilterSheet
 	open={showFilter}
 	onclose={() => (showFilter = false)}
-	onclear={() => { activeFilters = {}; exhausted = false; loadFeed(true); }}
+	onclear={() => { filterStore.clear(); exhausted = false; loadFeed(true); }}
 	onapply={handleApplyFilters}
-	initialFilters={activeFilters}
+	initialFilters={filterStore.filters}
 />
 
 <!-- 3-dot action menu -->

@@ -22,7 +22,6 @@ type EmailProvider interface {
 type TemplateID string
 
 const (
-	EmailVerifyTemplate   TemplateID = "email-verify"
 	PasswordResetTemplate TemplateID = "password-reset"
 	OTPCodeTemplate       TemplateID = "otp-code"
 )

@@ -23,6 +23,11 @@ import (
 	recTier3 "github.com/Gooowan/matchup/modules/recommendation/tier3"
 )
 
+// PushNotifier is a minimal interface so feed doesn't import the push package.
+type PushNotifier interface {
+	SendToUser(ctx context.Context, userID string, title, body string)
+}
+
 type FeedService struct {
 	DB                *pgxpool.Pool
 	Queries           *gen.Queries
@@ -31,6 +36,7 @@ type FeedService struct {
 	RecommendationSvc *recommendation.RecommendationService
 	ClubSvc           *clubs.ClubService
 	Recommender       RecommendationProvider
+	PushSvc           PushNotifier
 }
 
 func NewFeedService(
@@ -62,11 +68,11 @@ func (s *FeedService) GetFeed(ctx context.Context, userID pgtype.UUID, limit int
 
 	profile, err := s.RecommendationSvc.Queries.GetProfileByUserID(ctx, userID)
 	if err != nil {
-		return nil, fmt.Errorf("profile required to get feed: %w", err)
+		return []recgen.FindNearbyVisibleProfilesRow{}, nil
 	}
 
 	if !profile.Latitude.Valid || !profile.Longitude.Valid {
-		return nil, fmt.Errorf("profile location required")
+		return []recgen.FindNearbyVisibleProfilesRow{}, nil
 	}
 
 	// build exclude list: swiped + blocked
@@ -159,6 +165,12 @@ func (s *FeedService) Swipe(ctx context.Context, fromUserID, toUserID pgtype.UUI
 			return nil, fmt.Errorf("failed to create chat: %w", err)
 		}
 		result.ChatID = &chatID
+
+		// Notify the other user who liked first.
+		if s.PushSvc != nil {
+			toID := toUserID.String()
+			go s.PushSvc.SendToUser(context.Background(), toID, "New Match!", "You have a new match on MatchUp. Say hi!")
+		}
 	}
 
 	// Track swipe and match metrics

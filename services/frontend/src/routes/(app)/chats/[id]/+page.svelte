@@ -18,18 +18,9 @@
 		messages: Message[];
 	}
 
-	let groups = $state<MessageGroup[]>([
-		{
-			date: 'Today',
-			messages: [
-				{ id: '1', text: 'Hey! When are you free to practice?', sent: false, timestamp: '18:20' },
-				{ id: '2', text: "I'm free Saturday afternoon!", sent: true, timestamp: '18:22' },
-				{ id: '3', text: "Perfect, let's meet at the studio at 3pm", sent: false, timestamp: '18:24' },
-				{ id: '4', text: 'Sounds great, see you there 🎵', sent: true, timestamp: '18:25' }
-			]
-		}
-	]);
+	let groups = $state<MessageGroup[]>([]);
 
+	let isLoading = $state(true);
 	let inputText = $state('');
 	let messagesEl: HTMLElement;
 	let lastMessageId = $state<string | null>(null);
@@ -50,16 +41,16 @@
 			const d = new Date(m.created_at);
 			const label =
 				d.toDateString() === today
-					? 'Today'
+					? 'Сьогодні'
 					: d.toDateString() === yesterday
-						? 'Yesterday'
-						: d.toLocaleDateString('en', { day: 'numeric', month: 'short', year: 'numeric' });
+						? 'Вчора'
+						: d.toLocaleDateString('uk', { day: 'numeric', month: 'short', year: 'numeric' });
 			if (!grouped.has(label)) grouped.set(label, []);
 			grouped.get(label)!.push({
 				id: m.id,
 				text: m.content,
 				sent: m.is_own ?? false,
-				timestamp: d.toLocaleTimeString('en', { hour: '2-digit', minute: '2-digit' })
+				timestamp: d.toLocaleTimeString('uk', { hour: '2-digit', minute: '2-digit' })
 			});
 		}
 
@@ -95,7 +86,7 @@
 					const last = newMsgs[newMsgs.length - 1];
 					lastMessageId = last.id;
 
-					const today = 'Today';
+					const today = 'Сьогодні';
 					const lastGroup = groups[groups.length - 1];
 					if (lastGroup?.date === today) {
 						lastGroup.messages = [
@@ -104,7 +95,7 @@
 								id: m.id,
 								text: m.content,
 								sent: m.is_own ?? false,
-								timestamp: new Date(m.created_at).toLocaleTimeString('en', {
+								timestamp: new Date(m.created_at).toLocaleTimeString('uk', {
 									hour: '2-digit',
 									minute: '2-digit'
 								})
@@ -136,7 +127,7 @@
 				id: tempId,
 				text,
 				sent: true,
-				timestamp: new Date().toLocaleTimeString('en', { hour: '2-digit', minute: '2-digit' })
+				timestamp: new Date().toLocaleTimeString('uk', { hour: '2-digit', minute: '2-digit' })
 			});
 			groups = [...groups];
 		}
@@ -161,6 +152,7 @@
 
 	onMount(async () => {
 		await fetchMessages();
+		isLoading = false;
 		setTimeout(scrollToBottom, 100);
 		pollInterval = setInterval(fetchNewMessages, 3000);
 	});
@@ -228,6 +220,17 @@
 		class="flex flex-1 flex-col overflow-y-auto px-4 pt-4"
 		style="gap: 32px; padding-bottom: 120px;"
 	>
+		{#if isLoading}
+			<div class="flex flex-1 items-center justify-center py-16">
+				<div class="h-8 w-8 animate-spin rounded-full border-4" style="border-color: #313131; border-top-color: #8984da;"></div>
+			</div>
+		{:else if groups.length === 0}
+			<div class="flex flex-col items-center justify-center py-16 gap-3">
+				<i class="fi fi-rr-comment" style="font-size: 40px; color: #313131;"></i>
+				<p class="text-[14px] font-medium" style="color: #696969;">Повідомлень ще немає. Привітайся!</p>
+			</div>
+		{/if}
+
 		{#each groups as group}
 			<div class="text-center text-[12px] font-normal" style="color: #e1e1e1;">{group.date}</div>
 
@@ -272,7 +275,7 @@
 		<div class="glass-pill flex flex-1 items-center px-4" style="height: 38px;">
 			<input
 				type="text"
-				placeholder="Message"
+				placeholder="Повідомлення"
 				bind:value={inputText}
 				onkeydown={handleKeydown}
 				class="w-full bg-transparent text-[14px] font-semibold outline-none"

@@ -50,6 +50,11 @@ export function identifyUser(userId: string): void {
 	posthog.identify(userId);
 }
 
+export function captureOnboardingComplete(): void {
+	if (!browser || !initialised) return;
+	posthog.capture('onboarding_complete');
+}
+
 /** Reset PostHog identity on logout. */
 export function resetUser(): void {
 	if (!browser || !initialised) return;

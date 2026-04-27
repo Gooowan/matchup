@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { page } from '$app/state';
 	import { authFetch } from '$lib/utils/authFetch';
+	import { authStore } from '$stores/auth.svelte';
 	import { goto } from '$app/navigation';
 
 	let email = $derived(page.url.searchParams.get('email') ?? '');
@@ -36,7 +37,7 @@
 		errorMsg = '';
 		const code = digits.join('');
 		if (code.length < 8) {
-			errorMsg = 'Please enter the full 8-digit code';
+			errorMsg = 'Введи повний 8-значний код';
 			return;
 		}
 		isLoading = true;
@@ -48,13 +49,18 @@
 			});
 			const response = await resp.json();
 			if (resp.ok) {
-				// Go to login; onboarding check happens after login in the app layout
-				await goto('/login');
+				const ok = await authStore.checkAuth();
+				if (ok) {
+					const firstName = authStore.user?.profile_data?.first_name;
+					await goto(firstName ? '/feed' : '/onboarding');
+				} else {
+					await goto('/login');
+				}
 			} else {
-				errorMsg = response.error || 'Invalid verification code';
+				errorMsg = response.error || 'Невірний код підтвердження';
 			}
 		} catch {
-			errorMsg = 'Network error. Please try again.';
+			errorMsg = 'Помилка мережі. Спробуй ще раз.';
 		} finally {
 			isLoading = false;
 		}
@@ -70,7 +76,7 @@
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ email })
 			});
-			successMsg = 'Code sent!';
+			successMsg = 'Код надіслано!';
 			setTimeout(() => {
 				successMsg = '';
 			}, 3000);
@@ -81,12 +87,11 @@
 
 <div class="flex min-h-[100dvh] flex-col items-center justify-center px-6 pt-safe pb-safe">
 	<img src="/match_icon.svg" alt="MatchUp" class="mb-4 h-16 w-16" />
-	<h1 class="mb-2 text-[28px] font-black" style="color: #171717;">Check your email</h1>
+	<h1 class="mb-2 text-[28px] font-black" style="color: #171717;">Перевір пошту</h1>
 	<p class="mb-10 text-center text-[14px] font-medium" style="color: #696969;">
-		We sent a code to<br /><span style="color: #171717;">{email}</span>
+		Ми надіслали код на<br /><span style="color: #171717;">{email}</span>
 	</p>
 
-	<!-- 8-digit OTP inputs -->
 	<!-- svelte-ignore a11y_no_static_element_interactions -->
 	<div class="mb-8 flex gap-2" onpaste={handlePaste}>
 		{#each digits as digit, i}
@@ -117,7 +122,7 @@
 		class="mb-4 w-full max-w-sm py-3 text-[14px] font-semibold text-white transition-opacity disabled:opacity-60"
 		style="border-radius: 50px; background: #696969;"
 	>
-		{isLoading ? 'Verifying…' : 'Verify'}
+		{isLoading ? 'Перевірка…' : 'Підтвердити'}
 	</button>
 
 	<button
@@ -126,6 +131,6 @@
 		class="text-[13px] font-medium transition-opacity disabled:opacity-60"
 		style="color: #696969;"
 	>
-		{isResending ? 'Sending…' : 'Resend code'}
+		{isResending ? 'Надсилання…' : 'Надіслати код ще раз'}
 	</button>
 </div>

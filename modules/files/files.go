@@ -131,6 +131,37 @@ func NewFileService(db *pgxpool.Pool) (*FileService, error) {
 		// No public policy - access controlled via signed URLs
 	}
 
+	// Create photos bucket with public read access (extra profile photos)
+	photosBucket := "photos"
+	exists, err = service.Client.BucketExists(ctx, photosBucket)
+	if err != nil {
+		return nil, fmt.Errorf("failed to check photos bucket existence: %w", err)
+	}
+
+	if !exists {
+		err = service.Client.MakeBucket(ctx, photosBucket, minio.MakeBucketOptions{})
+		if err != nil {
+			return nil, fmt.Errorf("failed to create photos bucket: %w", err)
+		}
+
+		policy := fmt.Sprintf(`{
+			"Version": "2012-10-17",
+			"Statement": [
+				{
+					"Effect": "Allow",
+					"Principal": "*",
+					"Action": "s3:GetObject",
+					"Resource": "arn:aws:s3:::%s/*"
+				}
+			]
+		}`, photosBucket)
+
+		err = service.Client.SetBucketPolicy(ctx, photosBucket, policy)
+		if err != nil {
+			return nil, fmt.Errorf("failed to set photos bucket policy: %w", err)
+		}
+	}
+
 	return service, nil
 }
 

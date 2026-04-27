@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { authFetch } from '$lib/utils/authFetch';
+	import AsyncState from '$lib/components/matchup/AsyncState.svelte';
 	import toast from 'svelte-french-toast';
 
 	const DAYS = ['mon', 'tue', 'wed', 'thu', 'fri', 'sat', 'sun'] as const;
@@ -115,17 +116,13 @@
 		<h1 class="mu-text-primary flex-1 text-[20px] font-black">Business Panel</h1>
 	</div>
 
-	{#if isLoading}
-		<div class="flex flex-1 items-center justify-center">
-			<div class="h-8 w-8 animate-spin rounded-full border-4" style="border-color: #e0e0e0; border-top-color: #8984da;"></div>
-		</div>
-	{:else if clubs.length === 0}
-		<div class="flex flex-1 flex-col items-center justify-center gap-3 px-8 text-center">
-			<i class="fi fi-rr-store-alt" style="font-size: 48px; color: #aeb4bc;"></i>
-			<p class="text-[18px] font-bold mu-text-primary">No clubs yet</p>
-			<p class="text-[14px] font-medium" style="color: #696969;">Find your club on the map and tap Claim to manage it here.</p>
-		</div>
-	{:else}
+	<AsyncState
+		loading={isLoading}
+		empty={!isLoading && clubs.length === 0}
+		emptyIcon="fi-rr-store-alt"
+		emptyText="No clubs yet — find your club on the map and tap Claim."
+	>
+	{#if !isLoading && clubs.length > 0}
 		<div class="flex flex-1 flex-col overflow-y-auto px-4 pb-[100px]" style="gap: 20px; padding-top: 12px;">
 			{#each clubs as club}
 				{@const edit = edits[club.id]}
@@ -233,4 +230,5 @@
 			{/each}
 		</div>
 	{/if}
+	</AsyncState>
 </div>

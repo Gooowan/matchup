@@ -8,6 +8,9 @@ const config: CapacitorConfig = {
 		iosScheme: 'https'
 	},
 	plugins: {
+		PushNotifications: {
+			presentationOptions: ['badge', 'sound', 'alert']
+		},
 		StatusBar: {
 			style: 'Dark',
 			backgroundColor: '#dae1eb'

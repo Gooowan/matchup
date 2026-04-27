@@ -17,6 +17,7 @@ import (
 
 	"github.com/Gooowan/matchup/modules/chat"
 	"github.com/Gooowan/matchup/modules/clubs"
+	"github.com/Gooowan/matchup/modules/push"
 	"github.com/Gooowan/matchup/modules/core/db"
 	"github.com/Gooowan/matchup/modules/core/logging"
 	coreMetrics "github.com/Gooowan/matchup/modules/core/metrics"
@@ -111,7 +112,6 @@ func main() {
 		&emailTemplates,
 		"MatchUp",
 		[]email.TemplateID{
-			email.EmailVerifyTemplate,
 			email.PasswordResetTemplate,
 			email.OTPCodeTemplate,
 		})
@@ -142,12 +142,15 @@ func main() {
 	defer valkeyClient.Close()
 
 	otpService := otp.NewOTPService(valkeyClient, emailService)
+	authService.SetOTPService(otpService)
 
 	moderationSvc := moderation.NewModerationService(dbpool)
 	recommendationSvc := recommendation.NewRecommendationService(dbpool)
 	clubSvc := clubs.NewClubService(dbpool)
 	chatSvc := chat.NewChatService(dbpool, moderationSvc)
 	feedSvc := feed.NewFeedService(dbpool, chatSvc, moderationSvc, recommendationSvc, clubSvc)
+	pushSvc := push.NewService(dbpool, logger)
+	feedSvc.PushSvc = pushSvc
 	mapSvc := mapmod.NewMapService(dbpool, recommendationSvc)
 	subscriptionSvc := subscriptions.NewSubscriptionService(dbpool)
 
@@ -158,10 +161,11 @@ func main() {
 	adminController := core.NewAdminController(coreService)
 
 	recommendationCtrl := recommendation.NewRecommendationController(recommendationSvc)
+	pushCtrl := push.NewController(pushSvc)
 	feedCtrl := feed.NewFeedController(feedSvc)
 	chatCtrl := chat.NewChatController(chatSvc)
 	mapCtrl := mapmod.NewMapController(mapSvc)
-	moderationCtrl := moderation.NewModerationController(moderationSvc)
+	moderationCtrl := moderation.NewModerationController(moderationSvc, coreService)
 	subscriptionCtrl := subscriptions.NewSubscriptionController(subscriptionSvc)
 	clubCtrl := clubs.NewClubController(clubSvc, chatSvc)
 
@@ -208,6 +212,7 @@ func main() {
 
 	meGroup := r.Group("/me")
 	recommendationCtrl.RegisterRoutes(meGroup, userAuth)
+	pushCtrl.RegisterRoutes(meGroup, userAuth)
 
 	matchupGroup := r.Group("/matchup")
 	feedCtrl.RegisterRoutes(matchupGroup, userAuth, rlService.SwipeRateLimiter)
@@ -223,9 +228,12 @@ func main() {
 	profilesGroup.GET("/:userId/preview", recommendationCtrl.GetProfilePreview)
 
 	moderationCtrl.RegisterRoutes(r, userAuth)
+	adminGroup.GET("/reports", moderationCtrl.AdminListReports)
+	adminGroup.POST("/users/:userId/ban", moderationCtrl.AdminBanUser)
 
 	subscriptionsGroup := r.Group("/subscriptions")
 	subscriptionCtrl.RegisterRoutes(subscriptionsGroup, adminAuth, userAuth)
+	subscriptionCtrl.RegisterWebhook(r)
 
 	clubCtrl.RegisterRoutes(r, meGroup, adminGroup, userAuth, adminAuth)
 

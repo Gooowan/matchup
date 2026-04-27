@@ -116,6 +116,10 @@ func (s *ChatService) SendMessage(ctx context.Context, chatID, senderID pgtype.U
 		return nil, fmt.Errorf("cannot send message to blocked user")
 	}
 
+	if ok, reason := isMessageAllowed(content); !ok {
+		return nil, fmt.Errorf("%s", reason)
+	}
+
 	msg, err := s.Queries.CreateMessage(ctx, gen.CreateMessageParams{
 		ChatID:   chatID,
 		SenderID: senderID,

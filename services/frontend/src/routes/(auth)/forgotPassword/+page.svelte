@@ -1,134 +1,85 @@
 <script lang="ts">
-	import { t } from '$lib/locale';
-	import toast from 'svelte-french-toast';
-
-	import * as Card from '$lib/components/ui/card/index.js';
-	import * as Form from '$lib/components/ui/form/index.js';
-	import { Input } from '$lib/components/ui/input/index.js';
-	import { valibot } from 'sveltekit-superforms/adapters';
-	import { superForm, defaults } from 'sveltekit-superforms';
-
-	import Button from '$components/ui/button/button.svelte';
 	import { authFetch } from '$lib/utils/authFetch';
-	import { onMount } from 'svelte';
-	import * as v from 'valibot';
 	import { authStore } from '$stores/auth.svelte';
+	import { onMount } from 'svelte';
+
+	let email = $state('');
+	let isLoading = $state(false);
+	let errorMsg = $state('');
+	let emailSent = $state(false);
 
 	onMount(async () => {
 		await authStore.logout(false);
 	});
 
-	let emailSent = $state(false);
-	let sentToEmail = $state('');
-
-	const forgotPasswordSchema = v.object({
-		email: v.pipe(v.string(), v.email('auth.error.email')),
-	});
-
-	type FormData = v.InferInput<typeof forgotPasswordSchema>;
-
-	const initialData: FormData = {
-		email: '',
-	};
-
-	const form = superForm(defaults(initialData, valibot(forgotPasswordSchema)), {
-		SPA: true,
-		dataType: 'json',
-		validators: valibot(forgotPasswordSchema),
-		validationMethod: 'oninput',
-		onError: ({ result }) => {
-			toast.error(`${result.error}`);
-		},
-		async onUpdate({ form }) {
-			if (form.valid) {
-				const forgotPasswordData = {
-					email: form.data.email,
-				};
-
-				const resp = await authFetch('/auth/password/forgot', {
-					method: 'POST',
-					body: JSON.stringify(forgotPasswordData),
-					headers: {
-						'Content-Type': 'application/json',
-					},
-				});
-				const response: ApiResponse<{ message: string }> = await resp.json();
-
-				if (resp.status === 200 && response.data) {
-					sentToEmail = form.data.email;
-					emailSent = true;
-					return;
-				}
-
-				toast.error(response.error || $t('auth.toast.forgot-password-failed'));
+	async function handleSubmit() {
+		errorMsg = '';
+		isLoading = true;
+		try {
+			const resp = await authFetch('/auth/password/forgot', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ email })
+			});
+			const response = await resp.json();
+			if (resp.ok) {
+				emailSent = true;
+			} else {
+				errorMsg = response.error || 'Не вдалося надіслати листа. Спробуй ще раз.';
 			}
-		},
-	});
-
-	const { form: formData, enhance } = form;
+		} catch {
+			errorMsg = 'Помилка мережі. Спробуй ще раз.';
+		} finally {
+			isLoading = false;
+		}
+	}
 </script>
 
-<div class="flex h-full flex-col items-center justify-center">
-	<Card.Root class="m-auto w-full max-w-md">
-		<Card.Header>
-			<Card.Title class="text-xl">{$t('auth.forgot-password.title')}</Card.Title>
-			<Card.Description>{$t('auth.forgot-password.description')}</Card.Description>
-		</Card.Header>
-		<Card.Content>
-			{#if emailSent}
-				<div class="space-y-6 text-center">
-					<div class="space-y-2">
-						<div class="mx-auto flex h-12 w-12 items-center justify-center rounded-full">
-							<svg
-								class="h-12 w-12 text-green-600"
-								fill="none"
-								stroke="currentColor"
-								viewBox="0 0 24 24"
-							>
-								<path
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									stroke-width="2"
-									d="M3 8l7.89 4.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"
-								></path>
-							</svg>
-						</div>
-						<h3 class="text-lg font-semibold">{$t('auth.forgot-password.success.title')}</h3>
-						<p class="text-sm">
-							{$t('auth.forgot-password.success.message')} <strong>{sentToEmail}</strong>
-						</p>
-						<p class="text-sm text-neutral-500">
-							{$t('auth.forgot-password.success.check-email')}
-						</p>
-					</div>
+<div class="flex min-h-[100dvh] flex-col items-center justify-center px-6 pt-safe pb-safe">
+	<img src="/match_icon.svg" alt="MatchUp" class="mb-2 h-16 w-16" />
 
-					<Button href="/login" class="w-full">
-						{$t('auth.forgot-password.back-to-login')}
-					</Button>
-				</div>
-			{:else}
-				<form use:enhance method="POST" class="space-y-6">
-					<Form.Field {form} name="email">
-						<Form.Control>
-							{#snippet children({ props })}
-								<Form.Label>{$t('auth.email.label')}</Form.Label>
-								<Input
-									{...props}
-									bind:value={$formData.email}
-									type="email"
-									placeholder={$t('auth.email.placeholder')}
-								/>
-							{/snippet}
-						</Form.Control>
-						<Form.FieldErrors />
-					</Form.Field>
+	{#if emailSent}
+		<h1 class="mb-3 text-[24px] font-black" style="color: #171717;">Перевір пошту</h1>
+		<p class="mb-10 text-center text-[14px] font-medium" style="color: #696969;">
+			Ми надіслали посилання для скидання пароля на<br /><span style="color: #171717;">{email}</span>
+		</p>
+		<a
+			href="/login"
+			class="w-full max-w-sm py-3 text-center text-[14px] font-semibold text-white transition-opacity"
+			style="border-radius: 50px; background: #696969; display: block;"
+		>Повернутися до входу</a>
+	{:else}
+		<h1 class="mb-3 text-[24px] font-black" style="color: #171717;">Забули пароль?</h1>
+		<p class="mb-10 text-center text-[14px] font-medium" style="color: #696969;">
+			Введи свій email і ми надішлемо посилання для скидання пароля
+		</p>
 
-					<Form.Button class="w-full">{$t('auth.forgot-password.submit')}</Form.Button>
-					<Button href="/login" class="w-full" variant="ghost">
-						{$t('auth.forgot-password.back-to-login')}
-					</Button>
-				</form>
+		<div class="flex w-full max-w-sm flex-col gap-4">
+			<input
+				type="email"
+				placeholder="Ел. пошта"
+				bind:value={email}
+				autocomplete="email"
+				class="w-full px-5 py-3 text-[14px] font-medium outline-none"
+				style="border: 1.5px solid #171717; border-radius: 50px; background: transparent; color: #171717;"
+			/>
+
+			{#if errorMsg}
+				<p class="text-center text-[13px] font-medium text-red-500">{errorMsg}</p>
 			{/if}
-		</Card.Content>
-	</Card.Root>
+
+			<button
+				onclick={handleSubmit}
+				disabled={isLoading || !email}
+				class="mt-2 w-full py-3 text-[14px] font-semibold text-white transition-opacity disabled:opacity-60"
+				style="border-radius: 50px; background: #696969;"
+			>
+				{isLoading ? 'Надсилання…' : 'Надіслати посилання'}
+			</button>
+
+			<a href="/login" class="text-center text-[13px] font-medium" style="color: #696969;">
+				Повернутися до входу
+			</a>
+		</div>
+	{/if}
 </div>

@@ -1,198 +1,121 @@
 <script lang="ts">
-	import { t } from '$lib/locale';
-	import toast from 'svelte-french-toast';
-
-	import * as Card from '$lib/components/ui/card/index.js';
-	import * as Form from '$lib/components/ui/form/index.js';
-	import { Input } from '$lib/components/ui/input/index.js';
-	import { valibot } from 'sveltekit-superforms/adapters';
-	import { superForm, defaults } from 'sveltekit-superforms';
-
-	import Button from '$components/ui/button/button.svelte';
 	import { authFetch } from '$lib/utils/authFetch';
+	import { authStore } from '$stores/auth.svelte';
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
-	import * as v from 'valibot';
-	import { authStore } from '$stores/auth.svelte';
 
+	let password = $state('');
+	let confirmPassword = $state('');
+	let isLoading = $state(false);
+	let errorMsg = $state('');
 	let resetSuccess = $state(false);
-	let hasTokenError = $state(false);
 	let token = $state('');
-
-	const resetPasswordSchema = v.pipeAsync(
-		v.objectAsync({
-			password: v.pipe(v.string(), v.minLength(8, 'auth.error.password-length')),
-			confirm_password: v.pipe(v.string(), v.minLength(8, 'auth.error.password-length')),
-		}),
-		v.forwardAsync(
-			v.partialCheckAsync(
-				[['password'], ['confirm_password']],
-				(input) => input.password === input.confirm_password,
-				'auth.error.password-mismatch'
-			),
-			['confirm_password']
-		)
-	);
-
-	type FormData = v.InferInput<typeof resetPasswordSchema>;
-
-	const initialData: FormData = {
-		password: '',
-		confirm_password: '',
-	};
-
-	const form = superForm(defaults(initialData, valibot(resetPasswordSchema)), {
-		SPA: true,
-		dataType: 'json',
-		validators: valibot(resetPasswordSchema),
-		validationMethod: 'oninput',
-		onError: ({ result }) => {
-			toast.error(`${result.error}`);
-		},
-		async onUpdate({ form }) {
-			if (form.valid && token) {
-				const resetData = {
-					token,
-					password: form.data.password,
-				};
-
-				const resp = await authFetch('/auth/password/reset', {
-					method: 'POST',
-					body: JSON.stringify(resetData),
-					headers: {
-						'Content-Type': 'application/json',
-					},
-				});
-				const response: ApiResponse<{ message: string }> = await resp.json();
-
-				if (resp.status === 200 && response.data) {
-					resetSuccess = true;
-					return;
-				}
-
-				toast.error(response.error || $t('auth.toast.reset-password-failed'));
-			}
-		},
-	});
-
-	const { form: formData, enhance } = form;
+	let tokenMissing = $state(false);
 
 	onMount(async () => {
 		await authStore.logout(false);
-
 		const urlToken = page.url.searchParams.get('token');
 		if (!urlToken) {
-			hasTokenError = true;
-			toast.error($t('auth.error.missing-token'));
+			tokenMissing = true;
+		} else {
+			token = urlToken;
+		}
+	});
+
+	async function handleReset() {
+		errorMsg = '';
+		if (password !== confirmPassword) {
+			errorMsg = 'Паролі не збігаються';
 			return;
 		}
-		token = urlToken;
-	});
+		if (password.length < 8) {
+			errorMsg = 'Пароль має містити щонайменше 8 символів';
+			return;
+		}
+		isLoading = true;
+		try {
+			const resp = await authFetch('/auth/password/reset', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ token, password })
+			});
+			const response = await resp.json();
+			if (resp.ok) {
+				resetSuccess = true;
+			} else {
+				errorMsg = response.error || 'Не вдалося скинути пароль. Спробуй ще раз.';
+			}
+		} catch {
+			errorMsg = 'Помилка мережі. Спробуй ще раз.';
+		} finally {
+			isLoading = false;
+		}
+	}
 </script>
 
-<div class="flex h-full flex-col items-center justify-center">
-	<Card.Root class="m-auto w-full max-w-md">
-		<Card.Header>
-			<Card.Title class="text-xl">{$t('auth.reset-password.title')}</Card.Title>
-			<Card.Description>{$t('auth.reset-password.description')}</Card.Description>
-		</Card.Header>
-		<Card.Content>
-			{#if resetSuccess}
-				<div class="space-y-6 text-center">
-					<div class="space-y-2">
-						<div class="mx-auto flex h-12 w-12 items-center justify-center rounded-full">
-							<svg
-								class="h-12 w-12 text-green-600"
-								fill="none"
-								stroke="currentColor"
-								viewBox="0 0 24 24"
-							>
-								<path
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									stroke-width="2"
-									d="M5 13l4 4L19 7"
-								></path>
-							</svg>
-						</div>
-						<h3 class="text-lg font-semibold">{$t('auth.reset-password.success.title')}</h3>
-						<p class="text-sm text-neutral-500">
-							{$t('auth.reset-password.success.message')}
-						</p>
-					</div>
+<div class="flex min-h-[100dvh] flex-col items-center justify-center px-6 pt-safe pb-safe">
+	<img src="/match_icon.svg" alt="MatchUp" class="mb-2 h-16 w-16" />
 
-					<Button href="/login" class="w-full">
-						{$t('auth.reset-password.back-to-login')}
-					</Button>
-				</div>
-			{:else if hasTokenError}
-				<div class="space-y-6 text-center">
-					<div class="space-y-2">
-						<div class="mx-auto flex h-12 w-12 items-center justify-center rounded-full">
-							<svg
-								class="h-12 w-12 text-red-600"
-								fill="none"
-								stroke="currentColor"
-								viewBox="0 0 24 24"
-							>
-								<path
-									stroke-linecap="round"
-									stroke-linejoin="round"
-									stroke-width="2"
-									d="M6 18L18 6M6 6l12 12"
-								></path>
-							</svg>
-						</div>
-						<h3 class="text-lg font-semibold">{$t('auth.reset-password.error.title')}</h3>
-						<p class="text-sm text-red-600">{$t('auth.error.missing-token')}</p>
-						<p class="text-sm text-neutral-500">
-							{$t('auth.reset-password.error.message')}
-						</p>
-					</div>
+	{#if tokenMissing}
+		<h1 class="mb-3 text-[24px] font-black" style="color: #171717;">Недійсне посилання</h1>
+		<p class="mb-10 text-center text-[14px] font-medium" style="color: #696969;">
+			Посилання для скидання пароля недійсне або застаріло.
+		</p>
+		<a
+			href="/forgotPassword"
+			class="w-full max-w-sm py-3 text-center text-[14px] font-semibold text-white"
+			style="border-radius: 50px; background: #696969; display: block;"
+		>Запросити нове посилання</a>
+	{:else if resetSuccess}
+		<h1 class="mb-3 text-[24px] font-black" style="color: #171717;">Пароль змінено</h1>
+		<p class="mb-10 text-center text-[14px] font-medium" style="color: #696969;">
+			Твій пароль успішно змінено. Тепер можеш увійти.
+		</p>
+		<a
+			href="/login"
+			class="w-full max-w-sm py-3 text-center text-[14px] font-semibold text-white"
+			style="border-radius: 50px; background: #696969; display: block;"
+		>Увійти</a>
+	{:else}
+		<h1 class="mb-3 text-[24px] font-black" style="color: #171717;">Новий пароль</h1>
+		<p class="mb-10 text-center text-[14px] font-medium" style="color: #696969;">
+			Введи новий пароль для свого акаунту
+		</p>
 
-					<Button href="/login" class="w-full">
-						{$t('auth.reset-password.back-to-login')}
-					</Button>
-				</div>
-			{:else}
-				<form use:enhance method="POST" class="space-y-6">
-					<Form.Field {form} name="password">
-						<Form.Control>
-							{#snippet children({ props })}
-								<Form.Label>{$t('auth.password.label')}</Form.Label>
-								<Input
-									{...props}
-									bind:value={$formData.password}
-									type="password"
-									placeholder={$t('auth.password.placeholder')}
-								/>
-							{/snippet}
-						</Form.Control>
-						<Form.FieldErrors />
-					</Form.Field>
+		<div class="flex w-full max-w-sm flex-col gap-4">
+			<input
+				type="password"
+				placeholder="Новий пароль"
+				bind:value={password}
+				autocomplete="new-password"
+				class="w-full px-5 py-3 text-[14px] font-medium outline-none"
+				style="border: 1.5px solid #171717; border-radius: 50px; background: transparent; color: #171717;"
+			/>
+			<input
+				type="password"
+				placeholder="Підтвердити пароль"
+				bind:value={confirmPassword}
+				autocomplete="new-password"
+				class="w-full px-5 py-3 text-[14px] font-medium outline-none"
+				style="border: 1.5px solid #171717; border-radius: 50px; background: transparent; color: #171717;"
+			/>
 
-					<Form.Field {form} name="confirm_password">
-						<Form.Control>
-							{#snippet children({ props })}
-								<Form.Label>{$t('auth.confirm-password.label')}</Form.Label>
-								<Input
-									{...props}
-									bind:value={$formData.confirm_password}
-									type="password"
-									placeholder={$t('auth.confirm-password.placeholder')}
-								/>
-							{/snippet}
-						</Form.Control>
-						<Form.FieldErrors />
-					</Form.Field>
-
-					<Form.Button class="w-full">{$t('auth.reset-password.submit')}</Form.Button>
-					<Button href="/login" class="w-full" variant="ghost">
-						{$t('auth.reset-password.back-to-login')}
-					</Button>
-				</form>
+			{#if errorMsg}
+				<p class="text-center text-[13px] font-medium text-red-500">{errorMsg}</p>
 			{/if}
-		</Card.Content>
-	</Card.Root>
-</div>
 
+			<button
+				onclick={handleReset}
+				disabled={isLoading || !password || !confirmPassword}
+				class="mt-2 w-full py-3 text-[14px] font-semibold text-white transition-opacity disabled:opacity-60"
+				style="border-radius: 50px; background: #696969;"
+			>
+				{isLoading ? 'Збереження…' : 'Змінити пароль'}
+			</button>
+
+			<a href="/login" class="text-center text-[13px] font-medium" style="color: #696969;">
+				Повернутися до входу
+			</a>
+		</div>
+	{/if}
+</div>

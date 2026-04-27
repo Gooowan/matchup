@@ -90,4 +90,3 @@ volumes:
 
 networks:
   matchup-network:
-    external: true

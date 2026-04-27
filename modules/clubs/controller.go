@@ -192,7 +192,7 @@ func (c *ClubController) ClaimClub(ctx *gin.Context) {
 		ctx.JSON(http.StatusUnauthorized, types.Resp{Error: "Unauthorized"})
 		return
 	}
-	clubID, err := utils.StringToUUID(ctx.Param("id"))
+	clubID, err := utils.StringToUUID(ctx.Param("slug"))
 	if err != nil {
 		ctx.JSON(http.StatusBadRequest, types.Resp{Error: "Invalid club ID"})
 		return
@@ -220,7 +220,7 @@ func (c *ClubController) ManageClub(ctx *gin.Context) {
 		ctx.JSON(http.StatusUnauthorized, types.Resp{Error: "Unauthorized"})
 		return
 	}
-	clubID, err := utils.StringToUUID(ctx.Param("id"))
+	clubID, err := utils.StringToUUID(ctx.Param("slug"))
 	if err != nil {
 		ctx.JSON(http.StatusBadRequest, types.Resp{Error: "Invalid club ID"})
 		return
@@ -267,7 +267,7 @@ func (c *ClubController) ChatWithClub(ctx *gin.Context) {
 		ctx.JSON(http.StatusUnauthorized, types.Resp{Error: "Unauthorized"})
 		return
 	}
-	clubID, err := utils.StringToUUID(ctx.Param("id"))
+	clubID, err := utils.StringToUUID(ctx.Param("slug"))
 	if err != nil {
 		ctx.JSON(http.StatusBadRequest, types.Resp{Error: "Invalid club ID"})
 		return
@@ -397,9 +397,9 @@ func (c *ClubController) RegisterRoutes(
 	auth.Use(userAuth)
 	auth.POST("/:slug/join", c.JoinClub)
 	auth.DELETE("/:slug/join", c.LeaveClub)
-	auth.POST("/:id/claim", c.ClaimClub)
-	auth.PUT("/:id/manage", c.ManageClub)
-	auth.POST("/:id/chat", c.ChatWithClub)
+	auth.POST("/:slug/claim", c.ClaimClub)
+	auth.PUT("/:slug/manage", c.ManageClub)
+	auth.POST("/:slug/chat", c.ChatWithClub)
 
 	// /me/clubs and /me/owned-clubs
 	meGroup.GET("/clubs", c.GetMyClubs)

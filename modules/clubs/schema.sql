@@ -6,7 +6,7 @@ CREATE TABLE clubs (
     name           varchar(255) NOT NULL,
     slug           varchar(255) UNIQUE NOT NULL,
     description    text,
-    country        varchar(3)   NOT NULL,
+    country        varchar(100)   NOT NULL,
     city           varchar(100) NOT NULL,
     address        varchar(500),
     latitude       double precision NOT NULL,

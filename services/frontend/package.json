@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev": "vite dev --host 0.0.0.0 --port 5173",
+    "prebuild": "rm -rf .svelte-kit/output && svelte-kit sync",
     "build": "vite build",
     "preview": "pnpm run build && vite preview",
     "cap:sync": "pnpm build && cap sync",
@@ -18,6 +19,7 @@
     "@capacitor/haptics": "^8.0.2",
     "@capacitor/ios": "^8.3.0",
     "@capacitor/keyboard": "^8.0.2",
+    "@capacitor/push-notifications": "^8.0.1",
     "@capacitor/status-bar": "^8.0.2",
     "@sentry/capacitor": "^3.2.0",
     "@sentry/sveltekit": "^10.47.0",
@@ -37,10 +39,10 @@
     "@poppanator/sveltekit-svg": "^5.0.1",
     "@sentry/vite-plugin": "^5.1.1",
     "@sveltejs/adapter-static": "^3.0.9",
-    "@sveltejs/kit": "^2.22.0",
-    "@sveltejs/vite-plugin-svelte": "^6.0.0",
+    "@sveltejs/kit": "^2.58.0",
+    "@sveltejs/vite-plugin-svelte": "^7.0.0",
     "@tailwindcss/forms": "^0.5.9",
-    "@tailwindcss/vite": "^4.0.0",
+		"@tailwindcss/vite": "^4.2.4",
     "@types/d3-shape": "^3.1.7",
     "bits-ui": "^2.11.4",
     "clsx": "^2.1.1",
@@ -51,21 +53,32 @@
     "prettier": "^3.4.2",
     "prettier-plugin-svelte": "^3.3.3",
     "prettier-plugin-tailwindcss": "^0.6.11",
-    "svelte": "^5.0.0",
+    "svelte": "^5.46.4",
     "svelte-check": "^4.0.0",
     "sveltekit-superforms": "^2.27.1",
     "tailwind-merge": "^3.3.1",
     "tailwind-variants": "^3.1.1",
-    "tailwindcss": "^4.0.0",
+		"tailwindcss": "^4.2.4",
     "tw-animate-css": "^1.3.7",
     "typescript": "^5.0.0",
     "vaul-svelte": "1.0.0-next.7",
-    "vite": "^7.0.4",
+		"vite": "^8.0.0",
     "wrangler": "^4.32.0"
   },
   "pnpm": {
     "onlyBuiltDependencies": [
       "esbuild"
+    ],
+    "ignoredBuiltDependencies": [
+      "@sentry/capacitor",
+      "@sentry/cli",
+      "@tailwindcss/oxide",
+      "bufferutil",
+      "core-js",
+      "protobufjs",
+      "sharp",
+      "utf-8-validate",
+      "workerd"
     ]
   },
   "packageManager": "pnpm@10.16.0+sha512.8066e7b034217b700a9a4dbb3a005061d641ba130a89915213a10b3ca4919c19c037bec8066afdc559b89635fdb806b16ea673f2468fbb28aabfa13c53e3f769"

@@ -10,6 +10,7 @@
 	import FolderOpenIcon from '@lucide/svelte/icons/folder-open';
 	import BackIcon from '@lucide/svelte/icons/arrow-left';
 	import WalletIcon from '@lucide/svelte/icons/wallet';
+	import ShieldIcon from '@lucide/svelte/icons/shield-alert';
 
 	let { data, children } = $props();
 	let isAuthorized = $state(false);
@@ -18,6 +19,7 @@
 		{ href: '/app', label: 'App', icon: BackIcon },
 		{ href: '/admin', label: 'Dashboard', icon: HomeIcon },
 		{ href: '/admin/users', label: 'Users', icon: UsersIcon },
+		{ href: '/admin/moderation', label: 'Moderation', icon: ShieldIcon },
 		{ href: '/admin/withdraws', label: 'Withdrawals', icon: WalletIcon },
 		{ href: '/admin/marketing', label: 'Marketing', icon: FolderOpenIcon },
 	];

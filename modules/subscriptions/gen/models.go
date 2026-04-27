@@ -24,22 +24,24 @@ type Chat struct {
 }
 
 type Club struct {
-	ID          pgtype.UUID      `db:"id" json:"id"`
-	Name        string           `db:"name" json:"name"`
-	Slug        string           `db:"slug" json:"slug"`
-	Description pgtype.Text      `db:"description" json:"description"`
-	Country     string           `db:"country" json:"country"`
-	City        string           `db:"city" json:"city"`
-	Address     pgtype.Text      `db:"address" json:"address"`
-	Latitude    float64          `db:"latitude" json:"latitude"`
-	Longitude   float64          `db:"longitude" json:"longitude"`
-	Website     pgtype.Text      `db:"website" json:"website"`
-	Phone       pgtype.Text      `db:"phone" json:"phone"`
-	IsVerified  pgtype.Bool      `db:"is_verified" json:"is_verified"`
-	IsActive    pgtype.Bool      `db:"is_active" json:"is_active"`
-	Metadata    types.JSONB      `db:"metadata" json:"metadata"`
-	CreatedAt   pgtype.Timestamp `db:"created_at" json:"created_at"`
-	UpdatedAt   pgtype.Timestamp `db:"updated_at" json:"updated_at"`
+	ID           pgtype.UUID      `db:"id" json:"id"`
+	Name         string           `db:"name" json:"name"`
+	Slug         string           `db:"slug" json:"slug"`
+	Description  pgtype.Text      `db:"description" json:"description"`
+	Country      string           `db:"country" json:"country"`
+	City         string           `db:"city" json:"city"`
+	Address      pgtype.Text      `db:"address" json:"address"`
+	Latitude     float64          `db:"latitude" json:"latitude"`
+	Longitude    float64          `db:"longitude" json:"longitude"`
+	Website      pgtype.Text      `db:"website" json:"website"`
+	Phone        pgtype.Text      `db:"phone" json:"phone"`
+	IsVerified   pgtype.Bool      `db:"is_verified" json:"is_verified"`
+	IsActive     pgtype.Bool      `db:"is_active" json:"is_active"`
+	Metadata     types.JSONB      `db:"metadata" json:"metadata"`
+	OwnerUserID  pgtype.UUID      `db:"owner_user_id" json:"owner_user_id"`
+	WorkingHours types.JSONB      `db:"working_hours" json:"working_hours"`
+	CreatedAt    pgtype.Timestamp `db:"created_at" json:"created_at"`
+	UpdatedAt    pgtype.Timestamp `db:"updated_at" json:"updated_at"`
 }
 
 type ClubMember struct {

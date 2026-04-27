@@ -9,15 +9,18 @@ import (
 	"github.com/Gooowan/matchup/modules/core/types"
 	"github.com/Gooowan/matchup/modules/core/utils"
 	gen "github.com/Gooowan/matchup/modules/moderation/gen"
+	core "github.com/Gooowan/matchup/modules/users"
 	"github.com/Gooowan/matchup/modules/users/auth"
+	usergen "github.com/Gooowan/matchup/modules/users/gen"
 )
 
 type ModerationController struct {
-	svc *ModerationService
+	svc     *ModerationService
+	userSvc *core.UserService
 }
 
-func NewModerationController(svc *ModerationService) *ModerationController {
-	return &ModerationController{svc: svc}
+func NewModerationController(svc *ModerationService, userSvc *core.UserService) *ModerationController {
+	return &ModerationController{svc: svc, userSvc: userSvc}
 }
 
 func (c *ModerationController) BlockUser(ctx *gin.Context) {
@@ -95,6 +98,38 @@ func (c *ModerationController) ReportUser(ctx *gin.Context) {
 	if err := c.svc.ReportUser(ctx.Request.Context(), user.ID, targetID, req.Category, req.Comment); err != nil {
 		logging.FromContext(ctx.Request.Context()).Error("failed to report user", "error", err)
 		ctx.JSON(http.StatusInternalServerError, types.Resp{Error: "Failed to report user"})
+		return
+	}
+
+	ctx.JSON(http.StatusOK, types.Resp{Data: "ok"})
+}
+
+func (c *ModerationController) AdminListReports(ctx *gin.Context) {
+	reports, err := c.svc.ListAllReports(ctx.Request.Context(), 100)
+	if err != nil {
+		logging.FromContext(ctx.Request.Context()).Error("failed to list reports", "error", err)
+		ctx.JSON(http.StatusInternalServerError, types.Resp{Error: "failed to list reports"})
+		return
+	}
+	if reports == nil {
+		reports = []ReportRow{}
+	}
+	ctx.JSON(http.StatusOK, types.Resp{Data: reports})
+}
+
+func (c *ModerationController) AdminBanUser(ctx *gin.Context) {
+	targetID, err := utils.StringToUUID(ctx.Param("userId"))
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, types.Resp{Error: "invalid user ID"})
+		return
+	}
+
+	if err := c.userSvc.Queries.UpdateUserRole(ctx.Request.Context(), usergen.UpdateUserRoleParams{
+		Role:   "banned",
+		UserID: targetID,
+	}); err != nil {
+		logging.FromContext(ctx.Request.Context()).Error("failed to ban user", "error", err, "user_id", ctx.Param("userId"))
+		ctx.JSON(http.StatusInternalServerError, types.Resp{Error: "failed to ban user"})
 		return
 	}
 

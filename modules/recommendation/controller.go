@@ -61,14 +61,16 @@ func (c *RecommendationController) CreateOrUpdateProfile(ctx *gin.Context) {
 		ReadyToRelocate *bool    `json:"ready_to_relocate"`
 		ReadyToFinance  string   `json:"ready_to_finance"`
 		// Non-filterable fields stored in metadata JSONB
-		Bio string `json:"bio"`
+		Bio         string `json:"bio"`
+		AccountType string `json:"account_type"`
+		Role        string `json:"role"`
 	}
 	if err := ctx.ShouldBindJSON(&req); err != nil {
 		ctx.JSON(http.StatusBadRequest, types.Resp{Error: err.Error()})
 		return
 	}
 
-	if req.BirthDate != "" {
+	if req.BirthDate != "" && req.AccountType != "parent" {
 		if dob, err := time.Parse("2006-01-02", req.BirthDate); err == nil {
 			age := time.Now().Year() - dob.Year()
 			if time.Now().YearDay() < dob.YearDay() {
@@ -86,6 +88,14 @@ func (c *RecommendationController) CreateOrUpdateProfile(ctx *gin.Context) {
 		visible = *req.Visible
 	}
 
+	categoriesProvided := req.Categories != nil
+	if req.Categories == nil {
+		req.Categories = []string{}
+	}
+	if req.DanceStyles == nil {
+		req.DanceStyles = []string{}
+	}
+
 	existing, err := c.svc.Queries.GetProfileByUserID(ctx.Request.Context(), user.ID)
 	if err != nil {
 		// Create
@@ -100,6 +110,7 @@ func (c *RecommendationController) CreateOrUpdateProfile(ctx *gin.Context) {
 			Program:     orDefault(req.Program, "standard"),
 			Categories:  req.Categories,
 			Metadata:    types.JSONB{},
+			Data:        types.JSONB{},
 		}
 		if req.BirthDate != "" {
 			if t, err := time.Parse("2006-01-02", req.BirthDate); err == nil {
@@ -122,7 +133,13 @@ func (c *RecommendationController) CreateOrUpdateProfile(ctx *gin.Context) {
 			params.ReadyToFinance = pgtype.Text{String: req.ReadyToFinance, Valid: true}
 		}
 		if req.Bio != "" {
-			params.Metadata = types.JSONB{"bio": req.Bio}
+			params.Metadata["bio"] = req.Bio
+		}
+		if req.AccountType != "" {
+			params.Metadata["account_type"] = req.AccountType
+		}
+		if req.Role != "" {
+			params.Metadata["role"] = req.Role
 		}
 
 		profile, err := c.svc.Queries.CreateProfile(ctx.Request.Context(), params)
@@ -157,6 +174,12 @@ func (c *RecommendationController) CreateOrUpdateProfile(ctx *gin.Context) {
 	if req.Bio != "" {
 		metadata["bio"] = req.Bio
 	}
+	if req.AccountType != "" {
+		metadata["account_type"] = req.AccountType
+	}
+	if req.Role != "" {
+		metadata["role"] = req.Role
+	}
 
 	params := gen.UpdateProfileParams{
 		UserID:      user.ID,
@@ -167,7 +190,7 @@ func (c *RecommendationController) CreateOrUpdateProfile(ctx *gin.Context) {
 		Gender:      orDefault(req.Gender, existing.Gender),
 		Goal:        orDefault(req.Goal, existing.Goal),
 		Program:     orDefault(req.Program, existing.Program),
-		Categories:  orSlice(req.Categories, existing.Categories),
+		Categories:  func() []string { if categoriesProvided { return req.Categories }; return existing.Categories }(),
 		Metadata:    metadata,
 		Data:        existing.Data,
 	}
@@ -277,10 +300,15 @@ func (c *RecommendationController) UpdatePreferences(ctx *gin.Context) {
 		return
 	}
 
+	if req.PreferredCategories == nil {
+		req.PreferredCategories = []string{}
+	}
+
 	params := gen.UpsertPreferencesParams{
 		UserID:              user.ID,
 		PreferredCategories: req.PreferredCategories,
 		Metadata:            types.JSONB{},
+		Data:                types.JSONB{},
 	}
 	if req.PreferredGender != "" {
 		params.PreferredGender = pgtype.Text{String: req.PreferredGender, Valid: true}
@@ -393,10 +421,3 @@ func orDefault(val, fallback string) string {
 	return fallback
 }
 
-// orSlice returns val if non-nil/non-empty, otherwise fallback.
-func orSlice(val, fallback []string) []string {
-	if len(val) > 0 {
-		return val
-	}
-	return fallback
-}

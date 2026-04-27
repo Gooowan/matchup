@@ -1,6 +1,8 @@
 import { browser } from '$app/environment';
 import { goto } from '$app/navigation';
 import { authFetch } from '$utils/authFetch';
+import { resetUser as posthogReset } from '$lib/analytics/posthog';
+import * as Sentry from '@sentry/sveltekit';
 
 function createAuthStore() {
 	let user = $state<UserDTO | null>(null);
@@ -50,6 +52,11 @@ function createAuthStore() {
 
 			this.user = null;
 			this.isAuthenticated = false;
+
+			if (browser) {
+				try { Sentry.setUser(null); } catch {}
+				try { posthogReset(); } catch {}
+			}
 
 			try {
 				const apiUrl = import.meta.env.VITE_API_URL;

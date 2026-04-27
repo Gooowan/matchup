@@ -3,28 +3,32 @@ package files
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"net/http"
+	"path/filepath"
 	"time"
 
 	"github.com/gin-gonic/gin"
 
-	core "github.com/Gooowan/matchup/modules/users"
-	"github.com/Gooowan/matchup/modules/users/auth"
 	"github.com/Gooowan/matchup/modules/core/types"
 	"github.com/Gooowan/matchup/modules/core/utils"
 	filesgen "github.com/Gooowan/matchup/modules/files/gen"
+	core "github.com/Gooowan/matchup/modules/users"
+	"github.com/Gooowan/matchup/modules/users/auth"
 	coremodels "github.com/Gooowan/matchup/modules/users/gen"
 )
 
 type FilesController struct {
 	coreService *core.UserService
 	fileService *FileService
+	moderator   Moderator
 }
 
 func NewFilesController(coreService *core.UserService, fileService *FileService) *FilesController {
 	return &FilesController{
 		coreService: coreService,
 		fileService: fileService,
+		moderator:   NewModerator(slog.Default()),
 	}
 }
 
@@ -58,12 +62,19 @@ func (c *FilesController) UploadAvatar(ctx *gin.Context) {
 		return
 	}
 
-	fileExt := header.Filename[len(header.Filename)-4:]
+	// Moderation check: read file into memory, scan, then use as io.Reader for upload.
+	safeReader, err := ReadAndCheck(ctx.Request.Context(), c.moderator, file)
+	if err != nil {
+		ctx.JSON(http.StatusUnprocessableEntity, types.Resp{Error: "Image rejected: " + err.Error()})
+		return
+	}
+
+	fileExt := filepath.Ext(header.Filename)
 	uploadFile := File{
 		Bucket:      "avatars",
 		Key:         fmt.Sprintf("%s_%d%s", utils.UUIDToString(user.ID), time.Now().Unix(), fileExt),
-		Size:        header.Size,
-		Reader:      file,
+		Size:        int64(safeReader.Len()),
+		Reader:      safeReader,
 		ContentType: GetContentType(header.Filename),
 	}
 	filePath := fmt.Sprintf("%s/%s/%s", c.fileService.PublicEndpoint, uploadFile.Bucket, uploadFile.Key)
@@ -101,6 +112,59 @@ func (c *FilesController) UploadAvatar(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, types.Resp{
 		Data: gin.H{
 			"avatar": filePath,
+		},
+	})
+}
+
+func (c *FilesController) UploadPhoto(ctx *gin.Context) {
+	user, ok := auth.GetUserFromContext(ctx)
+	if !ok {
+		ctx.JSON(http.StatusUnauthorized, types.Resp{Error: "Unauthorized"})
+		return
+	}
+
+	file, header, err := ctx.Request.FormFile("photo")
+	if err != nil {
+		ctx.JSON(http.StatusBadRequest, types.Resp{Error: "Failed to get file from request"})
+		return
+	}
+	defer file.Close()
+
+	if !IsValidImageType(header.Filename) {
+		ctx.JSON(http.StatusBadRequest, types.Resp{Error: "Invalid file type. Only jpg, png, and webp files are allowed"})
+		return
+	}
+
+	if err := ValidateFileSize(header.Size, 10); err != nil {
+		ctx.JSON(http.StatusBadRequest, types.Resp{Error: err.Error()})
+		return
+	}
+
+	safeReader, err := ReadAndCheck(ctx.Request.Context(), c.moderator, file)
+	if err != nil {
+		ctx.JSON(http.StatusUnprocessableEntity, types.Resp{Error: "Image rejected: " + err.Error()})
+		return
+	}
+
+	fileExt := filepath.Ext(header.Filename)
+	uploadFile := File{
+		Bucket:      "photos",
+		Key:         fmt.Sprintf("%s_%d%s", utils.UUIDToString(user.ID), time.Now().Unix(), fileExt),
+		Size:        int64(safeReader.Len()),
+		Reader:      safeReader,
+		ContentType: GetContentType(header.Filename),
+	}
+	filePath := fmt.Sprintf("%s/%s/%s", c.fileService.PublicEndpoint, uploadFile.Bucket, uploadFile.Key)
+
+	if err := c.fileService.UploadFile(ctx.Request.Context(), uploadFile); err != nil {
+		utils.DebugPrint("Failed to upload photo for user %s, error: %v", utils.UUIDToString(user.ID), err)
+		ctx.JSON(http.StatusInternalServerError, types.Resp{Error: "Failed to upload file"})
+		return
+	}
+
+	ctx.JSON(http.StatusOK, types.Resp{
+		Data: gin.H{
+			"url": filePath,
 		},
 	})
 }

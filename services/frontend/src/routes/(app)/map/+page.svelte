@@ -2,16 +2,17 @@
 	import { onMount, onDestroy } from 'svelte';
 	import { goto } from '$app/navigation';
 	import { browser } from '$app/environment';
-	import FilterSheet, { type FilterState } from '$lib/components/matchup/FilterSheet.svelte';
+	import FilterSheet from '$lib/components/matchup/FilterSheet.svelte';
 	import BottomSheet from '$lib/components/matchup/BottomSheet.svelte';
 	import { authFetch } from '$lib/utils/authFetch';
+	import { filterStore } from '$stores/filters.svelte';
+	import toast from 'svelte-french-toast';
 
 	type Category = 'schools' | 'dancers' | 'tailoring' | 'events';
 
 	let activeCategory = $state<Category>('schools');
 	let showFilter = $state(false);
 	let selectedEntity = $state<MapEntity | null>(null);
-	let activeFilters = $state<FilterState>({});
 	let isDark = $state(browser && document.documentElement.classList.contains('dark'));
 
 	// Leaflet map refs
@@ -45,6 +46,17 @@
 	let entities = $state<MapEntity[]>([]);
 	let userLat = $state(0);
 	let userLng = $state(0);
+	let isLocating = $state(false);
+
+	function getPosition(): Promise<GeolocationPosition> {
+		return new Promise((resolve, reject) => {
+			navigator.geolocation.getCurrentPosition(resolve, reject, {
+				enableHighAccuracy: true,
+				timeout: 10000,
+				maximumAge: 30000
+			});
+		});
+	}
 
 	async function loadClubs() {
 		try {
@@ -72,11 +84,12 @@
 	}
 
 	async function loadNearbyDancers(lat: number, lng: number) {
+		if (lat === 0 && lng === 0) return;
 		try {
 			const resp = await authFetch('/map/nearby/radius', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ latitude: lat, longitude: lng, radius_km: activeFilters.distanceKm ?? 20 })
+				body: JSON.stringify({ latitude: lat, longitude: lng, radius_km: 20 })
 			});
 			if (resp.ok) {
 				const body = await resp.json();
@@ -88,7 +101,7 @@
 						return {
 							type: 'dancers' as Category,
 							id: u.user_id ?? u.id,
-							name: [pd.first_name, pd.last_name].filter(Boolean).join(' ') || 'Dancer',
+							name: [pd.first_name, pd.last_name].filter(Boolean).join(' ') || 'Танцівник',
 							location: [u.city, u.country].filter(Boolean).join(', '),
 							lat: u.latitude,
 							lng: u.longitude,
@@ -103,12 +116,13 @@
 	let filtered = $derived(
 		entities.filter((e) => {
 			if (e.type !== activeCategory) return false;
-			if (activeFilters.city && e.location && !e.location.toLowerCase().includes((activeFilters.city ?? '').toLowerCase())) return false;
+			if (filterStore.filters.city && e.location && !e.location.toLowerCase().includes((filterStore.filters.city ?? '').toLowerCase())) return false;
 			return true;
 		})
 	);
 
 	onMount(async () => {
+		filterStore.load();
 		const leaflet = await import('leaflet');
 		L = leaflet.default || leaflet;
 
@@ -120,8 +134,8 @@
 		});
 
 		map = L.map(mapContainer, {
-			center: [40.7128, -74.006],
-			zoom: 14,
+			center: [50.4501, 30.5234],
+			zoom: 12,
 			zoomControl: false,
 			attributionControl: false
 		});
@@ -132,17 +146,16 @@
 			maxZoom: 19
 		}).addTo(map);
 
-		// Try to get user location, fall back to default
-		navigator.geolocation.getCurrentPosition(
-			async (pos) => {
+		// Try to get user location, fall back silently to Kyiv default
+		if (browser && navigator.geolocation) {
+			getPosition().then(async (pos) => {
 				userLat = pos.coords.latitude;
 				userLng = pos.coords.longitude;
 				map.setView([userLat, userLng], 14);
 				await loadNearbyDancers(userLat, userLng);
 				addMarkers();
-			},
-			() => {}
-		);
+			}).catch(() => {});
+		}
 
 		await loadClubs();
 		addMarkers();
@@ -187,17 +200,20 @@
 	});
 
 	async function nearMe() {
-		if (!browser || !map) return;
-		navigator.geolocation.getCurrentPosition(
-			async (pos) => {
-				userLat = pos.coords.latitude;
-				userLng = pos.coords.longitude;
-				map.setView([userLat, userLng], 15);
-				await loadNearbyDancers(userLat, userLng);
-				addMarkers();
-			},
-			() => {}
-		);
+		if (!browser || !map || isLocating) return;
+		isLocating = true;
+		try {
+			const pos = await getPosition();
+			userLat = pos.coords.latitude;
+			userLng = pos.coords.longitude;
+			map.setView([userLat, userLng], 15);
+			await loadNearbyDancers(userLat, userLng);
+			addMarkers();
+		} catch {
+			toast.error('Не вдалося визначити геолокацію');
+		} finally {
+			isLocating = false;
+		}
 	}
 
 	async function openChat(entity: MapEntity) {
@@ -293,7 +309,7 @@
 
 		<!-- Near me FAB (bottom right) -->
 		<button
-			class="pointer-events-auto absolute flex items-center gap-4"
+			class="pointer-events-auto absolute flex items-center gap-4 transition-opacity disabled:opacity-60"
 			style="
 				bottom: calc(101px + max(env(safe-area-inset-bottom), 8px) + 8px);
 				right: 16px;
@@ -304,8 +320,13 @@
 				color: white;
 			"
 			onclick={nearMe}
+			disabled={isLocating}
 		>
-			<i class="fi fi-rr-map-marker" style="font-size: 20px; line-height: 1;"></i>
+			{#if isLocating}
+				<div class="h-[18px] w-[18px] animate-spin rounded-full border-2 border-white/30" style="border-top-color: white;"></div>
+			{:else}
+				<i class="fi fi-rr-map-marker" style="font-size: 20px; line-height: 1;"></i>
+			{/if}
 			<span class="text-[14px] font-semibold">Near me</span>
 		</button>
 	</div>
@@ -402,7 +423,7 @@
 					onclick={() => selectedEntity && openChat(selectedEntity)}
 				>
 					<i class="fi fi-rr-comment-heart" style="font-size: 20px; color: white;"></i>
-					<span class="text-[14px] font-semibold text-white">Chat</span>
+					<span class="text-[14px] font-semibold text-white">Написати</span>
 				</button>
 			</div>
 		{/if}
@@ -413,7 +434,7 @@
 <FilterSheet
 	open={showFilter}
 	onclose={() => (showFilter = false)}
-	onclear={() => (activeFilters = { danceStyles: [], role: '', distanceKm: 50, city: '' })}
-	onapply={(f) => { activeFilters = f; }}
-	initialFilters={activeFilters}
+	onclear={() => filterStore.clear()}
+	onapply={(f) => filterStore.apply(f)}
+	initialFilters={filterStore.filters}
 />
