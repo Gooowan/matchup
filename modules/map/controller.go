@@ -113,13 +113,23 @@ func (c *MapController) FindNearbyByCount(ctx *gin.Context) {
 
 	dtos := make([]gen.NearbyUserDTO, len(rows))
 	for i, r := range rows {
-		dtos[i] = gen.NearbyUserDTO{
+		dto := gen.NearbyUserDTO{
 			UserID:     utils.UUIDToString(r.UserID),
 			Latitude:   r.Latitude,
 			Longitude:  r.Longitude,
 			DistanceKm: r.DistanceKm,
 			UpdatedAt:  r.UpdatedAt.Time.UnixMilli(),
 		}
+		if preview, err := c.svc.RecommendationSvc.Queries.GetProfilePreview(ctx.Request.Context(), r.UserID); err == nil {
+			dto.ProfileData = preview.ProfileData
+			if preview.Country.Valid {
+				dto.Country = preview.Country.String
+			}
+			if preview.City.Valid {
+				dto.City = preview.City.String
+			}
+		}
+		dtos[i] = dto
 	}
 	ctx.JSON(http.StatusOK, types.Resp{Data: dtos})
 }
@@ -155,13 +165,23 @@ func (c *MapController) FindNearbyByRadius(ctx *gin.Context) {
 
 	dtos := make([]gen.NearbyUserDTO, len(rows))
 	for i, r := range rows {
-		dtos[i] = gen.NearbyUserDTO{
+		dto := gen.NearbyUserDTO{
 			UserID:     utils.UUIDToString(r.UserID),
 			Latitude:   r.Latitude,
 			Longitude:  r.Longitude,
 			DistanceKm: r.DistanceKm,
 			UpdatedAt:  r.UpdatedAt.Time.UnixMilli(),
 		}
+		if preview, err := c.svc.RecommendationSvc.Queries.GetProfilePreview(ctx.Request.Context(), r.UserID); err == nil {
+			dto.ProfileData = preview.ProfileData
+			if preview.Country.Valid {
+				dto.Country = preview.Country.String
+			}
+			if preview.City.Valid {
+				dto.City = preview.City.String
+			}
+		}
+		dtos[i] = dto
 	}
 	ctx.JSON(http.StatusOK, types.Resp{Data: dtos})
 }

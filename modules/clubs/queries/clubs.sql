@@ -12,8 +12,8 @@ SELECT * FROM clubs WHERE slug = @slug AND is_active = true;
 -- name: ListClubs :many
 SELECT * FROM clubs
 WHERE is_active = true
-  AND (@country::varchar IS NULL OR country = @country)
-  AND (@city::varchar IS NULL OR city = @city)
+  AND (NULLIF(@country::varchar, '') IS NULL OR country = @country)
+  AND (NULLIF(@city::varchar, '') IS NULL OR city = @city)
 ORDER BY name ASC
 LIMIT @limit_val OFFSET @offset_val;
 

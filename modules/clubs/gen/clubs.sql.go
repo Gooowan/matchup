@@ -417,8 +417,8 @@ func (q *Queries) ListClubMembers(ctx context.Context, arg ListClubMembersParams
 const listClubs = `-- name: ListClubs :many
 SELECT id, name, slug, description, country, city, address, latitude, longitude, website, phone, is_verified, is_active, metadata, owner_user_id, working_hours, created_at, updated_at FROM clubs
 WHERE is_active = true
-  AND ($1::varchar IS NULL OR country = $1)
-  AND ($2::varchar IS NULL OR city = $2)
+  AND (NULLIF($1::varchar, '') IS NULL OR country = $1)
+  AND (NULLIF($2::varchar, '') IS NULL OR city = $2)
 ORDER BY name ASC
 LIMIT $4 OFFSET $3
 `

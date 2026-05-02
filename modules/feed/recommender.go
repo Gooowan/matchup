@@ -111,6 +111,8 @@ func (p *TierRecommendationProvider) GetFeed(ctx context.Context, params FeedPar
 		if err != nil {
 			continue
 		}
+		// GetProfileByUserID queries profiles table only; fetch profile_data from users via GetProfilePreview
+		preview, _ := p.RecommendationSvc.Queries.GetProfilePreview(ctx, c.UserID)
 		rows = append(rows, recgen.FindNearbyVisibleProfilesRow{
 			ID:              profile.ID,
 			UserID:          profile.UserID,
@@ -130,6 +132,7 @@ func (p *TierRecommendationProvider) GetFeed(ctx context.Context, params FeedPar
 			ReadyToRelocate: profile.ReadyToRelocate,
 			ReadyToFinance:  profile.ReadyToFinance,
 			DistanceKm:      c.DistKm,
+			ProfileData:     preview.ProfileData,
 		})
 	}
 	return rows, nil

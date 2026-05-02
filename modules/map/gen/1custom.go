@@ -1,6 +1,7 @@
 package gen
 
 import (
+	"github.com/Gooowan/matchup/modules/core/types"
 	"github.com/Gooowan/matchup/modules/core/utils"
 )
 
@@ -23,9 +24,12 @@ func (l UserLocation) ToDTO() LocationDTO {
 }
 
 type NearbyUserDTO struct {
-	UserID     string  `json:"user_id"`
-	Latitude   float64 `json:"latitude"`
-	Longitude  float64 `json:"longitude"`
-	DistanceKm float64 `json:"distance_km"`
-	UpdatedAt  int64   `json:"updated_at"`
+	UserID      string      `json:"user_id"`
+	Latitude    float64     `json:"latitude"`
+	Longitude   float64     `json:"longitude"`
+	DistanceKm  float64     `json:"distance_km"`
+	UpdatedAt   int64       `json:"updated_at"`
+	ProfileData types.JSONB `json:"profile_data,omitempty"`
+	Country     string      `json:"country,omitempty"`
+	City        string      `json:"city,omitempty"`
 }
