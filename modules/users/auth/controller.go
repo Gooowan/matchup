@@ -84,7 +84,7 @@ func (c *AuthController) Register(ctx *gin.Context) {
 
 	user, err := c.authService.Register(ctx.Request.Context(), &req)
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, types.Resp{Error: err.Error()})
+		ctx.JSON(http.StatusInternalServerError, types.Resp{Error: "Failed to create account"})
 		return
 	}
 

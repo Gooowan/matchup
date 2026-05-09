@@ -8,6 +8,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/Gooowan/matchup/modules/chat"
+	"github.com/Gooowan/matchup/modules/core/geocoding"
 	"github.com/Gooowan/matchup/modules/core/logging"
 	"github.com/Gooowan/matchup/modules/core/types"
 	"github.com/Gooowan/matchup/modules/core/utils"
@@ -15,24 +16,27 @@ import (
 )
 
 type ClubController struct {
-	svc     *ClubService
-	chatSvc *chat.ChatService
+	svc      *ClubService
+	chatSvc  *chat.ChatService
+	geocoder geocoding.Geocoder
 }
 
-func NewClubController(svc *ClubService, chatSvc *chat.ChatService) *ClubController {
-	return &ClubController{svc: svc, chatSvc: chatSvc}
+func NewClubController(svc *ClubService, chatSvc *chat.ChatService, geocoder geocoding.Geocoder) *ClubController {
+	return &ClubController{svc: svc, chatSvc: chatSvc, geocoder: geocoder}
 }
 
 // --- Request types ---
 
+// clubRequest is used for admin create/update where lat/lng are required,
+// and also for public RegisterClub where they are optional (geocoded server-side).
 type clubRequest struct {
 	Name        string  `json:"name"        binding:"required"`
 	Description string  `json:"description"`
 	Country     string  `json:"country"     binding:"required"`
 	City        string  `json:"city"        binding:"required"`
 	Address     string  `json:"address"`
-	Latitude    float64 `json:"latitude"    binding:"required"`
-	Longitude   float64 `json:"longitude"   binding:"required"`
+	Latitude    float64 `json:"latitude"`
+	Longitude   float64 `json:"longitude"`
 	Website     string  `json:"website"`
 	Phone       string  `json:"phone"`
 }
@@ -72,7 +76,7 @@ func pageParams(ctx *gin.Context) (limit, offset int32) {
 func (c *ClubController) ListClubs(ctx *gin.Context) {
 	limit, offset := pageParams(ctx)
 	clubs, err := c.svc.ListClubs(ctx.Request.Context(),
-		ctx.Query("country"), ctx.Query("city"), limit, offset)
+		ctx.Query("country"), ctx.Query("city"), ctx.Query("q"), limit, offset)
 	if err != nil {
 		logging.FromContext(ctx.Request.Context()).Error("failed to list clubs", "error", err)
 		ctx.JSON(http.StatusInternalServerError, types.Resp{Error: "Failed to list clubs"})
@@ -92,7 +96,7 @@ func (c *ClubController) GetClub(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, types.Resp{Data: gin.H{"club": club, "member_count": count}})
 }
 
-// GET /clubs/:id/members
+// GET /clubs/:slug/members
 func (c *ClubController) ListMembers(ctx *gin.Context) {
 	club, err := c.svc.GetClubBySlug(ctx.Request.Context(), ctx.Param("slug"))
 	if err != nil {
@@ -116,6 +120,25 @@ func (c *ClubController) RegisterClub(ctx *gin.Context) {
 		ctx.JSON(http.StatusBadRequest, types.Resp{Error: err.Error()})
 		return
 	}
+
+	// Geocode when caller did not supply coordinates
+	if req.Latitude == 0 && req.Longitude == 0 && c.geocoder != nil {
+		lat, lng, err := c.geocoder.Geocode(ctx.Request.Context(), req.Country, req.City, req.Address)
+		if err != nil {
+			logging.FromContext(ctx.Request.Context()).Warn("geocoding failed", "error", err)
+			// Non-fatal: proceed with zero coords rather than refusing registration
+		} else {
+			req.Latitude, req.Longitude = lat, lng
+		}
+	}
+
+	// Basic range validation
+	if (req.Latitude != 0 || req.Longitude != 0) &&
+		(req.Latitude < -90 || req.Latitude > 90 || req.Longitude < -180 || req.Longitude > 180) {
+		ctx.JSON(http.StatusUnprocessableEntity, types.Resp{Error: "Coordinates out of valid range"})
+		return
+	}
+
 	club, err := c.svc.RegisterClub(ctx.Request.Context(), req.toParams(false))
 	if err != nil {
 		logging.FromContext(ctx.Request.Context()).Error("failed to register club", "error", err)
@@ -185,24 +208,24 @@ func (c *ClubController) GetMyClubs(ctx *gin.Context) {
 
 // --- Business owner endpoints ---
 
-// POST /clubs/:id/claim
+// POST /clubs/:slug/claim
 func (c *ClubController) ClaimClub(ctx *gin.Context) {
 	user, ok := auth.GetUserFromContext(ctx)
 	if !ok {
 		ctx.JSON(http.StatusUnauthorized, types.Resp{Error: "Unauthorized"})
 		return
 	}
-	clubID, err := utils.StringToUUID(ctx.Param("slug"))
+	club, err := c.svc.GetClubBySlug(ctx.Request.Context(), ctx.Param("slug"))
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, types.Resp{Error: "Invalid club ID"})
+		ctx.JSON(http.StatusNotFound, types.Resp{Error: "Club not found"})
 		return
 	}
-	club, err := c.svc.ClaimClub(ctx.Request.Context(), clubID, user.ID)
+	claimed, err := c.svc.ClaimClub(ctx.Request.Context(), club.ID, user.ID)
 	if err != nil {
 		ctx.JSON(http.StatusConflict, types.Resp{Error: "Club is already claimed or not found"})
 		return
 	}
-	ctx.JSON(http.StatusOK, types.Resp{Data: club})
+	ctx.JSON(http.StatusOK, types.Resp{Data: claimed})
 }
 
 type manageClubRequest struct {
@@ -213,16 +236,16 @@ type manageClubRequest struct {
 	WorkingHours map[string]any `json:"working_hours"`
 }
 
-// PUT /clubs/:id/manage
+// PUT /clubs/:slug/manage
 func (c *ClubController) ManageClub(ctx *gin.Context) {
 	user, ok := auth.GetUserFromContext(ctx)
 	if !ok {
 		ctx.JSON(http.StatusUnauthorized, types.Resp{Error: "Unauthorized"})
 		return
 	}
-	clubID, err := utils.StringToUUID(ctx.Param("slug"))
+	club, err := c.svc.GetClubBySlug(ctx.Request.Context(), ctx.Param("slug"))
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, types.Resp{Error: "Invalid club ID"})
+		ctx.JSON(http.StatusNotFound, types.Resp{Error: "Club not found"})
 		return
 	}
 	var req manageClubRequest
@@ -230,7 +253,7 @@ func (c *ClubController) ManageClub(ctx *gin.Context) {
 		ctx.JSON(http.StatusBadRequest, types.Resp{Error: err.Error()})
 		return
 	}
-	if err := c.svc.ManageClub(ctx.Request.Context(), clubID, user.ID, ManageClubParams{
+	if err := c.svc.ManageClub(ctx.Request.Context(), club.ID, user.ID, ManageClubParams{
 		Description:  req.Description,
 		Address:      req.Address,
 		Phone:        req.Phone,
@@ -260,19 +283,14 @@ func (c *ClubController) GetOwnedClubs(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, types.Resp{Data: clubs})
 }
 
-// POST /clubs/:id/chat — create or find a DM between current user and club owner.
+// POST /clubs/:slug/chat — create or find a DM between current user and club owner.
 func (c *ClubController) ChatWithClub(ctx *gin.Context) {
 	user, ok := auth.GetUserFromContext(ctx)
 	if !ok {
 		ctx.JSON(http.StatusUnauthorized, types.Resp{Error: "Unauthorized"})
 		return
 	}
-	clubID, err := utils.StringToUUID(ctx.Param("slug"))
-	if err != nil {
-		ctx.JSON(http.StatusBadRequest, types.Resp{Error: "Invalid club ID"})
-		return
-	}
-	club, err := c.svc.GetClubByID(ctx.Request.Context(), clubID)
+	club, err := c.svc.GetClubBySlug(ctx.Request.Context(), ctx.Param("slug"))
 	if err != nil {
 		ctx.JSON(http.StatusNotFound, types.Resp{Error: "Club not found"})
 		return

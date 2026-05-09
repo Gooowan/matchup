@@ -4,10 +4,10 @@ modules:
   - core
   - users
   - files
+  - clubs
   - recommendation
   - feed
   - chat
   - map
   - moderation
   - subscriptions
-  - clubs

@@ -18,5 +18,7 @@
   "title-id": "ID",
   "title-team": "Команда",
   "title-finance": "Фінанси",
-  "title-career": "Кар'єра"
+  "title-career": "Кар'єра",
+  "close": "Закрити",
+  "drag_to_close": "Потягни, щоб закрити"
 }

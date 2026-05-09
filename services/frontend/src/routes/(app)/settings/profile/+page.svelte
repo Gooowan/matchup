@@ -341,15 +341,15 @@
 	}
 </script>
 
-<div class="flex h-[100dvh] flex-col overflow-hidden" style="background: #dae1eb;">
+<div class="mu-screen flex h-[100dvh] flex-col overflow-hidden">
 	<div class="pt-safe"></div>
 
 	<!-- Header -->
 	<div class="flex flex-shrink-0 items-center gap-3 px-4 pt-4 pb-2">
 		<button onclick={() => goto('/settings')} class="flex items-center justify-center" aria-label="Назад">
-			<i class="fi fi-rr-angle-left" style="font-size: 20px; color: #171717; line-height: 1;"></i>
+			<i class="fi fi-rr-angle-left mu-text-primary" style="font-size: 20px; line-height: 1;"></i>
 		</button>
-		<h1 class="flex-1 text-[20px] font-black" style="color: #171717;">Редагувати профіль</h1>
+		<h1 class="mu-text-primary flex-1 truncate text-[20px] font-black">Редагувати профіль</h1>
 		<button
 			onclick={handleSave}
 			disabled={isSaving}
@@ -362,17 +362,17 @@
 
 	{#if isLoading}
 		<div class="flex flex-1 items-center justify-center">
-			<div class="h-8 w-8 animate-spin rounded-full border-4" style="border-color: #e0e0e0; border-top-color: #8984da;"></div>
+			<div class="h-8 w-8 animate-spin rounded-full border-4" style="border-color: rgba(174,180,188,0.3); border-top-color: #8984da;"></div>
 		</div>
 	{:else}
 		<div class="flex flex-1 flex-col overflow-y-auto px-4 pb-[100px]" style="gap: 16px; padding-top: 8px; -webkit-overflow-scrolling: touch;">
 
 			<!-- Avatar -->
-			<div class="flex flex-col items-center gap-3 rounded-[20px] bg-white p-6">
+			<div class="mu-card flex flex-col items-center gap-3 rounded-[20px] p-6">
 				<button
 					onclick={() => fileInput?.click()}
 					class="relative flex h-[100px] w-[100px] items-center justify-center overflow-hidden rounded-full"
-					style="background: #e0e0e0;"
+					style="background: rgba(174,180,188,0.2);"
 				>
 					{#if avatarPreview}
 						<img src={avatarPreview} alt="Аватар" class="h-full w-full object-cover" />
@@ -392,7 +392,7 @@
 			</div>
 
 			<!-- Extra photos -->
-			<div class="rounded-[20px] bg-white p-4" style="display: flex; flex-direction: column; gap: 12px;">
+			<div class="mu-card rounded-[20px] p-4" style="display: flex; flex-direction: column; gap: 12px;">
 				<div class="flex items-center justify-between">
 					<label class="text-[11px] font-semibold uppercase tracking-wider" style="color: #aeb4bc;">ФОТО</label>
 					<span class="text-[11px] font-medium" style="color: #aeb4bc;">{mediaUrls.length}/5</span>
@@ -414,11 +414,11 @@
 						<button
 							onclick={() => photoFileInput?.click()}
 							disabled={isUploadingPhoto}
-							class="flex flex-shrink-0 items-center justify-center rounded-[12px] transition-opacity disabled:opacity-60"
-							style="width: 80px; height: 80px; background: #f0f0f0; border: 1.5px dashed #d1d5db;"
+							class="mu-divider flex flex-shrink-0 items-center justify-center rounded-[12px] transition-opacity disabled:opacity-60"
+							style="width: 80px; height: 80px; background: rgba(174,180,188,0.12); border: 1.5px dashed rgba(174,180,188,0.5); border-top-style: dashed; border-right-style: dashed; border-bottom-style: dashed; border-left-style: dashed;"
 						>
 							{#if isUploadingPhoto}
-								<div class="h-5 w-5 animate-spin rounded-full border-2" style="border-color: #e0e0e0; border-top-color: #8984da;"></div>
+								<div class="h-5 w-5 animate-spin rounded-full border-2" style="border-color: rgba(174,180,188,0.3); border-top-color: #8984da;"></div>
 							{:else}
 								<i class="fi fi-rr-plus" style="font-size: 20px; color: #aeb4bc;"></i>
 							{/if}
@@ -429,47 +429,46 @@
 			</div>
 
 			<!-- Name -->
-			<div class="rounded-[20px] bg-white p-4" style="display: flex; flex-direction: column; gap: 12px;">
+			<div class="mu-card rounded-[20px] p-4" style="display: flex; flex-direction: column; gap: 12px;">
 				<label class="text-[11px] font-semibold uppercase tracking-wider" style="color: #aeb4bc;">ІМ'Я</label>
 				<input
 					type="text"
 					placeholder="Ім'я"
 					bind:value={firstName}
-					class="w-full bg-transparent text-[16px] font-semibold outline-none"
-					style="color: #171717; border-bottom: 1px solid #e0e0e0; padding-bottom: 8px;"
+					class="mu-text-primary mu-divider w-full bg-transparent text-[16px] font-semibold outline-none"
+					style="border-bottom-width: 1px; border-bottom-style: solid; padding-bottom: 8px;"
 				/>
 				<input
 					type="text"
 					placeholder="Прізвище"
 					bind:value={lastName}
-					class="w-full bg-transparent text-[16px] font-semibold outline-none"
-					style="color: #171717;"
+					class="mu-text-primary w-full bg-transparent text-[16px] font-semibold outline-none"
 				/>
 			</div>
 
 			<!-- Basic info -->
-			<div class="rounded-[20px] bg-white p-4" style="display: flex; flex-direction: column; gap: 12px;">
+			<div class="mu-card rounded-[20px] p-4" style="display: flex; flex-direction: column; gap: 12px;">
 				<label class="text-[11px] font-semibold uppercase tracking-wider" style="color: #aeb4bc;">ОСНОВНА ІНФОРМАЦІЯ</label>
 				<div class="flex gap-2">
 					{#each GENDER_OPTIONS as g}
 						<button
 							onclick={() => (gender = g.value)}
 							class="flex-1 rounded-[50px] py-2 text-[13px] font-semibold transition-all"
-							style="background: {gender === g.value ? '#8984da' : 'transparent'}; color: {gender === g.value ? 'white' : '#696969'}; border: 1.5px solid {gender === g.value ? '#8984da' : '#d1d5db'};"
+							style="background: {gender === g.value ? '#8984da' : 'transparent'}; color: {gender === g.value ? 'white' : '#696969'}; border: 1.5px solid {gender === g.value ? '#8984da' : 'rgba(174,180,188,0.4)'};"
 						>{g.label}</button>
 					{/each}
 				</div>
-				<div class="flex items-center justify-between" style="border-top: 1px solid #f0f0f0; padding-top: 12px;">
-					<span class="text-[14px] font-semibold" style="color: #171717;">Дата народження</span>
+				<div class="mu-divider flex items-center justify-between" style="border-top-width: 1px; border-top-style: solid; padding-top: 12px;">
+					<span class="mu-text-primary shrink-0 text-[14px] font-semibold">Дата народження</span>
 					<input
 						type="date"
 						bind:value={birthDate}
-						class="bg-transparent text-[14px] font-medium outline-none"
+						class="shrink-0 bg-transparent text-[14px] font-medium outline-none"
 						style="color: #8984da;"
 					/>
 				</div>
-				<div class="flex items-center justify-between" style="border-top: 1px solid #f0f0f0; padding-top: 12px;">
-					<span class="text-[14px] font-semibold" style="color: #171717;">Зріст (см)</span>
+				<div class="mu-divider flex items-center justify-between" style="border-top-width: 1px; border-top-style: solid; padding-top: 12px;">
+					<span class="mu-text-primary text-[14px] font-semibold">Зріст (см)</span>
 					<input
 						type="number"
 						placeholder="—"
@@ -483,19 +482,19 @@
 			</div>
 
 			<!-- Location -->
-			<div class="rounded-[20px] bg-white p-4" style="display: flex; flex-direction: column; gap: 12px;">
+			<div class="mu-card rounded-[20px] p-4" style="display: flex; flex-direction: column; gap: 12px;">
 				<label class="text-[11px] font-semibold uppercase tracking-wider" style="color: #aeb4bc;">МІСЦЕЗНАХОДЖЕННЯ</label>
 				<select
 					bind:value={city}
-					class="w-full bg-transparent text-[16px] font-semibold outline-none"
-					style="color: {city ? '#171717' : '#aeb4bc'}; -webkit-appearance: none; appearance: none;"
+					class="mu-text-primary w-full bg-transparent text-[16px] font-semibold outline-none"
+					style="-webkit-appearance: none; appearance: none; opacity: {city ? '1' : '0.5'};"
 				>
 					<option value="">Оберіть місто</option>
 					{#each UKRAINE_CITIES as c}
 						<option value={c}>{c}</option>
 					{/each}
 				</select>
-				<div style="border-top: 1px solid #f0f0f0; padding-top: 12px;">
+				<div class="mu-divider" style="border-top-width: 1px; border-top-style: solid; padding-top: 12px;">
 					<input
 						type="text"
 						value="Україна"
@@ -507,68 +506,67 @@
 			</div>
 
 			<!-- Program -->
-			<div class="rounded-[20px] bg-white p-4" style="display: flex; flex-direction: column; gap: 12px;">
+			<div class="mu-card rounded-[20px] p-4" style="display: flex; flex-direction: column; gap: 12px;">
 				<label class="text-[11px] font-semibold uppercase tracking-wider" style="color: #aeb4bc;">ПРОГРАМА ТАНЦІВ</label>
 				<div class="flex gap-2">
 					{#each PROGRAM_OPTIONS as p}
 						<button
 							onclick={() => (program = p.value)}
 							class="flex-1 rounded-[50px] py-2.5 text-[14px] font-semibold transition-all"
-							style="background: {program === p.value ? '#8984da' : 'transparent'}; color: {program === p.value ? 'white' : '#696969'}; border: 1.5px solid {program === p.value ? '#8984da' : '#d1d5db'};"
+							style="background: {program === p.value ? '#8984da' : 'transparent'}; color: {program === p.value ? 'white' : '#696969'}; border: 1.5px solid {program === p.value ? '#8984da' : 'rgba(174,180,188,0.4)'};"
 						>{p.label}</button>
 					{/each}
 				</div>
 			</div>
 
 			<!-- Goal -->
-			<div class="rounded-[20px] bg-white p-4" style="display: flex; flex-direction: column; gap: 12px;">
+			<div class="mu-card rounded-[20px] p-4" style="display: flex; flex-direction: column; gap: 12px;">
 				<label class="text-[11px] font-semibold uppercase tracking-wider" style="color: #aeb4bc;">ЦІЛЬ</label>
 				<div class="grid grid-cols-2 gap-2">
 					{#each GOAL_OPTIONS as g}
 						<button
 							onclick={() => (goal = g.value)}
 							class="rounded-[50px] py-2.5 text-[13px] font-semibold transition-all"
-							style="background: {goal === g.value ? '#8984da' : 'transparent'}; color: {goal === g.value ? 'white' : '#696969'}; border: 1.5px solid {goal === g.value ? '#8984da' : '#d1d5db'};"
+							style="background: {goal === g.value ? '#8984da' : 'transparent'}; color: {goal === g.value ? 'white' : '#696969'}; border: 1.5px solid {goal === g.value ? '#8984da' : 'rgba(174,180,188,0.4)'};"
 						>{g.label}</button>
 					{/each}
 				</div>
 			</div>
 
 			<!-- Categories -->
-			<div class="rounded-[20px] bg-white p-4" style="display: flex; flex-direction: column; gap: 12px;">
+			<div class="mu-card rounded-[20px] p-4" style="display: flex; flex-direction: column; gap: 12px;">
 				<label class="text-[11px] font-semibold uppercase tracking-wider" style="color: #aeb4bc;">КАТЕГОРІЯ</label>
 				<div class="flex flex-wrap gap-2">
 					{#each CATEGORIES_UA as cat}
 						<button
 							onclick={() => toggleCategory(cat.value)}
 							class="rounded-[50px] px-3 py-1.5 text-[13px] font-semibold transition-all"
-							style="background: {categories.includes(cat.value) ? '#8984da' : 'transparent'}; color: {categories.includes(cat.value) ? 'white' : '#696969'}; border: 1.5px solid {categories.includes(cat.value) ? '#8984da' : '#d1d5db'};"
+							style="background: {categories.includes(cat.value) ? '#8984da' : 'transparent'}; color: {categories.includes(cat.value) ? 'white' : '#696969'}; border: 1.5px solid {categories.includes(cat.value) ? '#8984da' : 'rgba(174,180,188,0.4)'};"
 						>{cat.label}</button>
 					{/each}
 				</div>
 			</div>
 
 			<!-- Bio -->
-			<div class="rounded-[20px] bg-white p-4" style="display: flex; flex-direction: column; gap: 8px;">
+			<div class="mu-card rounded-[20px] p-4" style="display: flex; flex-direction: column; gap: 8px;">
 				<label class="text-[11px] font-semibold uppercase tracking-wider" style="color: #aeb4bc;">ПРО СЕБЕ</label>
 				<textarea
 					placeholder="Розкажи про себе…"
 					bind:value={bio}
 					rows="4"
-					class="w-full resize-none bg-transparent text-[14px] font-medium leading-relaxed outline-none"
-					style="color: #171717;"
+					class="mu-text-primary w-full resize-none bg-transparent text-[14px] font-medium leading-relaxed outline-none"
 				></textarea>
 			</div>
 
 			<!-- Preferences -->
-			<div class="rounded-[20px] bg-white p-4" style="display: flex; flex-direction: column; gap: 12px;">
+			<div class="mu-card rounded-[20px] p-4" style="display: flex; flex-direction: column; gap: 12px;">
 				<label class="text-[11px] font-semibold uppercase tracking-wider" style="color: #aeb4bc;">УПОДОБАННЯ</label>
 				<div class="flex items-center justify-between">
-					<span class="text-[14px] font-semibold" style="color: #171717;">Готовий/а до переїзду</span>
+					<span class="mu-text-primary text-[14px] font-semibold">Готовий/а до переїзду</span>
 					<button
 						onclick={() => (readyToRelocate = !readyToRelocate)}
 						class="relative flex items-center transition-colors"
-						style="width: 50px; height: 28px; border-radius: 50px; background: {readyToRelocate ? '#8984da' : '#d1d5db'};"
+						style="width: 50px; height: 28px; border-radius: 50px; background: {readyToRelocate ? '#8984da' : 'rgba(174,180,188,0.4)'};"
 						role="switch"
 						aria-checked={readyToRelocate}
 					>
@@ -585,7 +583,7 @@
 							<button
 								onclick={() => (readyToFinance = readyToFinance === opt.value ? '' : opt.value)}
 								class="flex-1 rounded-[50px] py-2 text-[13px] font-semibold transition-all"
-								style="background: {readyToFinance === opt.value ? '#8984da' : 'transparent'}; color: {readyToFinance === opt.value ? 'white' : '#696969'}; border: 1.5px solid {readyToFinance === opt.value ? '#8984da' : '#d1d5db'};"
+								style="background: {readyToFinance === opt.value ? '#8984da' : 'transparent'}; color: {readyToFinance === opt.value ? 'white' : '#696969'}; border: 1.5px solid {readyToFinance === opt.value ? '#8984da' : 'rgba(174,180,188,0.4)'};"
 							>{opt.label}</button>
 						{/each}
 					</div>

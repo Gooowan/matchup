@@ -98,6 +98,7 @@ type Profile struct {
 	City            pgtype.Text      `db:"city" json:"city"`
 	ReadyToRelocate pgtype.Bool      `db:"ready_to_relocate" json:"ready_to_relocate"`
 	ReadyToFinance  pgtype.Text      `db:"ready_to_finance" json:"ready_to_finance"`
+	PrimaryClubID   pgtype.UUID      `db:"primary_club_id" json:"primary_club_id"`
 	Metadata        types.JSONB      `db:"metadata" json:"metadata"`
 	Data            types.JSONB      `db:"data" json:"data"`
 	CreatedAt       pgtype.Timestamp `db:"created_at" json:"created_at"`

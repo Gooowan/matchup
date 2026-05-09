@@ -13,8 +13,9 @@ SELECT * FROM clubs WHERE slug = @slug AND is_active = true;
 SELECT * FROM clubs
 WHERE is_active = true
   AND (NULLIF(@country::varchar, '') IS NULL OR country = @country)
-  AND (NULLIF(@city::varchar, '') IS NULL OR city = @city)
-ORDER BY name ASC
+  AND (NULLIF(@city::varchar, '') IS NULL OR city ILIKE '%' || @city || '%')
+  AND (NULLIF(@q::varchar, '') IS NULL OR name ILIKE '%' || @q || '%' OR city ILIKE '%' || @q || '%')
+ORDER BY is_verified DESC, name ASC
 LIMIT @limit_val OFFSET @offset_val;
 
 -- name: ListClubsNearby :many
@@ -77,14 +78,17 @@ SELECT
     cm.role,
     cm.joined_at,
     p.gender,
+    p.birth_date,
     p.goal,
     p.program,
     p.categories,
     p.country,
     p.city,
-    p.metadata
+    p.metadata,
+    u.profile_data
 FROM club_members cm
 JOIN profiles p ON p.user_id = cm.user_id
+JOIN users u ON u.id = cm.user_id
 WHERE cm.club_id = @club_id AND p.visible = true
 ORDER BY cm.joined_at DESC
 LIMIT @limit_val OFFSET @offset_val;

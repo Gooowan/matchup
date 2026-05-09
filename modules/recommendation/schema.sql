@@ -20,6 +20,7 @@ CREATE TABLE profiles(
     city               varchar(100),
     ready_to_relocate  boolean       DEFAULT false,
     ready_to_finance   varchar(20)   DEFAULT 'no',
+    primary_club_id    uuid          REFERENCES clubs(id) ON DELETE SET NULL,
     -- Non-queryable data (bio, media_urls, social links, etc.)
     metadata           jsonb         NOT NULL DEFAULT '{}',
     -- Legacy JSONB kept for rollback safety; drop after migration verified
@@ -40,6 +41,7 @@ CREATE INDEX idx_profiles_program      ON profiles(program);
 CREATE INDEX idx_profiles_country_city ON profiles(country, city);
 CREATE INDEX idx_profiles_categories   ON profiles USING GIN(categories);
 CREATE INDEX idx_profiles_relocate     ON profiles(ready_to_relocate) WHERE ready_to_relocate = true;
+CREATE INDEX idx_profiles_primary_club ON profiles(primary_club_id);
 
 -- User matching preferences (dedicated columns for SQL-level filtering)
 CREATE TABLE user_preferences(

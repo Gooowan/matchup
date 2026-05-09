@@ -21,6 +21,7 @@ type FeedParams struct {
 	Latitude   float64
 	Longitude  float64
 	Country    string
+	UserClubs  []recommendation.UserClub
 	Prefs      *recgen.UserPreference
 	ExcludeIDs []pgtype.UUID
 	Limit      int32
@@ -43,6 +44,7 @@ func (p *TierRecommendationProvider) GetFeed(ctx context.Context, params FeedPar
 		Country:    params.Country,
 		Latitude:   params.Latitude,
 		Longitude:  params.Longitude,
+		UserClubs:  params.UserClubs,
 		ExcludeIDs: params.ExcludeIDs,
 		Limit:      params.Limit,
 	}

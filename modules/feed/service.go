@@ -101,11 +101,26 @@ func (s *FeedService) GetFeed(ctx context.Context, userID pgtype.UUID, limit int
 		country = profile.Country.String
 	}
 
+	// Fetch clubs the user belongs to so tier-1 circles 1 and 2 can run.
+	var userClubs []recommendation.UserClub
+	if s.ClubSvc != nil {
+		if rawClubs, err := s.ClubSvc.GetUserClubs(ctx, userID); err == nil {
+			for _, c := range rawClubs {
+				userClubs = append(userClubs, recommendation.UserClub{
+					ID:        c.ID,
+					Latitude:  c.Latitude,
+					Longitude: c.Longitude,
+				})
+			}
+		}
+	}
+
 	return s.Recommender.GetFeed(ctx, FeedParams{
 		UserID:     userID,
 		Latitude:   profile.Latitude.Float64,
 		Longitude:  profile.Longitude.Float64,
 		Country:    country,
+		UserClubs:  userClubs,
 		Prefs:      &prefs,
 		ExcludeIDs: excludeIDs,
 		Limit:      limit,

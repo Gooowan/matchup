@@ -3,6 +3,7 @@
 	import { onMount } from 'svelte';
 	import { authFetch } from '$lib/utils/authFetch';
 	import { unreadStore } from '$stores/unread.svelte';
+	import { t } from '$lib/locale';
 
 	type ChatTab = 'chats' | 'business' | 'marketplace';
 	let activeTab = $state<ChatTab>('chats');
@@ -64,7 +65,7 @@
 	<!-- Search bar -->
 	<div class="glass-pill mx-4 mt-2 flex items-center gap-3 px-4" style="height: 38px;">
 		<i class="fi fi-rr-search" style="font-size: 20px; line-height: 1; color: #9c9c9c; flex-shrink: 0;"></i>
-		<span class="text-[14px] font-semibold" style="color: #9c9c9c;">Search</span>
+		<span class="text-[14px] font-semibold" style="color: #9c9c9c;">{$t('chats.search_placeholder')}</span>
 	</div>
 
 	<!-- Tab switcher -->
@@ -74,21 +75,21 @@
 			style="height: 28px; background: {activeTab === 'chats' ? 'white' : 'transparent'}; color: {activeTab === 'chats' ? '#3a3a3a' : 'white'};"
 			onclick={() => (activeTab = 'chats')}
 		>
-			Chats
+			{$t('chats.tab_chats')}
 		</button>
 		<button
 			class="flex flex-1 items-center justify-center rounded-[20px] text-[13px] font-semibold transition-colors"
 			style="height: 28px; background: {activeTab === 'business' ? 'white' : 'transparent'}; color: {activeTab === 'business' ? '#3a3a3a' : 'white'};"
 			onclick={() => (activeTab = 'business')}
 		>
-			Business
+			{$t('chats.tab_business')}
 		</button>
 		<button
 			class="flex flex-1 items-center justify-center rounded-[20px] text-[13px] font-semibold transition-colors"
 			style="height: 28px; background: {activeTab === 'marketplace' ? 'white' : 'transparent'}; color: {activeTab === 'marketplace' ? '#3a3a3a' : 'white'};"
 			onclick={() => (activeTab = 'marketplace')}
 		>
-			Market
+			{$t('chats.tab_market')}
 		</button>
 	</div>
 
@@ -96,8 +97,8 @@
 	{#if activeTab === 'marketplace'}
 		<div class="flex flex-1 flex-col items-center justify-center gap-4">
 			<i class="fi fi-rr-shopping-bag" style="font-size: 48px; color: #313131;"></i>
-			<p class="text-[16px] font-semibold" style="color: #696969;">Marketplace</p>
-			<p class="text-[13px] font-medium" style="color: #484848;">Coming soon</p>
+			<p class="text-[16px] font-semibold" style="color: #696969;">{$t('marketplace.title')}</p>
+			<p class="text-[13px] font-medium" style="color: #484848;">{$t('chats.coming_soon')}</p>
 		</div>
 	{:else}
 		<div class="mt-6 flex flex-1 flex-col overflow-y-auto px-4 pb-[100px]" style="gap: 24px;">
@@ -149,12 +150,10 @@
 				<div class="flex flex-col items-center justify-center py-16">
 					{#if activeTab === 'business'}
 						<i class="fi fi-rr-store-alt" style="font-size: 48px; color: #313131;"></i>
-						<p class="mt-4 text-[16px] font-semibold" style="color: #696969;">No business conversations</p>
-						<p class="mt-1 text-[13px] font-medium text-center" style="color: #484848;">Find a dance school on the map and start chatting</p>
+						<p class="mt-4 text-[16px] font-semibold" style="color: #696969;">{$t('chats.empty')}</p>
 					{:else}
 						<i class="fi fi-rr-comment-heart" style="font-size: 48px; color: #313131;"></i>
-						<p class="mt-4 text-[16px] font-semibold" style="color: #696969;">No chats yet</p>
-						<p class="mt-1 text-[13px] font-medium" style="color: #484848;">Match with someone to start chatting</p>
+						<p class="mt-4 text-[16px] font-semibold" style="color: #696969;">{$t('chats.empty')}</p>
 					{/if}
 				</div>
 			{/if}

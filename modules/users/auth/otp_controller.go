@@ -2,7 +2,9 @@ package auth
 
 import (
 	"net/http"
+	"os"
 	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -93,10 +95,28 @@ func (c *OTPAuthController) VerifyEmailOTP(ctx *gin.Context) {
 		return
 	}
 
-	if _, err := c.auth.EmailVerifyByUserID(ctx.Request.Context(), userIDStr); err != nil {
-		// Non-fatal: token may already be cleared
-		_ = err
+	verifiedUser, err := c.auth.EmailVerifyByUserID(ctx.Request.Context(), userIDStr)
+	if err != nil {
+		// Non-fatal: token may already be cleared; re-fetch user to still issue token
+		verifiedUser = &user
 	}
 
-	ctx.JSON(http.StatusOK, types.Resp{Data: gin.H{"message": "Email verified successfully"}})
+	token, expiresAt, err := c.auth.IssueToken(ctx.Request.Context(), verifiedUser.ID)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, types.Resp{Error: "Failed to create session"})
+		return
+	}
+
+	domain := os.Getenv("COOKIE_DOMAIN")
+	ctx.SetCookie("auth_token", token, int(time.Until(expiresAt).Seconds()), "/", domain, true, true)
+
+	if verifiedUser.ProfileData != nil {
+		if localeValue, exists := verifiedUser.ProfileData["locale"]; exists {
+			if locale, ok := localeValue.(string); ok && locale != "" {
+				ctx.SetCookie("locale", locale, 60*60*24*365, "/", domain, false, false)
+			}
+		}
+	}
+
+	ctx.JSON(http.StatusOK, types.Resp{Data: gin.H{"user": verifiedUser.ToDTO()}})
 }

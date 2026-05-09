@@ -7,13 +7,20 @@
 	import { authFetch } from '$lib/utils/authFetch';
 	import { filterStore } from '$stores/filters.svelte';
 	import toast from 'svelte-french-toast';
+	import { t } from '$lib/locale';
 
-	type Category = 'schools' | 'dancers' | 'tailoring' | 'events';
+	type Category = 'clubs' | 'events';
 
-	let activeCategory = $state<Category>('schools');
+	let activeCategory = $state<Category>('clubs');
 	let showFilter = $state(false);
 	let selectedEntity = $state<MapEntity | null>(null);
 	let isDark = $state(browser && document.documentElement.classList.contains('dark'));
+	let searchQuery = $state('');
+	let searchTimeout: ReturnType<typeof setTimeout> | null = null;
+
+	// Events popup state
+	let showEventsPopup = $state(false);
+	let eventsTimer: ReturnType<typeof setTimeout> | null = null;
 
 	// Leaflet map refs
 	let mapContainer: HTMLElement;
@@ -28,25 +35,71 @@
 		lat: number;
 		lng: number;
 		logoUrl?: string;
-		photos?: string[];
-		rating?: number;
-		ratingCount?: number;
 		phone?: string;
 		website?: string;
-		hours?: string;
 		address?: string;
 		slug?: string;
-		// Event-specific
-		date?: string;
-		description?: string;
-		ticketsUrl?: string;
-		bannerUrl?: string;
+	}
+
+	interface ClubMember {
+		user_id: string;
+		profile_data: Record<string, string> | null;
+		birth_date: string | null;
+		gender: string;
+		goal: string;
+		program: string;
+		categories: string[];
+		country: string | null;
+		city: string | null;
 	}
 
 	let entities = $state<MapEntity[]>([]);
 	let userLat = $state(0);
 	let userLng = $state(0);
 	let isLocating = $state(false);
+	let clubMembers = $state<ClubMember[]>([]);
+	let isLoadingMembers = $state(false);
+
+	// --- Events popup ---
+	function openEventsPopup() {
+		showEventsPopup = true;
+		if (eventsTimer) clearTimeout(eventsTimer);
+		eventsTimer = setTimeout(closeEventsPopup, 3000);
+	}
+
+	function closeEventsPopup() {
+		if (eventsTimer) clearTimeout(eventsTimer);
+		eventsTimer = null;
+		showEventsPopup = false;
+		activeCategory = 'clubs';
+	}
+
+	function calcAge(birthDateStr: string | null): number | null {
+		if (!birthDateStr) return null;
+		const dob = new Date(birthDateStr);
+		const diff = Date.now() - dob.getTime();
+		const age = Math.floor(diff / (365.25 * 24 * 3600 * 1000));
+		return age >= 0 ? age : null;
+	}
+
+	function applyMemberFilters(members: ClubMember[]): ClubMember[] {
+		const f = filterStore.filters;
+		return members.filter((m) => {
+			if (f.gender && m.gender !== f.gender) return false;
+			if (f.goal && m.goal !== f.goal) return false;
+			if (f.program && m.program !== f.program) return false;
+			if (f.categories && f.categories.length > 0) {
+				const overlap = m.categories.some((c) => f.categories!.includes(c));
+				if (!overlap) return false;
+			}
+			const age = calcAge(m.birth_date);
+			if (f.ageMin != null && age != null && age < f.ageMin) return false;
+			if (f.ageMax != null && age != null && age > f.ageMax) return false;
+			return true;
+		});
+	}
+
+	let filteredMembers = $derived(applyMemberFilters(clubMembers));
 
 	function getPosition(): Promise<GeolocationPosition> {
 		return new Promise((resolve, reject) => {
@@ -58,16 +111,21 @@
 		});
 	}
 
-	async function loadClubs() {
+	async function loadClubs(q?: string) {
 		try {
-			const resp = await fetch(`${import.meta.env.VITE_API_URL}/clubs`);
+			const params = new URLSearchParams();
+			if (q) params.set('q', q);
+			const city = filterStore.filters.city;
+			if (city) params.set('city', city);
+			const url = `${import.meta.env.VITE_API_URL}/clubs${params.toString() ? '?' + params.toString() : ''}`;
+			const resp = await fetch(url);
 			if (resp.ok) {
 				const body = await resp.json();
 				const clubs = body.data ?? [];
-				const schoolEntities: MapEntity[] = clubs
+				const clubEntities: MapEntity[] = clubs
 					.filter((c: any) => c.latitude && c.longitude)
 					.map((c: any) => ({
-						type: 'schools' as Category,
+						type: 'clubs' as Category,
 						id: c.id ?? c.slug,
 						slug: c.slug,
 						name: c.name,
@@ -78,48 +136,36 @@
 						phone: c.phone?.String ?? c.phone ?? '',
 						website: c.website?.String ?? c.website ?? ''
 					}));
-				entities = [...entities.filter((e) => e.type !== 'schools'), ...schoolEntities];
+				entities = clubEntities;
 			}
 		} catch {}
 	}
 
-	async function loadNearbyDancers(lat: number, lng: number) {
-		if (lat === 0 && lng === 0) return;
+	async function loadClubMembers(slug: string) {
+		if (!slug) return;
+		isLoadingMembers = true;
+		clubMembers = [];
 		try {
-			const resp = await authFetch('/map/nearby/radius', {
-				method: 'POST',
-				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({ latitude: lat, longitude: lng, radius_km: 20 })
-			});
+			const resp = await authFetch(`/clubs/${slug}/members?limit=50`);
 			if (resp.ok) {
 				const body = await resp.json();
-				const nearby = body.data?.users ?? body.data ?? [];
-				const dancerEntities: MapEntity[] = nearby
-					.filter((u: any) => u.latitude && u.longitude)
-					.map((u: any) => {
-						const pd = u.profile_data ?? {};
-						return {
-							type: 'dancers' as Category,
-							id: u.user_id ?? u.id,
-							name: [pd.first_name, pd.last_name].filter(Boolean).join(' ') || 'Танцівник',
-							location: [u.city, u.country].filter(Boolean).join(', '),
-							lat: u.latitude,
-							lng: u.longitude,
-							logoUrl: pd.avatar ?? ''
-						};
-					});
-				entities = [...entities.filter((e) => e.type !== 'dancers'), ...dancerEntities];
+				clubMembers = (body.data ?? []) as ClubMember[];
 			}
-		} catch {}
+		} catch {
+			clubMembers = [];
+		} finally {
+			isLoadingMembers = false;
+		}
 	}
 
-	let filtered = $derived(
-		entities.filter((e) => {
-			if (e.type !== activeCategory) return false;
-			if (filterStore.filters.city && e.location && !e.location.toLowerCase().includes((filterStore.filters.city ?? '').toLowerCase())) return false;
-			return true;
-		})
-	);
+	function handleSearchInput() {
+		if (searchTimeout) clearTimeout(searchTimeout);
+		searchTimeout = setTimeout(() => {
+			loadClubs(searchQuery || undefined).then(() => addMarkers());
+		}, 300);
+	}
+
+	let filtered = $derived(entities.filter((e) => e.type === activeCategory));
 
 	onMount(async () => {
 		filterStore.load();
@@ -146,14 +192,11 @@
 			maxZoom: 19
 		}).addTo(map);
 
-		// Try to get user location, fall back silently to Kyiv default
 		if (browser && navigator.geolocation) {
-			getPosition().then(async (pos) => {
+			getPosition().then((pos) => {
 				userLat = pos.coords.latitude;
 				userLng = pos.coords.longitude;
 				map.setView([userLat, userLng], 14);
-				await loadNearbyDancers(userLat, userLng);
-				addMarkers();
 			}).catch(() => {});
 		}
 
@@ -162,6 +205,8 @@
 	});
 
 	onDestroy(() => {
+		if (searchTimeout) clearTimeout(searchTimeout);
+		if (eventsTimer) clearTimeout(eventsTimer);
 		map?.remove();
 	});
 
@@ -171,14 +216,10 @@
 			if (layer instanceof L.Marker) map.removeLayer(layer);
 		});
 
-		filtered.forEach((entity) => {
-			const iconHtml =
-				entity.type === 'events'
-					? `<i class="fi fi-sr-calendar" style="font-size:24px;color:#696969;"></i>`
-					: entity.type === 'schools'
-						? `<i class="fi fi-sr-map-marker-home" style="font-size:24px;color:#8984da;"></i>`
-						: `<i class="fi fi-sr-marker" style="font-size:24px;color:#696969;"></i>`;
+		if (activeCategory !== 'clubs') return;
 
+		filtered.forEach((entity) => {
+			const iconHtml = `<i class="fi fi-sr-map-marker-home" style="font-size:24px;color:#8984da;"></i>`;
 			const icon = L.divIcon({
 				html: iconHtml,
 				className: '',
@@ -188,7 +229,10 @@
 
 			L.marker([entity.lat, entity.lng], { icon })
 				.addTo(map)
-				.on('click', () => (selectedEntity = entity));
+				.on('click', () => {
+					selectedEntity = entity;
+					if (entity.slug) loadClubMembers(entity.slug);
+				});
 		});
 	}
 
@@ -207,10 +251,9 @@
 			userLat = pos.coords.latitude;
 			userLng = pos.coords.longitude;
 			map.setView([userLat, userLng], 15);
-			await loadNearbyDancers(userLat, userLng);
 			addMarkers();
 		} catch {
-			toast.error('Не вдалося визначити геолокацію');
+			toast.error($t('map.geolocation_failed'));
 		} finally {
 			isLocating = false;
 		}
@@ -218,9 +261,9 @@
 
 	async function openChat(entity: MapEntity) {
 		selectedEntity = null;
-		if (entity.type === 'schools' && entity.id) {
+		if (entity.slug) {
 			try {
-				const resp = await authFetch(`/clubs/${entity.id}/chat`, { method: 'POST' });
+				const resp = await authFetch(`/clubs/${entity.slug}/chat`, { method: 'POST' });
 				if (resp.ok) {
 					const body = await resp.json();
 					const chatId = body.data?.chat_id ?? body.chat_id;
@@ -232,6 +275,10 @@
 			} catch {}
 		}
 		goto('/chats');
+	}
+
+	function handleApplyFilters() {
+		loadClubs(searchQuery || undefined).then(() => addMarkers());
 	}
 </script>
 
@@ -246,7 +293,7 @@
 
 	<!-- Overlay UI layer -->
 	<div class="pointer-events-none absolute inset-0" style="z-index: 10;">
-		<!-- Search bar -->
+		<!-- Search input -->
 		<div
 			class="pointer-events-auto absolute left-4 right-4 mu-card mu-border flex items-center gap-3"
 			style="
@@ -259,10 +306,17 @@
 			"
 		>
 			<i class="fi fi-rr-search mu-text-primary" style="font-size: 20px; line-height: 1; flex-shrink: 0;"></i>
-			<span class="mu-text-primary text-[14px] font-semibold">Search</span>
+			<input
+				type="search"
+				bind:value={searchQuery}
+				oninput={handleSearchInput}
+				placeholder={$t('map.search_placeholder')}
+				class="mu-text-primary w-full bg-transparent text-[14px] font-semibold outline-none placeholder:font-normal"
+				style="color: inherit;"
+			/>
 		</div>
 
-		<!-- Category tab bar -->
+		<!-- Two-tab bar: Clubs + Events -->
 		<div
 			class="pointer-events-auto absolute left-4 right-4 mu-card mu-border flex items-center gap-1"
 			style="
@@ -274,19 +328,29 @@
 				padding: 4px;
 			"
 		>
-			{#each (['schools', 'dancers', 'tailoring', 'events'] as const) as cat}
-				<button
-					class="flex flex-1 items-center justify-center rounded-[20px] text-[14px] font-semibold transition-colors"
-					style="
-						height: 28px;
-						background: {activeCategory === cat ? (isDark ? '#8984da' : '#696969') : 'transparent'};
-						color: {activeCategory === cat ? 'white' : (isDark ? '#e1e1e1' : '#171717')};
-					"
-					onclick={() => (activeCategory = cat)}
-				>
-					{cat.charAt(0).toUpperCase() + cat.slice(1)}
-				</button>
-			{/each}
+			<button
+				class="flex flex-1 items-center justify-center rounded-[20px] text-[14px] font-semibold transition-colors"
+				style="
+					height: 28px;
+					background: {activeCategory === 'clubs' ? (isDark ? '#8984da' : '#696969') : 'transparent'};
+					color: {activeCategory === 'clubs' ? 'white' : (isDark ? '#e1e1e1' : '#171717')};
+				"
+				onclick={() => (activeCategory = 'clubs')}
+			>
+				{$t('map.tab_clubs')}
+			</button>
+
+			<button
+				class="relative flex flex-1 items-center justify-center gap-1 rounded-[20px] text-[14px] font-semibold opacity-50"
+				style="height: 28px; color: {isDark ? '#e1e1e1' : '#171717'};"
+				onclick={() => { activeCategory = 'events'; openEventsPopup(); }}
+			>
+				{$t('map.tab_events')}
+				<span
+					class="rounded-full px-1 text-[10px] font-bold text-white"
+					style="background: #8984da; padding: 1px 5px; line-height: 1.4;"
+				>{$t('map.tab_events_soon')}</span>
+			</button>
 		</div>
 
 		<!-- Filter FAB (bottom left) -->
@@ -304,7 +368,7 @@
 			onclick={() => (showFilter = true)}
 		>
 			<i class="fi fi-rr-settings-sliders" style="font-size: 20px; line-height: 1;"></i>
-			<span class="text-[14px] font-semibold">Filter</span>
+			<span class="text-[14px] font-semibold">{$t('map.filter')}</span>
 		</button>
 
 		<!-- Near me FAB (bottom right) -->
@@ -327,106 +391,123 @@
 			{:else}
 				<i class="fi fi-rr-map-marker" style="font-size: 20px; line-height: 1;"></i>
 			{/if}
-			<span class="text-[14px] font-semibold">Near me</span>
+			<span class="text-[14px] font-semibold">{$t('map.near_me')}</span>
 		</button>
 	</div>
 </div>
 
-<!-- Entity bottom sheet -->
-<BottomSheet open={!!selectedEntity} onclose={() => (selectedEntity = null)}>
+<!-- Events popup with blurred backdrop -->
+{#if showEventsPopup}
+	<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+	<div
+		class="fixed inset-0 flex items-center justify-center"
+		style="z-index: 200; backdrop-filter: blur(8px); background: rgba(0,0,0,0.15);"
+		onclick={closeEventsPopup}
+	>
+		<!-- svelte-ignore a11y_click_events_have_key_events a11y_no_static_element_interactions -->
+		<div
+			class="mx-6 rounded-[24px] px-8 py-10 text-center shadow-2xl"
+			style="background: rgba(255,255,255,0.95); max-width: 320px; width: 100%;"
+			onclick={closeEventsPopup}
+		>
+			<div class="mb-4 flex justify-center">
+				<div class="flex h-[64px] w-[64px] items-center justify-center rounded-full" style="background: linear-gradient(135deg, #8984da, #b4b0e8);">
+					<i class="fi fi-rr-calendar text-white" style="font-size: 28px; line-height: 1;"></i>
+				</div>
+			</div>
+			<h2 class="text-[20px] font-black" style="color: #171717;">{$t('map.events_brief_title')}</h2>
+			<p class="mt-1 text-[13px] font-medium" style="color: #696969;">{$t('map.events_brief_subtitle')}</p>
+			<!-- Auto-dismiss progress bar -->
+			<div class="mt-5 h-[3px] w-full overflow-hidden rounded-full" style="background: #e5e7eb;">
+				<div class="event-countdown h-full rounded-full" style="background: #8984da;"></div>
+			</div>
+		</div>
+	</div>
+{/if}
+
+<style>
+.event-countdown {
+	width: 100%;
+	animation: event-countdown-shrink 3s linear forwards;
+}
+@keyframes event-countdown-shrink {
+	from { width: 100%; }
+	to   { width: 0%; }
+}
+</style>
+
+<!-- Club bottom sheet -->
+<BottomSheet open={!!selectedEntity} onclose={() => { selectedEntity = null; clubMembers = []; }}>
 	{#if selectedEntity}
-		{#if selectedEntity.type === 'events'}
-			<!-- Event card -->
-			{#if selectedEntity.bannerUrl}
-				<div class="relative mb-3 overflow-hidden rounded-[20px]" style="height: 179px;">
-					<img src={selectedEntity.bannerUrl} alt={selectedEntity.name} class="h-full w-full object-cover" />
-					<div class="absolute inset-0" style="background: linear-gradient(180deg, rgba(0,0,0,0.3) 0%, rgba(0,0,0,0) 100%);"></div>
+		<!-- Club header -->
+		<div class="mb-4 flex items-start gap-4">
+			{#if selectedEntity.logoUrl}
+				<img src={selectedEntity.logoUrl} alt={selectedEntity.name} class="h-[80px] w-[80px] flex-shrink-0 rounded-full object-cover" />
+			{:else}
+				<div class="flex h-[80px] w-[80px] flex-shrink-0 items-center justify-center rounded-full" style="background: #696969;">
+					<i class="fi fi-rr-bank text-white" style="font-size: 32px;"></i>
 				</div>
 			{/if}
-			{#if selectedEntity.date}
-				<p class="mu-text-primary mb-1 text-[14px] font-extrabold">{selectedEntity.date}</p>
-			{/if}
-			<p class="mu-text-primary mb-2 text-[18px] font-black">{selectedEntity.name}</p>
-			<div class="mb-1 flex items-center gap-1.5">
-				<i class="fi fi-rr-marker mu-text-primary" style="font-size: 15px;"></i>
-				<span class="mu-text-primary text-[12px] font-medium">{selectedEntity.location}</span>
-			</div>
-			{#if selectedEntity.ticketsUrl}
-				<div class="mb-1 flex items-center gap-1.5">
-					<i class="fi fi-rr-ticket mu-text-primary" style="font-size: 15px;"></i>
-					<span class="mu-text-primary text-[12px] font-medium">{selectedEntity.ticketsUrl}</span>
-				</div>
-			{/if}
-			{#if selectedEntity.description}
-				<p class="mu-text-primary mb-4 text-[12px] font-medium leading-snug">{selectedEntity.description}</p>
-			{/if}
-			<div class="flex items-center gap-2">
-				<button class="flex h-[38px] items-center justify-center rounded-[65px] px-4" style="background: #696969;">
-					<i class="fi fi-rr-bookmark" style="font-size: 20px; color: white;"></i>
-				</button>
-				<button class="flex h-[38px] flex-1 items-center justify-center gap-4 rounded-[65px] px-4" style="background: #696969;">
-					<i class="fi fi-rr-calendar-pen" style="font-size: 20px; color: white;"></i>
-					<span class="text-[14px] font-semibold text-white">Add to calendar</span>
-				</button>
-			</div>
-		{:else}
-			<!-- School / Dancer / Tailor card -->
-			<div class="mb-4 flex items-start gap-4">
-				{#if selectedEntity.logoUrl}
-					<img src={selectedEntity.logoUrl} alt={selectedEntity.name} class="h-[80px] w-[80px] flex-shrink-0 rounded-full object-cover" />
-				{:else}
-					<div class="flex h-[80px] w-[80px] flex-shrink-0 items-center justify-center rounded-full" style="background: #696969;">
-						<i class="fi fi-rr-bank text-white" style="font-size: 32px;"></i>
-					</div>
-				{/if}
-				<div class="flex flex-col gap-1">
-					<p class="mu-text-primary text-[18px] font-black">{selectedEntity.name}</p>
-					<div class="flex items-center gap-1.5">
-						<i class="fi fi-rr-marker mu-text-primary" style="font-size: 15px;"></i>
-						<span class="mu-text-primary text-[12px] font-medium">{selectedEntity.location}</span>
-					</div>
-					{#if selectedEntity.ratingCount}
-						<div class="flex items-center gap-1.5">
-							<span class="mu-text-primary text-[12px] font-medium">★★★★★ ({selectedEntity.ratingCount})</span>
-						</div>
-					{/if}
+			<div class="flex flex-col gap-1">
+				<p class="mu-text-primary text-[18px] font-black">{selectedEntity.name}</p>
+				<div class="flex items-center gap-1.5">
+					<i class="fi fi-rr-marker mu-text-primary" style="font-size: 15px;"></i>
+					<span class="mu-text-primary text-[12px] font-medium">{selectedEntity.location}</span>
 				</div>
 			</div>
+		</div>
 
-			{#if selectedEntity.hours}
-				<p class="mu-text-primary mb-1 text-[12px] font-medium">Open hours: {selectedEntity.hours}</p>
-			{/if}
-			{#if selectedEntity.address}
-				<p class="mu-text-primary mb-3 text-[12px] font-medium">Address: {selectedEntity.address}</p>
-			{/if}
+		{#if selectedEntity.address}
+			<p class="mu-text-primary mb-3 text-[12px] font-medium">{selectedEntity.address}</p>
+		{/if}
 
-			{#if selectedEntity.photos && selectedEntity.photos.length}
-				<div class="mb-4 flex gap-2">
-					{#each selectedEntity.photos as photo}
-						<div class="overflow-hidden rounded-[20px]" style="width: 217px; height: 107px; flex-shrink: 0;">
-							<img src={photo} alt="" class="h-full w-full object-cover" />
-						</div>
+		<!-- Chat button -->
+		<button
+			class="flex h-[38px] w-full items-center justify-center gap-2 rounded-[65px] mb-5"
+			style="background: #696969;"
+			onclick={() => selectedEntity && openChat(selectedEntity)}
+		>
+			<i class="fi fi-rr-comment-heart" style="font-size: 20px; color: white;"></i>
+			<span class="text-[14px] font-semibold text-white">{$t('map.write')}</span>
+		</button>
+
+		<!-- Dancers section -->
+		<div>
+			<p class="mu-text-primary mb-3 text-[13px] font-bold uppercase tracking-wider" style="color: #aeb4bc;">{$t('map.dancers')}</p>
+
+			{#if isLoadingMembers}
+				<div class="flex justify-center py-4">
+					<div class="h-6 w-6 animate-spin rounded-full border-2 border-[#8984da]/30" style="border-top-color: #8984da;"></div>
+				</div>
+			{:else if filteredMembers.length === 0}
+				<p class="py-3 text-center text-[13px] font-medium" style="color: #aeb4bc;">{$t('map.no_dancers')}</p>
+			{:else}
+				<div class="flex gap-3 overflow-x-auto pb-2" style="-webkit-overflow-scrolling: touch;">
+					{#each filteredMembers as member}
+						{@const avatar = member.profile_data?.avatar ?? ''}
+						{@const firstName = member.profile_data?.first_name ?? ''}
+						{@const age = calcAge(member.birth_date)}
+						<button
+							class="flex flex-shrink-0 flex-col items-center gap-1.5"
+							style="width: 72px;"
+							onclick={() => goto(`/profiles/${member.user_id}`)}
+						>
+							{#if avatar}
+								<img src={avatar} alt={firstName} class="h-[72px] w-[72px] rounded-full object-cover" />
+							{:else}
+								<div class="flex h-[72px] w-[72px] items-center justify-center rounded-full" style="background: #dae1eb;">
+									<i class="fi fi-rr-user" style="font-size: 28px; color: #aeb4bc;"></i>
+								</div>
+							{/if}
+							<p class="mu-text-primary w-full truncate text-center text-[12px] font-semibold">{firstName || '—'}</p>
+							{#if age !== null}
+								<p class="text-[11px] font-medium" style="color: #aeb4bc;">{age} р.</p>
+							{/if}
+						</button>
 					{/each}
 				</div>
 			{/if}
-
-			<div class="flex items-center gap-2">
-				<button class="flex h-[38px] items-center justify-center rounded-[65px] px-4" style="background: #696969;">
-					<i class="fi {selectedEntity.type === 'dancers' ? 'fi-rr-heart' : 'fi-rr-bookmark'}" style="font-size: 20px; color: white;"></i>
-				</button>
-				<button class="flex h-[38px] flex-1 items-center justify-center rounded-[65px] px-6" style="background: #696969;">
-					<span class="text-[14px] font-semibold text-white">View Profile</span>
-				</button>
-				<button
-					class="flex h-[38px] items-center gap-4 rounded-[65px]"
-					style="background: #696969; padding: 0 24px 0 16px;"
-					onclick={() => selectedEntity && openChat(selectedEntity)}
-				>
-					<i class="fi fi-rr-comment-heart" style="font-size: 20px; color: white;"></i>
-					<span class="text-[14px] font-semibold text-white">Написати</span>
-				</button>
-			</div>
-		{/if}
+		</div>
 	{/if}
 </BottomSheet>
 
@@ -434,7 +515,7 @@
 <FilterSheet
 	open={showFilter}
 	onclose={() => (showFilter = false)}
-	onclear={() => filterStore.clear()}
-	onapply={(f) => filterStore.apply(f)}
+	onclear={() => { filterStore.clear(); handleApplyFilters(); }}
+	onapply={(f) => { filterStore.apply(f); handleApplyFilters(); }}
 	initialFilters={filterStore.filters}
 />

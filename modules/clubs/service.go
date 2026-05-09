@@ -3,6 +3,7 @@ package clubs
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"regexp"
 	"strings"
 
@@ -24,10 +25,43 @@ func NewClubService(db *pgxpool.Pool) *ClubService {
 
 var slugReplacer = regexp.MustCompile(`[^a-z0-9]+`)
 
+// cyrillicTable maps Cyrillic runes (lowercase) to Latin equivalents.
+var cyrillicTable = map[rune]string{
+	'а': "a", 'б': "b", 'в': "v", 'г': "h", 'ґ': "g", 'д': "d",
+	'е': "e", 'є': "ie", 'ж': "zh", 'з': "z", 'и': "y", 'і': "i",
+	'ї': "i", 'й': "i", 'к': "k", 'л': "l", 'м': "m", 'н': "n",
+	'о': "o", 'п': "p", 'р': "r", 'с': "s", 'т': "t", 'у': "u",
+	'ф': "f", 'х': "kh", 'ц': "ts", 'ч': "ch", 'ш': "sh", 'щ': "shch",
+	'ь': "", 'ю': "iu", 'я': "ia", 'ё': "io", 'э': "e", 'ъ': "",
+	'ы': "y",
+}
+
+func transliterate(s string) string {
+	var b strings.Builder
+	for _, r := range strings.ToLower(s) {
+		if latin, ok := cyrillicTable[r]; ok {
+			b.WriteString(latin)
+		} else {
+			b.WriteRune(r)
+		}
+	}
+	return b.String()
+}
+
 func generateSlug(name string) string {
-	s := strings.ToLower(name)
+	s := transliterate(name)
+	s = strings.ToLower(s)
 	s = slugReplacer.ReplaceAllString(s, "-")
 	s = strings.Trim(s, "-")
+	if s == "" {
+		// Defensive: random suffix when the name is entirely non-transliterable
+		const chars = "abcdefghijklmnopqrstuvwxyz0123456789"
+		b := make([]byte, 6)
+		for i := range b {
+			b[i] = chars[rand.Intn(len(chars))]
+		}
+		s = "club-" + string(b)
+	}
 	return s
 }
 
@@ -44,8 +78,27 @@ type CreateClubParams struct {
 	IsVerified  bool
 }
 
+func (s *ClubService) uniqueSlug(ctx context.Context, base string) string {
+	slug := base
+	for i := 2; i <= 50; i++ {
+		_, err := s.Queries.GetClubBySlug(ctx, slug)
+		if err != nil {
+			// Not found — slug is available
+			return slug
+		}
+		slug = fmt.Sprintf("%s-%d", base, i)
+	}
+	// Last resort: append random suffix
+	const chars = "abcdefghijklmnopqrstuvwxyz0123456789"
+	b := make([]byte, 4)
+	for i := range b {
+		b[i] = chars[rand.Intn(len(chars))]
+	}
+	return base + "-" + string(b)
+}
+
 func (s *ClubService) CreateClub(ctx context.Context, p CreateClubParams) (gen.Club, error) {
-	slug := generateSlug(p.Name)
+	slug := s.uniqueSlug(ctx, generateSlug(p.Name))
 
 	return s.Queries.CreateClub(ctx, gen.CreateClubParams{
 		Name:        p.Name,
@@ -71,10 +124,11 @@ func (s *ClubService) GetClubByID(ctx context.Context, id pgtype.UUID) (gen.Club
 	return s.Queries.GetClubByID(ctx, id)
 }
 
-func (s *ClubService) ListClubs(ctx context.Context, country, city string, limit, offset int32) ([]gen.Club, error) {
+func (s *ClubService) ListClubs(ctx context.Context, country, city, q string, limit, offset int32) ([]gen.Club, error) {
 	return s.Queries.ListClubs(ctx, gen.ListClubsParams{
 		Country:   country,
 		City:      city,
+		Q:         q,
 		LimitVal:  limit,
 		OffsetVal: offset,
 	})

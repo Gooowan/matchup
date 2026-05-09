@@ -7,6 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	clubsgen "github.com/Gooowan/matchup/modules/clubs/gen"
 	"github.com/Gooowan/matchup/modules/core/logging"
 	"github.com/Gooowan/matchup/modules/core/types"
 	"github.com/Gooowan/matchup/modules/core/utils"
@@ -46,20 +47,21 @@ func (c *RecommendationController) CreateOrUpdateProfile(ctx *gin.Context) {
 	}
 
 	var req struct {
-		DanceStyles     []string `json:"dance_styles"`
-		Latitude        float64  `json:"latitude"`
-		Longitude       float64  `json:"longitude"`
-		Visible         *bool    `json:"visible"`
-		Gender          string   `json:"gender"`
-		BirthDate       string   `json:"birth_date"`
-		HeightCm        *int16   `json:"height_cm"`
-		Goal            string   `json:"goal"`
-		Program         string   `json:"program"`
-		Categories      []string `json:"categories"`
-		Country         string   `json:"country"`
-		City            string   `json:"city"`
-		ReadyToRelocate *bool    `json:"ready_to_relocate"`
-		ReadyToFinance  string   `json:"ready_to_finance"`
+		DanceStyles    []string `json:"dance_styles"`
+		Latitude       float64  `json:"latitude"`
+		Longitude      float64  `json:"longitude"`
+		Visible        *bool    `json:"visible"`
+		Gender         string   `json:"gender"`
+		BirthDate      string   `json:"birth_date"`
+		HeightCm       *int16   `json:"height_cm"`
+		Goal           string   `json:"goal"`
+		Program        string   `json:"program"`
+		Categories     []string `json:"categories"`
+		Country        string   `json:"country"`
+		City           string   `json:"city"`
+		PrimaryClubID  *string  `json:"primary_club_id"`
+		ReadyToRelocate *bool   `json:"ready_to_relocate"`
+		ReadyToFinance  string  `json:"ready_to_finance"`
 		// Non-filterable fields stored in metadata JSONB
 		Bio         string `json:"bio"`
 		AccountType string `json:"account_type"`
@@ -96,21 +98,35 @@ func (c *RecommendationController) CreateOrUpdateProfile(ctx *gin.Context) {
 		req.DanceStyles = []string{}
 	}
 
+	// If primary_club_id is provided, derive city/country from the club.
+	var resolvedPrimaryClubID pgtype.UUID
+	if req.PrimaryClubID != nil && *req.PrimaryClubID != "" {
+		if clubID, err := utils.StringToUUID(*req.PrimaryClubID); err == nil {
+			clubQueries := clubsgen.New(c.svc.DB)
+			if club, err := clubQueries.GetClubByID(ctx.Request.Context(), clubID); err == nil {
+				req.Country = club.Country
+				req.City = club.City
+				resolvedPrimaryClubID = clubID
+			}
+		}
+	}
+
 	existing, err := c.svc.Queries.GetProfileByUserID(ctx.Request.Context(), user.ID)
 	if err != nil {
 		// Create
 		params := gen.CreateProfileParams{
-			UserID:      user.ID,
-			DanceStyles: req.DanceStyles,
-			Latitude:    pgtype.Float8{Float64: req.Latitude, Valid: req.Latitude != 0},
-			Longitude:   pgtype.Float8{Float64: req.Longitude, Valid: req.Longitude != 0},
-			Visible:     visible,
-			Gender:      req.Gender,
-			Goal:        orDefault(req.Goal, "hobby"),
-			Program:     orDefault(req.Program, "standard"),
-			Categories:  req.Categories,
-			Metadata:    types.JSONB{},
-			Data:        types.JSONB{},
+			UserID:        user.ID,
+			DanceStyles:   req.DanceStyles,
+			Latitude:      pgtype.Float8{Float64: req.Latitude, Valid: req.Latitude != 0},
+			Longitude:     pgtype.Float8{Float64: req.Longitude, Valid: req.Longitude != 0},
+			Visible:       visible,
+			Gender:        req.Gender,
+			Goal:          orDefault(req.Goal, "hobby"),
+			Program:       orDefault(req.Program, "standard"),
+			Categories:    req.Categories,
+			PrimaryClubID: resolvedPrimaryClubID,
+			Metadata:      types.JSONB{},
+			Data:          types.JSONB{},
 		}
 		if req.BirthDate != "" {
 			if t, err := time.Parse("2006-01-02", req.BirthDate); err == nil {
@@ -181,18 +197,25 @@ func (c *RecommendationController) CreateOrUpdateProfile(ctx *gin.Context) {
 		metadata["role"] = req.Role
 	}
 
+	// Keep existing primary_club_id if not explicitly updated.
+	primaryClubID := resolvedPrimaryClubID
+	if !primaryClubID.Valid && req.PrimaryClubID == nil {
+		primaryClubID = existing.PrimaryClubID
+	}
+
 	params := gen.UpdateProfileParams{
-		UserID:      user.ID,
-		DanceStyles: styles,
-		Latitude:    lat,
-		Longitude:   lon,
-		Visible:     visible,
-		Gender:      orDefault(req.Gender, existing.Gender),
-		Goal:        orDefault(req.Goal, existing.Goal),
-		Program:     orDefault(req.Program, existing.Program),
-		Categories:  func() []string { if categoriesProvided { return req.Categories }; return existing.Categories }(),
-		Metadata:    metadata,
-		Data:        existing.Data,
+		UserID:        user.ID,
+		DanceStyles:   styles,
+		Latitude:      lat,
+		Longitude:     lon,
+		Visible:       visible,
+		Gender:        orDefault(req.Gender, existing.Gender),
+		Goal:          orDefault(req.Goal, existing.Goal),
+		Program:       orDefault(req.Program, existing.Program),
+		Categories:    func() []string { if categoriesProvided { return req.Categories }; return existing.Categories }(),
+		PrimaryClubID: primaryClubID,
+		Metadata:      metadata,
+		Data:          existing.Data,
 	}
 	if req.BirthDate != "" {
 		if t, err := time.Parse("2006-01-02", req.BirthDate); err == nil {

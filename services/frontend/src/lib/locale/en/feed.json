@@ -1,0 +1,20 @@
+{
+  "empty_title": "No matches yet",
+  "empty_subtitle": "Try adjusting your filters",
+  "filter": "Filter",
+  "match_title": "You matched!",
+  "match_you_and": "You and {name} like each other.",
+  "match_first_move": "Why not make the first move?",
+  "match_subtitle": "You liked each other",
+  "match_chat": "Chat now",
+  "match_continue": "Keep going",
+  "action_report": "Report",
+  "action_hide": "Hide",
+  "refresh": "Refresh",
+  "dancer_fallback": "Dancer",
+  "no_profiles_title": "No more dancers",
+  "no_profiles_subtitle": "Come back later — new profiles are added regularly.",
+  "toast_report_sent": "Report sent",
+  "toast_error": "Error. Please try again.",
+  "action_more_options": "More options"
+}

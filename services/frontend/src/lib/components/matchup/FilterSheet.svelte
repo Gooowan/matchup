@@ -1,5 +1,6 @@
 <script lang="ts">
 	import BottomSheet from './BottomSheet.svelte';
+	import { t } from '$lib/locale';
 
 	export interface FilterState {
 		gender?: string;
@@ -50,21 +51,21 @@
 		wantsPartnerToFinance = i.wantsPartnerToFinance ?? '';
 	});
 
-	const FINANCE_OPTIONS: { value: string; label: string }[] = [
-		{ value: 'no', label: 'Ні' },
-		{ value: 'yes', label: 'Так' },
-		{ value: 'partial', label: 'Частково' }
-	];
+	const FINANCE_OPTIONS = $derived<{ value: string; label: string }[]>([
+		{ value: 'no', label: $t('filters.finance_no') },
+		{ value: 'yes', label: $t('filters.finance_yes') },
+		{ value: 'partial', label: $t('filters.finance_partial') }
+	]);
 	const UKRAINE_CITIES = ['Київ', 'Харків', 'Одеса', 'Дніпро', 'Запоріжжя', 'Львів', 'Кривий Ріг', 'Миколаїв', 'Вінниця', 'Херсон', 'Полтава', 'Чернігів', 'Черкаси', 'Суми', 'Житомир', 'Хмельницький', 'Рівне', 'Тернопіль', 'Луцьк', 'Ужгород'];
-	const CATEGORIES_UA = [
-		{ value: 'kids', label: 'Діти' },
-		{ value: 'juvenile1', label: 'Ювенали 1' },
-		{ value: 'juvenile2', label: 'Ювенали 2' },
-		{ value: 'junior1', label: 'Юніори 1' },
-		{ value: 'junior2', label: 'Юніори 2' },
-		{ value: 'youth', label: 'Молодь' },
-		{ value: 'adult', label: 'Дорослі' }
-	];
+	const CATEGORIES_UA = $derived([
+		{ value: 'kids', label: $t('filters.category_kids') },
+		{ value: 'juvenile1', label: $t('filters.category_juvenile1') },
+		{ value: 'juvenile2', label: $t('filters.category_juvenile2') },
+		{ value: 'junior1', label: $t('filters.category_junior1') },
+		{ value: 'junior2', label: $t('filters.category_junior2') },
+		{ value: 'youth', label: $t('filters.category_youth') },
+		{ value: 'adult', label: $t('filters.category_adult') }
+	]);
 
 	function toggleCategory(v: string) {
 		categories = categories.includes(v) ? categories.filter((x) => x !== v) : [...categories, v];
@@ -104,17 +105,17 @@
 <BottomSheet {open} {onclose}>
 	<!-- Header -->
 	<div class="flex items-center justify-between pb-4">
-		<button onclick={onclose} class="mu-text-primary text-[14px] font-medium">Скасувати</button>
-		<span class="mu-text-primary text-[16px] font-bold">Фільтри</span>
-		<button onclick={handleClear} class="text-[14px] font-medium" style="color: #b1b1b1;">Скинути</button>
+		<button onclick={onclose} class="mu-text-primary text-[14px] font-medium">{$t('filters.cancel')}</button>
+		<span class="mu-text-primary text-[16px] font-bold">{$t('filters.title')}</span>
+		<button onclick={handleClear} class="text-[14px] font-medium" style="color: #b1b1b1;">{$t('filters.reset')}</button>
 	</div>
 
 	<div class="flex flex-col gap-4 pb-6">
 		<!-- Gender -->
 		<div style="display: flex; flex-direction: column; gap: 10px;">
-			<label class="text-[11px] font-semibold uppercase tracking-wider" style="color: #aeb4bc;">ШУКАЮ</label>
+			<label class="text-[11px] font-semibold uppercase tracking-wider" style="color: #aeb4bc;">{$t('filters.section_gender')}</label>
 			<div class="flex gap-2">
-				{#each [{ value: 'male', label: 'Чоловік' }, { value: 'female', label: 'Жінка' }] as g}
+				{#each [{ value: 'male', label: $t('filters.male') }, { value: 'female', label: $t('filters.female') }] as g}
 					<button
 						onclick={() => (gender = gender === g.value ? '' : g.value)}
 						class="flex-1 rounded-[50px] py-2.5 text-[14px] font-semibold transition-all"
@@ -126,11 +127,11 @@
 
 		<!-- Age -->
 		<div style="display: flex; flex-direction: column; gap: 10px;">
-			<label class="text-[11px] font-semibold uppercase tracking-wider" style="color: #aeb4bc;">ВІК ПАРТНЕРА</label>
+			<label class="text-[11px] font-semibold uppercase tracking-wider" style="color: #aeb4bc;">{$t('filters.section_age')}</label>
 			<div class="flex items-center gap-3">
 				<input
 					type="number"
-					placeholder="Від"
+					placeholder={$t('filters.from')}
 					bind:value={ageMin}
 					min="4" max="80"
 					class="flex-1 rounded-[12px] border px-3 py-2 text-[14px] font-semibold outline-none text-center"
@@ -139,7 +140,7 @@
 				<span class="text-[14px] font-medium" style="color: #aeb4bc;">—</span>
 				<input
 					type="number"
-					placeholder="До"
+					placeholder={$t('filters.to')}
 					bind:value={ageMax}
 					min="4" max="80"
 					class="flex-1 rounded-[12px] border px-3 py-2 text-[14px] font-semibold outline-none text-center"
@@ -150,11 +151,11 @@
 
 		<!-- Height -->
 		<div style="display: flex; flex-direction: column; gap: 10px;">
-			<label class="text-[11px] font-semibold uppercase tracking-wider" style="color: #aeb4bc;">ЗРІСТ ПАРТНЕРА (СМ)</label>
+			<label class="text-[11px] font-semibold uppercase tracking-wider" style="color: #aeb4bc;">{$t('filters.section_height')}</label>
 			<div class="flex items-center gap-3">
 				<input
 					type="number"
-					placeholder="Від"
+					placeholder={$t('filters.from')}
 					bind:value={heightMin}
 					min="100" max="220"
 					class="flex-1 rounded-[12px] border px-3 py-2 text-[14px] font-semibold outline-none text-center"
@@ -163,7 +164,7 @@
 				<span class="text-[14px] font-medium" style="color: #aeb4bc;">—</span>
 				<input
 					type="number"
-					placeholder="До"
+					placeholder={$t('filters.to')}
 					bind:value={heightMax}
 					min="100" max="220"
 					class="flex-1 rounded-[12px] border px-3 py-2 text-[14px] font-semibold outline-none text-center"
@@ -174,9 +175,9 @@
 
 		<!-- Goal -->
 		<div style="display: flex; flex-direction: column; gap: 10px;">
-			<label class="text-[11px] font-semibold uppercase tracking-wider" style="color: #aeb4bc;">БАЖАНА ЦІЛЬ</label>
+			<label class="text-[11px] font-semibold uppercase tracking-wider" style="color: #aeb4bc;">{$t('filters.section_goal')}</label>
 			<div class="flex gap-2">
-				{#each [{ value: 'hobby', label: 'Хобі' }, { value: 'professional', label: 'Профі' }] as g}
+				{#each [{ value: 'hobby', label: $t('filters.goal_hobby') }, { value: 'professional', label: $t('filters.goal_professional') }] as g}
 					<button
 						onclick={() => (goal = goal === g.value ? '' : g.value)}
 						class="flex-1 rounded-[50px] py-2.5 text-[14px] font-semibold transition-all"
@@ -188,9 +189,9 @@
 
 		<!-- Program -->
 		<div style="display: flex; flex-direction: column; gap: 10px;">
-			<label class="text-[11px] font-semibold uppercase tracking-wider" style="color: #aeb4bc;">ПРОГРАМА</label>
+			<label class="text-[11px] font-semibold uppercase tracking-wider" style="color: #aeb4bc;">{$t('filters.section_program')}</label>
 			<div class="flex gap-2">
-				{#each [{ value: 'standard', label: 'Стандарт' }, { value: 'latina', label: 'Латина' }, { value: 'both', label: 'Обидва' }] as p}
+				{#each [{ value: 'standard', label: $t('filters.program_standard') }, { value: 'latina', label: $t('filters.program_latina') }, { value: 'both', label: $t('filters.program_both') }] as p}
 					<button
 						onclick={() => (program = program === p.value ? '' : p.value)}
 						class="flex-1 rounded-[50px] py-2.5 text-[13px] font-semibold transition-all"
@@ -202,7 +203,7 @@
 
 		<!-- Categories -->
 		<div style="display: flex; flex-direction: column; gap: 10px;">
-			<label class="text-[11px] font-semibold uppercase tracking-wider" style="color: #aeb4bc;">КАТЕГОРІЯ</label>
+			<label class="text-[11px] font-semibold uppercase tracking-wider" style="color: #aeb4bc;">{$t('filters.section_categories')}</label>
 			<div class="flex flex-wrap gap-2">
 				{#each CATEGORIES_UA as cat}
 					<button
@@ -216,13 +217,13 @@
 
 		<!-- City -->
 		<div style="display: flex; flex-direction: column; gap: 10px;">
-			<label class="text-[11px] font-semibold uppercase tracking-wider" style="color: #aeb4bc;">МІСТО ПОШУКУ</label>
+			<label class="text-[11px] font-semibold uppercase tracking-wider" style="color: #aeb4bc;">{$t('filters.section_city')}</label>
 			<select
 				bind:value={city}
 				class="w-full bg-transparent text-[16px] font-semibold outline-none"
 				style="color: {city ? '#171717' : '#aeb4bc'}; -webkit-appearance: none; appearance: none;"
 			>
-				<option value="">Будь-яке місто</option>
+				<option value="">{$t('filters.any_city')}</option>
 				{#each UKRAINE_CITIES as c}
 					<option value={c}>{c}</option>
 				{/each}
@@ -231,7 +232,7 @@
 
 		<!-- Partner finance -->
 		<div style="display: flex; flex-direction: column; gap: 10px;">
-			<label class="text-[11px] font-semibold uppercase tracking-wider" style="color: #aeb4bc;">ПАРТНЕР ГОТОВИЙ ФІНАНСУВАТИ</label>
+			<label class="text-[11px] font-semibold uppercase tracking-wider" style="color: #aeb4bc;">{$t('filters.section_finance')}</label>
 			<div class="flex gap-2">
 				{#each FINANCE_OPTIONS as opt}
 					<button
@@ -250,6 +251,6 @@
 		class="w-full py-3 text-[14px] font-semibold text-white"
 		style="border-radius: 50px; background: #8984da;"
 	>
-		Застосувати
+		{$t('filters.apply')}
 	</button>
 </BottomSheet>

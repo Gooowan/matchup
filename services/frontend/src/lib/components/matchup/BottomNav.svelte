@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { page } from '$app/state';
 	import { unreadStore } from '$stores/unread.svelte';
+	import { t } from '$lib/locale';
 
 	type Tab = 'map' | 'marketplace' | 'feed' | 'chats' | 'settings';
 
@@ -37,7 +38,7 @@
 		<!-- Icon row, centered in the 60px container -->
 		<div class="absolute inset-0 flex items-center justify-between px-4">
 			<!-- Map -->
-			<a href="/map" class="flex items-center justify-center" aria-label="Map">
+			<a href="/map" class="flex items-center justify-center" aria-label={$t('nav.map')}>
 				<i
 					class="fi {isActive('map') ? 'fi-sr-marker' : 'fi-rr-marker'} leading-none"
 					style="font-size: 20px; color: {isActive('map') ? '#8984da' : 'white'};"
@@ -45,9 +46,9 @@
 			</a>
 
 			<!-- Marketplace -->
-			<a href="/marketplace" class="flex items-center justify-center" aria-label="Marketplace">
+			<a href="/marketplace" class="flex items-center justify-center" aria-label={$t('nav.marketplace')}>
 				<i
-					class="fi fi-rr-shopping-bag leading-none"
+					class="fi {isActive('marketplace') ? 'fi-sr-shopping-bag' : 'fi-rr-shopping-bag'} leading-none"
 					style="font-size: 20px; color: {isActive('marketplace') ? '#8984da' : 'white'};"
 				></i>
 			</a>
@@ -57,13 +58,13 @@
 				href="/feed"
 				class="relative flex h-[60px] w-[60px] flex-shrink-0 items-center justify-center rounded-full"
 				style="background: linear-gradient(135deg, #8984da 0%, #b4b0e8 100%); box-shadow: 0 2px 16px rgba(137,132,218,0.5);"
-				aria-label="MatchUp"
+				aria-label={$t('nav.matchup')}
 			>
 				<img src="/match_icon.svg" alt="MatchUp" class="h-7 w-7" />
 			</a>
 
 			<!-- Chats (with unread badge) -->
-			<a href="/chats" class="relative flex items-center justify-center" aria-label="Chats">
+			<a href="/chats" class="relative flex items-center justify-center" aria-label={$t('nav.chats')}>
 				<i
 					class="fi {isActive('chats') ? 'fi-sr-comment-heart' : 'fi-rr-comment-heart'} leading-none"
 					style="font-size: 20px; color: {isActive('chats') ? '#8984da' : 'white'};"
@@ -78,9 +79,9 @@
 			</a>
 
 			<!-- Settings -->
-			<a href="/settings" class="flex items-center justify-center" aria-label="Settings">
+			<a href="/settings" class="flex items-center justify-center" aria-label={$t('nav.settings')}>
 				<i
-					class="fi fi-rr-settings leading-none"
+					class="fi {isActive('settings') ? 'fi-sr-settings' : 'fi-rr-settings'} leading-none"
 					style="font-size: 20px; color: {isActive('settings') ? '#8984da' : 'white'};"
 				></i>
 			</a>

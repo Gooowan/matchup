@@ -17,6 +17,7 @@ import (
 
 	"github.com/Gooowan/matchup/modules/chat"
 	"github.com/Gooowan/matchup/modules/clubs"
+	"github.com/Gooowan/matchup/modules/core/geocoding"
 	"github.com/Gooowan/matchup/modules/push"
 	"github.com/Gooowan/matchup/modules/core/db"
 	"github.com/Gooowan/matchup/modules/core/logging"
@@ -146,6 +147,17 @@ func main() {
 
 	moderationSvc := moderation.NewModerationService(dbpool)
 	recommendationSvc := recommendation.NewRecommendationService(dbpool)
+	geocoder := geocoding.NewNominatimGeocoder(
+		os.Getenv("NOMINATIM_URL"),
+		func() string {
+			if ua := os.Getenv("MATCHUP_USER_AGENT"); ua != "" {
+				return ua
+			}
+			return "matchup-server/1.0 (admin@matchup.local)"
+		}(),
+	)
+	defer geocoder.Close()
+
 	clubSvc := clubs.NewClubService(dbpool)
 	chatSvc := chat.NewChatService(dbpool, moderationSvc)
 	feedSvc := feed.NewFeedService(dbpool, chatSvc, moderationSvc, recommendationSvc, clubSvc)
@@ -167,7 +179,7 @@ func main() {
 	mapCtrl := mapmod.NewMapController(mapSvc)
 	moderationCtrl := moderation.NewModerationController(moderationSvc, coreService)
 	subscriptionCtrl := subscriptions.NewSubscriptionController(subscriptionSvc)
-	clubCtrl := clubs.NewClubController(clubSvc, chatSvc)
+	clubCtrl := clubs.NewClubController(clubSvc, chatSvc, geocoder)
 
 	r := gin.New()
 	r.Use(gin.Recovery())

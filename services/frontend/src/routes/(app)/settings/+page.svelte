@@ -52,9 +52,9 @@
 					<i class="fi fi-rr-user" style="font-size: 28px; color: #696969;"></i>
 				{/if}
 			</div>
-			<div class="flex flex-col gap-0.5">
-				<span class="mu-text-primary text-[16px] font-bold">{displayName}</span>
-				<span class="mu-text-secondary text-[13px] font-medium">{user?.email ?? ''}</span>
+			<div class="flex min-w-0 flex-col gap-0.5">
+				<span class="mu-text-primary truncate text-[16px] font-bold">{displayName}</span>
+				<span class="mu-text-secondary truncate text-[13px] font-medium">{user?.email ?? ''}</span>
 			</div>
 		</div>
 
@@ -102,6 +102,17 @@
 					<div class="flex items-center gap-3">
 						<i class="fi fi-rr-user-pen mu-text-primary" style="font-size: 18px;"></i>
 						<span class="mu-text-primary text-[14px] font-semibold">Редагувати профіль</span>
+					</div>
+					<i class="fi fi-rr-angle-right" style="font-size: 14px; color: #aeb4bc;"></i>
+				</a>
+				<a
+					href="/settings/clubs"
+					class="mu-divider flex items-center justify-between px-4 py-3"
+					style="border-top-width: 1px; border-top-style: solid;"
+				>
+					<div class="flex items-center gap-3">
+						<i class="fi fi-rr-bank mu-text-primary" style="font-size: 18px;"></i>
+						<span class="mu-text-primary text-[14px] font-semibold">Мої клуби</span>
 					</div>
 					<i class="fi fi-rr-angle-right" style="font-size: 14px; color: #aeb4bc;"></i>
 				</a>

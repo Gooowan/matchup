@@ -39,18 +39,21 @@ func (p *Provider) GetCandidates(ctx context.Context, params rec.FeedParams) ([]
 		}
 
 		rows, err := p.queries.GetSameClubProfiles(ctx, gen.GetSameClubProfilesParams{
-			ClubIds:             clubIDs,
-			UserID:              params.UserID,
-			ExcludeIds:          excludeIDs,
-			PreferredGender:     filterParams.preferredGender,
-			AgeMin:              filterParams.ageMin,
-			AgeMax:              filterParams.ageMax,
-			HeightMin:           filterParams.heightMin,
-			HeightMax:           filterParams.heightMax,
-			PreferredGoal:       filterParams.preferredGoal,
-			PreferredProgram:    filterParams.preferredProgram,
-			PreferredCategories: filterParams.preferredCategories,
-			LimitVal:            params.Limit,
+			ClubIds:               clubIDs,
+			UserID:                params.UserID,
+			ExcludeIds:            excludeIDs,
+			PreferredGender:       filterParams.preferredGender,
+			AgeMin:                filterParams.ageMin,
+			AgeMax:                filterParams.ageMax,
+			HeightMin:             filterParams.heightMin,
+			HeightMax:             filterParams.heightMax,
+			PreferredGoal:         filterParams.preferredGoal,
+			PreferredProgram:      filterParams.preferredProgram,
+			PreferredCategories:   filterParams.preferredCategories,
+			PreferredCountry:      filterParams.preferredCountry,
+			PreferredCity:         filterParams.preferredCity,
+			WantsPartnerToFinance: filterParams.wantsPartnerToFinance,
+			LimitVal:              params.Limit,
 		})
 		if err == nil {
 			for _, row := range rows {
@@ -84,20 +87,23 @@ func (p *Provider) GetCandidates(ctx context.Context, params rec.FeedParams) ([]
 
 		remaining := params.Limit - int32(len(results))
 		rows, err := p.queries.GetNearbyClubProfiles(ctx, gen.GetNearbyClubProfilesParams{
-			RefLatitude:         refLat,
-			RefLongitude:        refLng,
-			ExcludeClubIds:      userClubIDs,
-			UserID:              params.UserID,
-			ExcludeIds:          excludeIDs,
-			PreferredGender:     filterParams.preferredGender,
-			AgeMin:              filterParams.ageMin,
-			AgeMax:              filterParams.ageMax,
-			HeightMin:           filterParams.heightMin,
-			HeightMax:           filterParams.heightMax,
-			PreferredGoal:       filterParams.preferredGoal,
-			PreferredProgram:    filterParams.preferredProgram,
-			PreferredCategories: filterParams.preferredCategories,
-			LimitVal:            remaining * 3, // over-fetch for dedup
+			RefLatitude:           refLat,
+			RefLongitude:          refLng,
+			ExcludeClubIds:        userClubIDs,
+			UserID:                params.UserID,
+			ExcludeIds:            excludeIDs,
+			PreferredGender:       filterParams.preferredGender,
+			AgeMin:                filterParams.ageMin,
+			AgeMax:                filterParams.ageMax,
+			HeightMin:             filterParams.heightMin,
+			HeightMax:             filterParams.heightMax,
+			PreferredGoal:         filterParams.preferredGoal,
+			PreferredProgram:      filterParams.preferredProgram,
+			PreferredCategories:   filterParams.preferredCategories,
+			PreferredCountry:      filterParams.preferredCountry,
+			PreferredCity:         filterParams.preferredCity,
+			WantsPartnerToFinance: filterParams.wantsPartnerToFinance,
+			LimitVal:              remaining * 3, // over-fetch for dedup
 		})
 		if err == nil {
 			// Merge interleaved by club distance
@@ -137,18 +143,20 @@ func (p *Provider) GetCandidates(ctx context.Context, params rec.FeedParams) ([]
 	if params.Country != "" {
 		remaining := params.Limit - int32(len(results))
 		rows, err := p.queries.GetCountryWideProfiles(ctx, gen.GetCountryWideProfilesParams{
-			Country:             pgtype.Text{String: params.Country, Valid: true},
-			UserID:              params.UserID,
-			ExcludeIds:          excludeIDs,
-			PreferredGender:     filterParams.preferredGender,
-			AgeMin:              filterParams.ageMin,
-			AgeMax:              filterParams.ageMax,
-			HeightMin:           filterParams.heightMin,
-			HeightMax:           filterParams.heightMax,
-			PreferredGoal:       filterParams.preferredGoal,
-			PreferredProgram:    filterParams.preferredProgram,
-			PreferredCategories: filterParams.preferredCategories,
-			LimitVal:            remaining * 2,
+			Country:               pgtype.Text{String: params.Country, Valid: true},
+			UserID:                params.UserID,
+			ExcludeIds:            excludeIDs,
+			PreferredGender:       filterParams.preferredGender,
+			AgeMin:                filterParams.ageMin,
+			AgeMax:                filterParams.ageMax,
+			HeightMin:             filterParams.heightMin,
+			HeightMax:             filterParams.heightMax,
+			PreferredGoal:         filterParams.preferredGoal,
+			PreferredProgram:      filterParams.preferredProgram,
+			PreferredCategories:   filterParams.preferredCategories,
+			PreferredCity:         filterParams.preferredCity,
+			WantsPartnerToFinance: filterParams.wantsPartnerToFinance,
+			LimitVal:              remaining * 2,
 		})
 		if err == nil {
 			for _, row := range rows {
@@ -185,14 +193,17 @@ func clubCentroid(clubs []rec.UserClub) (lat, lng float64) {
 
 // sqlcFilterParams holds the generated pgtype values for sqlc calls.
 type sqlcFilterParams struct {
-	preferredGender     pgtype.Text
-	ageMin              pgtype.Int2
-	ageMax              pgtype.Int2
-	heightMin           pgtype.Int2
-	heightMax           pgtype.Int2
-	preferredGoal       pgtype.Text
-	preferredProgram    pgtype.Text
-	preferredCategories []string
+	preferredGender        pgtype.Text
+	ageMin                 pgtype.Int2
+	ageMax                 pgtype.Int2
+	heightMin              pgtype.Int2
+	heightMax              pgtype.Int2
+	preferredGoal          pgtype.Text
+	preferredProgram       pgtype.Text
+	preferredCategories    []string
+	preferredCountry       pgtype.Text
+	preferredCity          pgtype.Text
+	wantsPartnerToFinance  pgtype.Text
 }
 
 func buildFilterParams(f rec.FilterParams) sqlcFilterParams {
@@ -221,6 +232,15 @@ func buildFilterParams(f rec.FilterParams) sqlcFilterParams {
 	}
 	if len(f.PreferredCategories) > 0 {
 		p.preferredCategories = f.PreferredCategories
+	}
+	if f.PreferredCountry != nil {
+		p.preferredCountry = pgtype.Text{String: *f.PreferredCountry, Valid: true}
+	}
+	if f.PreferredCity != nil {
+		p.preferredCity = pgtype.Text{String: *f.PreferredCity, Valid: true}
+	}
+	if f.WantsPartnerToFinance != nil {
+		p.wantsPartnerToFinance = pgtype.Text{String: *f.WantsPartnerToFinance, Valid: true}
 	}
 
 	return p

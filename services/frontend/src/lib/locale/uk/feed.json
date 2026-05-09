@@ -1,0 +1,20 @@
+{
+  "empty_title": "Поки що немає метчів",
+  "empty_subtitle": "Спробуй змінити фільтри",
+  "filter": "Фільтр",
+  "match_title": "Ви сподобалися!",
+  "match_you_and": "Ти і {name} сподобалися одне одному.",
+  "match_first_move": "Може, зробиш перший крок?",
+  "match_subtitle": "Ви сподобалися одне одному",
+  "match_chat": "Написати",
+  "match_continue": "Продовжити",
+  "action_report": "Поскаржитись",
+  "action_hide": "Приховати",
+  "refresh": "Оновити",
+  "dancer_fallback": "Танцюрист",
+  "no_profiles_title": "Нові знайомства незабаром",
+  "no_profiles_subtitle": "Повертайся пізніше — нові профілі додаються регулярно.",
+  "toast_report_sent": "Скаргу надіслано",
+  "toast_error": "Помилка. Спробуй ще раз.",
+  "action_more_options": "Більше дій"
+}

@@ -10,6 +10,7 @@
 	import { filterStore } from '$stores/filters.svelte';
 	import { captureSwipe, captureMatch } from '$lib/analytics/posthog';
 	import toast from 'svelte-french-toast';
+	import { t } from '$lib/locale';
 
 	interface FeedCandidate {
 		user_id: string;
@@ -56,7 +57,7 @@
 		if (c.height_cm) tags.push(`${c.height_cm} cm`);
 		return {
 			id: c.user_id,
-			name: pd.first_name ?? 'Танцівник',
+			name: pd.first_name ?? $t('feed.dancer_fallback'),
 			age: c.birth_date ? calcAge(c.birth_date) : 0,
 			photoUrl: (pd.avatar as string) ?? '',
 			tags,
@@ -108,6 +109,8 @@
 
 	async function handleLike(id: string) {
 		captureSwipe('LIKE', 'feed');
+		// Capture before removing the card so we have the profile for the match popup
+		const liked = profiles.find((p) => p.id === id) ?? null;
 		removeTopCard();
 		try {
 			const resp = await authFetch('/matchup/swipe', {
@@ -118,7 +121,7 @@
 			if (resp.ok) {
 				const body = await resp.json();
 				if (body.data?.is_mutual_match) {
-					matchedProfile = profiles.find((p) => p.id === id) ?? null;
+					matchedProfile = liked;
 					matchedChatId = body.data?.chat_id ?? null;
 					showMatch = true;
 					captureMatch();
@@ -173,9 +176,9 @@
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ reason: 'inappropriate' })
 			});
-			toast.success('Скаргу надіслано');
+			toast.success($t('feed.toast_report_sent'));
 		} catch {
-			toast.error('Помилка. Спробуй ще раз.');
+			toast.error($t('feed.toast_error'));
 		}
 	}
 </script>
@@ -251,13 +254,13 @@
 					style="background: #8984da;"
 				>Редагувати профіль</a>
 			{:else}
-				<p class="mt-4 text-[20px] font-black text-center" style="color: #7d7d7d;">No Matches for Now</p>
-				<p class="mt-2 text-[14px] font-medium text-center" style="color: #b1b1b1;">You've seen everyone nearby. Try expanding your filters or check back later.</p>
+				<p class="mt-4 text-[20px] font-black text-center" style="color: #7d7d7d;">{$t('feed.empty_title')}</p>
+				<p class="mt-2 text-[14px] font-medium text-center" style="color: #b1b1b1;">{$t('feed.empty_subtitle')}</p>
 				<button
 					onclick={() => loadFeed(true)}
 					class="mt-6 rounded-[50px] px-6 py-2.5 text-[14px] font-semibold text-white"
 					style="background: #8984da;"
-				>Оновити</button>
+				>{$t('feed.refresh')}</button>
 			{/if}
 		</div>
 	{/if}
@@ -275,7 +278,7 @@
 			aria-label="Filter"
 		>
 			<i class="fi fi-rr-settings-sliders" style="font-size: 16px; line-height: 1; color: white;"></i>
-			<span class="text-[13px] font-semibold text-white">Filter</span>
+			<span class="text-[13px] font-semibold text-white">{$t('feed.filter')}</span>
 		</button>
 
 		<div class="flex items-center gap-2">

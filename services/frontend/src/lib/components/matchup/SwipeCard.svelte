@@ -1,5 +1,8 @@
 <script lang="ts">
 	import { spring } from 'svelte/motion';
+	import { t } from '$lib/locale';
+
+	export const STOCK_AVATAR = 'https://images.unsplash.com/photo-1545959570-a94084071b5d?w=800&auto=format';
 
 	export interface DancerProfile {
 		id: string;
@@ -117,11 +120,12 @@
 	<div class="relative h-full w-full overflow-hidden" style="border-radius: {fullScreen ? '0' : '20px'}">
 		<!-- Photo -->
 		<img
-			src={profile.photoUrl}
+			src={profile.photoUrl || STOCK_AVATAR}
 			alt={profile.name}
 			class="absolute inset-0 h-auto w-full object-cover"
 			style="min-height: 100%; object-position: center top;"
 			draggable="false"
+			onerror={(e) => { (e.currentTarget as HTMLImageElement).src = STOCK_AVATAR; }}
 		/>
 
 		<!-- Top gradient -->
@@ -175,15 +179,15 @@
 			class="absolute flex items-center justify-center rounded-full"
 			style="width: 38px; height: 38px; right: 8px; top: 8px;"
 			onclick={(e) => { e.stopPropagation(); onmenu?.(profile.id); }}
-			aria-label="More options"
+			aria-label={$t('feed.action_more_options')}
 		>
 			<i class="fi fi-rr-menu-dots-vertical rotate-90 text-white" style="font-size: 15px; line-height: 1;"></i>
 		</button>
 
 		<!-- Profile info overlay -->
 		<div
-			class="absolute right-0 left-4 flex flex-col"
-			style="bottom: calc(max(env(safe-area-inset-bottom), 8px) + 80px); width: 311px; gap: 24px;"
+			class="absolute right-4 left-4 flex flex-col"
+			style="bottom: calc(max(env(safe-area-inset-bottom), 8px) + 80px); gap: 24px;"
 		>
 			<!-- Name -->
 			<div class="flex items-baseline gap-0">
@@ -231,7 +235,7 @@
 					onclick={() => swipeLeft()}
 				>
 					<i class="fi fi-rr-cross" style="font-size: 15px; line-height: 1; color: #171717;"></i>
-					<span class="text-[12px] font-semibold" style="color: #171717;">Pass</span>
+					<span class="text-[12px] font-semibold" style="color: #171717;">{$t('swipe.pass')}</span>
 				</button>
 
 				<!-- View Profile -->
@@ -240,7 +244,7 @@
 					style="height: 38px;"
 					onclick={() => onviewprofile?.(profile.id)}
 				>
-					<span class="text-[12px] font-semibold" style="color: #171717;">View Profile</span>
+					<span class="text-[12px] font-semibold" style="color: #171717;">{$t('swipe.view_profile')}</span>
 				</button>
 
 				<!-- Like -->
@@ -250,7 +254,7 @@
 					onclick={() => swipeRight()}
 				>
 					<i class="fi fi-rr-heart" style="font-size: 15px; line-height: 1; color: #171717;"></i>
-					<span class="text-[12px] font-semibold" style="color: #171717;">Like</span>
+					<span class="text-[12px] font-semibold" style="color: #171717;">{$t('swipe.like')}</span>
 				</button>
 			</div>
 		</div>

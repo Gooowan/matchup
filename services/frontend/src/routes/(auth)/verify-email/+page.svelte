@@ -42,20 +42,22 @@
 		}
 		isLoading = true;
 		try {
-			const resp = await authFetch('/auth/otp/verify', {
+			const resp = await fetch(`${import.meta.env.VITE_API_URL}/auth/otp/verify`, {
 				method: 'POST',
+				credentials: 'include',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ email, code })
 			});
 			const response = await resp.json();
 			if (resp.ok) {
-				const ok = await authStore.checkAuth();
-				if (ok) {
-					const firstName = authStore.user?.profile_data?.first_name;
-					await goto(firstName ? '/feed' : '/onboarding');
-				} else {
-					await goto('/login');
+				// Cookie is now set by the server; update local auth state from returned user
+				const user = response.data?.user;
+				if (user) {
+					authStore.user = user;
+					authStore.isAuthenticated = true;
 				}
+				const firstName = user?.profile_data?.first_name ?? authStore.user?.profile_data?.first_name;
+				await goto(firstName ? '/feed' : '/onboarding');
 			} else {
 				errorMsg = response.error || 'Невірний код підтвердження';
 			}
@@ -71,16 +73,21 @@
 		errorMsg = '';
 		successMsg = '';
 		try {
-			await authFetch('/auth/otp/send', {
+			const resp = await fetch(`${import.meta.env.VITE_API_URL}/auth/otp/send`, {
 				method: 'POST',
+				credentials: 'include',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify({ email })
 			});
-			successMsg = 'Код надіслано!';
-			setTimeout(() => {
-				successMsg = '';
-			}, 3000);
-		} catch {}
+			if (resp.ok) {
+				successMsg = 'Код надіслано!';
+				setTimeout(() => { successMsg = ''; }, 3000);
+			} else {
+				errorMsg = 'Не вдалося надіслати код. Спробуй ще раз.';
+			}
+		} catch {
+			errorMsg = 'Помилка мережі. Спробуй ще раз.';
+		}
 		isResending = false;
 	}
 </script>

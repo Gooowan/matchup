@@ -26,6 +26,7 @@ type Querier interface {
 	GetSameClubProfiles(ctx context.Context, arg GetSameClubProfilesParams) ([]GetSameClubProfilesRow, error)
 	GetSimilarUsers(ctx context.Context, userID pgtype.UUID) ([]GetSimilarUsersRow, error)
 	InsertLikeLog(ctx context.Context, arg InsertLikeLogParams) error
+	SetProfilePrimaryClub(ctx context.Context, arg SetProfilePrimaryClubParams) error
 	UpdateProfile(ctx context.Context, arg UpdateProfileParams) error
 	UpdateProfileMetadata(ctx context.Context, arg UpdateProfileMetadataParams) error
 	UpsertPreferences(ctx context.Context, arg UpsertPreferencesParams) (UserPreference, error)

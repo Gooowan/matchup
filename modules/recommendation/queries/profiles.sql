@@ -3,13 +3,13 @@ INSERT INTO profiles(
     user_id, dance_styles, latitude, longitude, visible,
     gender, birth_date, height_cm, goal, program, categories,
     country, city, ready_to_relocate, ready_to_finance,
-    metadata, data
+    primary_club_id, metadata, data
 )
 VALUES (
     @user_id, @dance_styles, @latitude, @longitude, @visible,
     @gender, @birth_date, @height_cm, @goal, @program, @categories,
     @country, @city, @ready_to_relocate, @ready_to_finance,
-    @metadata, @data
+    @primary_club_id, @metadata, @data
 )
 RETURNING *;
 
@@ -32,6 +32,7 @@ UPDATE profiles SET
     city              = @city,
     ready_to_relocate = @ready_to_relocate,
     ready_to_finance  = @ready_to_finance,
+    primary_club_id   = @primary_club_id,
     metadata          = @metadata,
     data              = @data,
     updated_at        = CURRENT_TIMESTAMP
@@ -48,10 +49,16 @@ SELECT
     p.user_id, p.dance_styles, p.metadata, p.visible,
     p.gender, p.birth_date, p.height_cm, p.goal, p.program,
     p.categories, p.country, p.city,
-    u.profile_data
+    p.primary_club_id,
+    u.profile_data,
+    c.name AS club_name
 FROM profiles p
 JOIN users u ON u.id = p.user_id
+LEFT JOIN clubs c ON c.id = p.primary_club_id AND c.is_active = true
 WHERE p.user_id = @user_id AND p.visible = true;
+
+-- name: SetProfilePrimaryClub :exec
+UPDATE profiles SET primary_club_id = @primary_club_id, updated_at = now() WHERE user_id = @user_id;
 
 -- name: DeleteProfile :exec
 DELETE FROM profiles WHERE user_id = @user_id;
@@ -115,6 +122,13 @@ WHERE cm.club_id = ANY(@club_ids::uuid[])
   AND (sqlc.narg(preferred_goal)::varchar IS NULL OR p.goal = sqlc.narg(preferred_goal))
   AND (sqlc.narg(preferred_program)::varchar IS NULL OR p.program = sqlc.narg(preferred_program))
   AND (sqlc.narg(preferred_categories)::text[] IS NULL OR p.categories && sqlc.narg(preferred_categories))
+  AND (sqlc.narg(preferred_country)::varchar IS NULL OR p.country = sqlc.narg(preferred_country))
+  AND (
+      sqlc.narg(preferred_city)::varchar IS NULL
+      OR p.city = sqlc.narg(preferred_city)
+      OR p.ready_to_relocate = true
+  )
+  AND (sqlc.narg(wants_partner_to_finance)::varchar IS NULL OR p.ready_to_finance = sqlc.narg(wants_partner_to_finance))
 ORDER BY cm.joined_at ASC
 LIMIT @limit_val;
 
@@ -147,6 +161,13 @@ WHERE c.id != ALL(@exclude_club_ids::uuid[])
   AND (sqlc.narg(preferred_goal)::varchar IS NULL OR p.goal = sqlc.narg(preferred_goal))
   AND (sqlc.narg(preferred_program)::varchar IS NULL OR p.program = sqlc.narg(preferred_program))
   AND (sqlc.narg(preferred_categories)::text[] IS NULL OR p.categories && sqlc.narg(preferred_categories))
+  AND (sqlc.narg(preferred_country)::varchar IS NULL OR p.country = sqlc.narg(preferred_country))
+  AND (
+      sqlc.narg(preferred_city)::varchar IS NULL
+      OR p.city = sqlc.narg(preferred_city)
+      OR p.ready_to_relocate = true
+  )
+  AND (sqlc.narg(wants_partner_to_finance)::varchar IS NULL OR p.ready_to_finance = sqlc.narg(wants_partner_to_finance))
 ORDER BY club_dist_km ASC
 LIMIT @limit_val;
 
@@ -169,5 +190,11 @@ WHERE p.country = @country
   AND (sqlc.narg(preferred_goal)::varchar IS NULL OR p.goal = sqlc.narg(preferred_goal))
   AND (sqlc.narg(preferred_program)::varchar IS NULL OR p.program = sqlc.narg(preferred_program))
   AND (sqlc.narg(preferred_categories)::text[] IS NULL OR p.categories && sqlc.narg(preferred_categories))
+  AND (
+      sqlc.narg(preferred_city)::varchar IS NULL
+      OR p.city = sqlc.narg(preferred_city)
+      OR p.ready_to_relocate = true
+  )
+  AND (sqlc.narg(wants_partner_to_finance)::varchar IS NULL OR p.ready_to_finance = sqlc.narg(wants_partner_to_finance))
 ORDER BY md5(p.user_id::text || current_date::text)
 LIMIT @limit_val;

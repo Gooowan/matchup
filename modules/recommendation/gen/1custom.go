@@ -45,6 +45,7 @@ type ProfileDTO struct {
 	Categories      []string    `json:"categories"`
 	Country         string      `json:"country,omitempty"`
 	City            string      `json:"city,omitempty"`
+	PrimaryClubID   *string     `json:"primary_club_id,omitempty"`
 	ReadyToRelocate bool        `json:"ready_to_relocate"`
 	ReadyToFinance  string      `json:"ready_to_finance,omitempty"`
 	Metadata        types.JSONB `json:"metadata"`
@@ -87,6 +88,10 @@ func (p Profile) ToDTO() ProfileDTO {
 	}
 	if p.ReadyToFinance.Valid {
 		dto.ReadyToFinance = p.ReadyToFinance.String
+	}
+	if p.PrimaryClubID.Valid {
+		s := utils.UUIDToString(p.PrimaryClubID)
+		dto.PrimaryClubID = &s
 	}
 	return dto
 }
@@ -160,19 +165,21 @@ func (p UserPreference) ToDTO() PreferencesDTO {
 
 // ProfilePreviewDTO for viewing another user's profile.
 type ProfilePreviewDTO struct {
-	UserID      string      `json:"user_id"`
-	DanceStyles []string    `json:"dance_styles"`
-	Visible     bool        `json:"visible"`
-	Gender      string      `json:"gender"`
-	BirthDate   string      `json:"birth_date,omitempty"`
-	HeightCm    *int16      `json:"height_cm,omitempty"`
-	Goal        string      `json:"goal"`
-	Program     string      `json:"program"`
-	Categories  []string    `json:"categories"`
-	Country     string      `json:"country,omitempty"`
-	City        string      `json:"city,omitempty"`
-	Metadata    types.JSONB `json:"metadata"`
-	ProfileData types.JSONB `json:"profile_data"`
+	UserID         string      `json:"user_id"`
+	DanceStyles    []string    `json:"dance_styles"`
+	Visible        bool        `json:"visible"`
+	Gender         string      `json:"gender"`
+	BirthDate      string      `json:"birth_date,omitempty"`
+	HeightCm       *int16      `json:"height_cm,omitempty"`
+	Goal           string      `json:"goal"`
+	Program        string      `json:"program"`
+	Categories     []string    `json:"categories"`
+	Country        string      `json:"country,omitempty"`
+	City           string      `json:"city,omitempty"`
+	PrimaryClubID  *string     `json:"primary_club_id,omitempty"`
+	ClubName       *string     `json:"club_name,omitempty"`
+	Metadata       types.JSONB `json:"metadata"`
+	ProfileData    types.JSONB `json:"profile_data"`
 }
 
 func (p GetProfilePreviewRow) ToDTO() ProfilePreviewDTO {
@@ -199,6 +206,13 @@ func (p GetProfilePreviewRow) ToDTO() ProfilePreviewDTO {
 	}
 	if p.City.Valid {
 		dto.City = p.City.String
+	}
+	if p.PrimaryClubID.Valid {
+		s := utils.UUIDToString(p.PrimaryClubID)
+		dto.PrimaryClubID = &s
+	}
+	if p.ClubName.Valid {
+		dto.ClubName = &p.ClubName.String
 	}
 	return dto
 }

@@ -351,14 +351,17 @@ SELECT
     cm.role,
     cm.joined_at,
     p.gender,
+    p.birth_date,
     p.goal,
     p.program,
     p.categories,
     p.country,
     p.city,
-    p.metadata
+    p.metadata,
+    u.profile_data
 FROM club_members cm
 JOIN profiles p ON p.user_id = cm.user_id
+JOIN users u ON u.id = cm.user_id
 WHERE cm.club_id = $1 AND p.visible = true
 ORDER BY cm.joined_at DESC
 LIMIT $3 OFFSET $2
@@ -371,16 +374,18 @@ type ListClubMembersParams struct {
 }
 
 type ListClubMembersRow struct {
-	UserID     pgtype.UUID      `db:"user_id" json:"user_id"`
-	Role       pgtype.Text      `db:"role" json:"role"`
-	JoinedAt   pgtype.Timestamp `db:"joined_at" json:"joined_at"`
-	Gender     string           `db:"gender" json:"gender"`
-	Goal       string           `db:"goal" json:"goal"`
-	Program    string           `db:"program" json:"program"`
-	Categories []string         `db:"categories" json:"categories"`
-	Country    pgtype.Text      `db:"country" json:"country"`
-	City       pgtype.Text      `db:"city" json:"city"`
-	Metadata   types.JSONB      `db:"metadata" json:"metadata"`
+	UserID      pgtype.UUID      `db:"user_id" json:"user_id"`
+	Role        pgtype.Text      `db:"role" json:"role"`
+	JoinedAt    pgtype.Timestamp `db:"joined_at" json:"joined_at"`
+	Gender      string           `db:"gender" json:"gender"`
+	BirthDate   pgtype.Date      `db:"birth_date" json:"birth_date"`
+	Goal        string           `db:"goal" json:"goal"`
+	Program     string           `db:"program" json:"program"`
+	Categories  []string         `db:"categories" json:"categories"`
+	Country     pgtype.Text      `db:"country" json:"country"`
+	City        pgtype.Text      `db:"city" json:"city"`
+	Metadata    types.JSONB      `db:"metadata" json:"metadata"`
+	ProfileData types.JSONB      `db:"profile_data" json:"profile_data"`
 }
 
 func (q *Queries) ListClubMembers(ctx context.Context, arg ListClubMembersParams) ([]ListClubMembersRow, error) {
@@ -397,12 +402,14 @@ func (q *Queries) ListClubMembers(ctx context.Context, arg ListClubMembersParams
 			&i.Role,
 			&i.JoinedAt,
 			&i.Gender,
+			&i.BirthDate,
 			&i.Goal,
 			&i.Program,
 			&i.Categories,
 			&i.Country,
 			&i.City,
 			&i.Metadata,
+			&i.ProfileData,
 		); err != nil {
 			return nil, err
 		}
@@ -418,14 +425,16 @@ const listClubs = `-- name: ListClubs :many
 SELECT id, name, slug, description, country, city, address, latitude, longitude, website, phone, is_verified, is_active, metadata, owner_user_id, working_hours, created_at, updated_at FROM clubs
 WHERE is_active = true
   AND (NULLIF($1::varchar, '') IS NULL OR country = $1)
-  AND (NULLIF($2::varchar, '') IS NULL OR city = $2)
-ORDER BY name ASC
-LIMIT $4 OFFSET $3
+  AND (NULLIF($2::varchar, '') IS NULL OR city ILIKE '%' || $2 || '%')
+  AND (NULLIF($3::varchar, '') IS NULL OR name ILIKE '%' || $3 || '%' OR city ILIKE '%' || $3 || '%')
+ORDER BY is_verified DESC, name ASC
+LIMIT $5 OFFSET $4
 `
 
 type ListClubsParams struct {
 	Country   string `db:"country" json:"country"`
 	City      string `db:"city" json:"city"`
+	Q         string `db:"q" json:"q"`
 	OffsetVal int32  `db:"offset_val" json:"offset_val"`
 	LimitVal  int32  `db:"limit_val" json:"limit_val"`
 }
@@ -434,6 +443,7 @@ func (q *Queries) ListClubs(ctx context.Context, arg ListClubsParams) ([]Club, e
 	rows, err := q.db.Query(ctx, listClubs,
 		arg.Country,
 		arg.City,
+		arg.Q,
 		arg.OffsetVal,
 		arg.LimitVal,
 	)

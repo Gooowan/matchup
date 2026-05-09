@@ -308,6 +308,12 @@ func (s *AuthService) PasswordReset(ctx context.Context, token, newPassword stri
 	return nil
 }
 
+// IssueToken creates and returns a signed JWT for the given user ID.
+// It is a thin alias over CreateJwtToken exposed for use by other controllers.
+func (s *AuthService) IssueToken(ctx context.Context, userID pgtype.UUID) (string, time.Time, error) {
+	return s.CreateJwtToken(ctx, userID)
+}
+
 // EmailVerifyByUserID marks a user's email as verified by clearing the verification token.
 func (s *AuthService) EmailVerifyByUserID(ctx context.Context, userIDStr string) (*coregen.User, error) {
 	userUUID, err := utils.StringToUUID(userIDStr)

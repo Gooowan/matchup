@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { fade, scale } from 'svelte/transition';
 	import type { DancerProfile } from './SwipeCard.svelte';
+	import { t } from '$lib/locale';
 
 	interface Props {
 		open?: boolean;
@@ -35,7 +36,7 @@
 			transition:scale={{ start: 0.9, duration: 350, delay: 100 }}
 		>
 			<!-- Heading -->
-			<h1 class="text-center text-[40px] font-black text-white leading-tight">You matched!</h1>
+			<h1 class="text-center text-[40px] font-black text-white leading-tight">{$t('feed.match_title')}</h1>
 
 			<!-- Photos + logo -->
 			<div class="relative flex items-center justify-center" style="height: 200px; width: 343px;">
@@ -73,10 +74,10 @@
 			<!-- Subtitle -->
 			<div class="flex flex-col items-center gap-1 text-center">
 				<p class="text-[20px] font-normal text-white">
-					You and {theirProfile?.name} like each other.
+					{$t('feed.match_you_and').replace('{name}', theirProfile?.name ?? '')}
 				</p>
 				<p class="text-[20px] font-normal text-white" style="letter-spacing: 1px;">
-					Why not make the first move?
+					{$t('feed.match_first_move')}
 				</p>
 			</div>
 
@@ -86,7 +87,7 @@
 				style="height: 40px; width: 163px;"
 				onclick={onchat}
 			>
-				<span class="text-[14px] font-semibold" style="color: #171717;">Chat now</span>
+				<span class="text-[14px] font-semibold" style="color: #171717;">{$t('feed.match_chat')}</span>
 			</button>
 		</div>
 	</div>

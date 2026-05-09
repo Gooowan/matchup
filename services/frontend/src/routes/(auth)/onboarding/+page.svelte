@@ -5,38 +5,39 @@
 	import { authStore } from '$stores/auth.svelte';
 	import { captureOnboardingComplete } from '$lib/analytics/posthog';
 	import toast from 'svelte-french-toast';
+	import { t } from '$lib/locale';
 
 	const STORAGE_KEY = 'matchup_onboarding';
 
-	const PROGRAM_OPTIONS = [
-		{ value: 'latina', label: 'Латина' },
-		{ value: 'standard', label: 'Стандарт' },
-		{ value: 'both', label: 'Обидва' }
-	];
+	const PROGRAM_OPTIONS = $derived([
+		{ value: 'latina', label: $t('onboarding.program_latina') },
+		{ value: 'standard', label: $t('onboarding.program_standard') },
+		{ value: 'both', label: $t('onboarding.program_both') }
+	]);
 
-	const GENDER_OPTIONS = [
-		{ value: 'male', label: 'Чоловік' },
-		{ value: 'female', label: 'Жінка' },
-		{ value: 'other', label: 'Інше' }
-	];
-	const GOAL_OPTIONS = [
-		{ value: 'hobby', label: 'Хобі' },
-		{ value: 'professional', label: 'Профі' }
-	];
-	const FINANCE_OPTIONS: { value: string; label: string }[] = [
-		{ value: 'no', label: 'Ні' },
-		{ value: 'yes', label: 'Так' },
-		{ value: 'partial', label: 'Частково' }
-	];
-	const CATEGORIES_UA = [
-		{ value: 'kids', label: 'Діти' },
-		{ value: 'juvenile1', label: 'Ювенали 1' },
-		{ value: 'juvenile2', label: 'Ювенали 2' },
-		{ value: 'junior1', label: 'Юніори 1' },
-		{ value: 'junior2', label: 'Юніори 2' },
-		{ value: 'youth', label: 'Молодь' },
-		{ value: 'adult', label: 'Дорослі' }
-	];
+	const GENDER_OPTIONS = $derived([
+		{ value: 'male', label: $t('onboarding.gender_male') },
+		{ value: 'female', label: $t('onboarding.gender_female') },
+		{ value: 'other', label: $t('onboarding.gender_other') }
+	]);
+	const GOAL_OPTIONS = $derived([
+		{ value: 'hobby', label: $t('onboarding.goal_hobby') },
+		{ value: 'professional', label: $t('onboarding.goal_professional') }
+	]);
+	const FINANCE_OPTIONS: { value: string; label: string }[] = $derived([
+		{ value: 'no', label: $t('onboarding.finance_no') },
+		{ value: 'yes', label: $t('onboarding.finance_yes') },
+		{ value: 'partial', label: $t('onboarding.finance_partial') }
+	]);
+	const CATEGORIES_UA = $derived([
+		{ value: 'kids', label: $t('onboarding.category_kids') },
+		{ value: 'juvenile1', label: $t('onboarding.category_juvenile1') },
+		{ value: 'juvenile2', label: $t('onboarding.category_juvenile2') },
+		{ value: 'junior1', label: $t('onboarding.category_junior1') },
+		{ value: 'junior2', label: $t('onboarding.category_junior2') },
+		{ value: 'youth', label: $t('onboarding.category_youth') },
+		{ value: 'adult', label: $t('onboarding.category_adult') }
+	]);
 	const COUNTRIES = [
 		'Україна', 'Польща', 'Германія', 'Чехія', 'Австрія', 'Угорщина', 'Румунія',
 		'Словаччина', 'Болгарія', 'Хорватія', 'Франція', 'Іспанія', 'Португалія',
@@ -76,7 +77,7 @@
 	};
 
 	let step = $state(1);
-	const TOTAL_STEPS = 4;
+	const TOTAL_STEPS = 5;
 
 	// Step 1: Basic info
 	let accountType = $state<'dancer' | 'parent'>('dancer');
@@ -106,6 +107,20 @@
 	let prefCountry = $state('Україна'); // locked to Ukraine for v1; expand COUNTRIES list when unlocking
 	let prefCity = $state('');
 	let wantsFinance = $state('');
+
+	// Step 3: Club
+	let selectedClubId = $state<string | null>(null);
+	let selectedClubSlug = $state('');
+	let selectedClubName = $state('');
+	let clubSearchQuery = $state('');
+	let clubResults = $state<{ id: string; slug: string; name: string; city: string }[]>([]);
+	let showCreateForm = $state(false);
+	let isCreatingClub = $state(false);
+	let newClubName = $state('');
+	let newClubAddress = $state('');
+	let newClubCity = $state('');
+	let wasJustCreated = $state(false);
+	let clubSearchTimer: ReturnType<typeof setTimeout> | null = null;
 
 	// Step 4: Location + photo
 	let city = $state('');
@@ -152,6 +167,10 @@
 			if (s.wantsFinance) wantsFinance = s.wantsFinance;
 			if (s.city) city = s.city;
 			if (s.country) country = s.country;
+			if (s.selectedClubId) selectedClubId = s.selectedClubId;
+			if (s.selectedClubSlug) selectedClubSlug = s.selectedClubSlug;
+			if (s.selectedClubName) selectedClubName = s.selectedClubName;
+			if (s.wasJustCreated) wasJustCreated = s.wasJustCreated;
 		} catch {
 			// ignore corrupt storage
 		}
@@ -163,6 +182,7 @@
 			JSON.stringify({
 				step, accountType, firstName, lastName, gender, birthDate, heightCm,
 				danceProgram, goal, userCategories, readyToRelocate, readyToFinance, bio,
+				selectedClubId, selectedClubSlug, selectedClubName, wasJustCreated,
 				prefGender, ageMin, ageMax, heightMin, heightMax,
 				prefGoal, prefProgram, prefCategories, prefCountry, prefCity,
 				wantsFinance,
@@ -185,7 +205,7 @@
 
 	let ageError = $derived(
 		birthDate && !isParent && getAge(birthDate) < 18
-			? 'Тобі повинно бути 18 або більше, щоб користуватися MatchUp.'
+			? $t('onboarding.age_error')
 			: ''
 	);
 
@@ -367,6 +387,83 @@
 		extraPhotoPreviews = extraPhotoPreviews.filter((_, idx) => idx !== i);
 	}
 
+	const UA_CITY_CENTROIDS: Record<string, { lat: number; lng: number }> = {
+		'Київ': { lat: 50.4501, lng: 30.5234 },
+		'Львів': { lat: 49.8397, lng: 24.0297 },
+		'Одеса': { lat: 46.4825, lng: 30.7233 },
+		'Харків': { lat: 49.9935, lng: 36.2304 },
+		'Дніпро': { lat: 48.4647, lng: 35.0462 }
+	};
+
+	async function geocodeClub(address: string, cityName: string): Promise<{ lat: number; lng: number }> {
+		try {
+			const q = encodeURIComponent(`${cityName}, Ukraine${address ? ', ' + address : ''}`);
+			const resp = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${q}&limit=1`);
+			if (resp.ok) {
+				const results = await resp.json();
+				if (results.length > 0) {
+					return { lat: parseFloat(results[0].lat), lng: parseFloat(results[0].lon) };
+				}
+			}
+		} catch { /* fallback */ }
+		return UA_CITY_CENTROIDS[cityName] ?? { lat: 50.4501, lng: 30.5234 };
+	}
+
+	function handleClubSearchInput() {
+		if (clubSearchTimer) clearTimeout(clubSearchTimer);
+		clubSearchTimer = setTimeout(searchClubs, 300);
+	}
+
+	async function searchClubs() {
+		if (!clubSearchQuery.trim()) { clubResults = []; return; }
+		try {
+			const resp = await authFetch(`/clubs?q=${encodeURIComponent(clubSearchQuery)}&limit=20`);
+			if (resp.ok) {
+				const body = await resp.json();
+				clubResults = (body.data ?? []).map((c: { id: string; slug: string; name: string; city: string }) => ({
+					id: c.id, slug: c.slug, name: c.name, city: c.city
+				}));
+			}
+		} catch { clubResults = []; }
+	}
+
+	async function createAndJoinClub() {
+		if (!newClubName.trim()) return;
+		isCreatingClub = true;
+		try {
+			const clubCity = newClubCity.trim() || city;
+			const geocoded = await geocodeClub(newClubAddress, clubCity);
+			const resp = await authFetch('/clubs/register', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({
+					name: newClubName.trim(),
+					country: 'Ukraine',
+					city: clubCity,
+					address: newClubAddress.trim() || undefined,
+					latitude: geocoded.lat,
+					longitude: geocoded.lng
+				})
+			});
+			if (resp.ok) {
+				const body = await resp.json();
+				selectedClubId = body.data?.id ?? null;
+				selectedClubSlug = body.data?.slug ?? '';
+				selectedClubName = newClubName.trim();
+				wasJustCreated = true;
+				showCreateForm = false;
+				toast.success('Клуб створено!');
+			} else {
+				const body = await resp.json().catch(() => ({}));
+				toast.error((body as { error?: string }).error ?? 'Помилка створення клубу');
+			}
+		} catch {
+			toast.error('Помилка. Спробуй ще раз.');
+		} finally {
+			isCreatingClub = false;
+		}
+	}
+
 	function canAdvance(): boolean {
 		if (step === 1) return firstName.length >= 2 && lastName.length >= 2 && !!gender && !ageError;
 		if (step === 2) return !!danceProgram;
@@ -402,7 +499,8 @@
 				country,
 				city,
 				account_type: accountType,
-				categories: userCategories
+				categories: userCategories,
+				primary_club_id: selectedClubId ?? null
 			};
 			if (birthDate) body.birth_date = birthDate;
 			if (heightCm) body.height_cm = heightCm;
@@ -416,6 +514,14 @@
 				body: JSON.stringify(body)
 			});
 
+			if (selectedClubId && !wasJustCreated && selectedClubSlug) {
+				try {
+					await postOrThrow(`/clubs/${selectedClubSlug}/join`, { method: 'POST' });
+				} catch {
+					// non-fatal: profile already saved
+				}
+			}
+
 			const prefBody: Record<string, unknown> = {
 				preferred_categories: prefCategories
 			};
@@ -426,8 +532,8 @@
 			if (heightMax !== null) prefBody.height_max = heightMax;
 			if (prefGoal) prefBody.preferred_goal = prefGoal;
 			if (prefProgram) prefBody.preferred_program = prefProgram;
-			if (country) prefBody.preferred_country = country;
-			if (city) prefBody.preferred_city = city;
+			if (prefCountry || country) prefBody.preferred_country = prefCountry || country;
+			if (prefCity || city) prefBody.preferred_city = prefCity || city;
 			if (wantsFinance) prefBody.wants_partner_to_finance = wantsFinance;
 
 			await postOrThrow('/me/preferences', {
@@ -485,17 +591,20 @@
 		</div>
 
 		{#if step === 1}
-			<h1 class="text-[28px] font-black" style="color: #171717;">Розкажи про себе</h1>
-			<p class="mt-1 text-[14px] font-medium" style="color: #696969;">Крок 1 з 4 — {isParent ? 'Основна інформація дитини' : 'Основна інформація'}</p>
+			<h1 class="text-[28px] font-black" style="color: #171717;">{$t('onboarding.step1_title')}</h1>
+			<p class="mt-1 text-[14px] font-medium" style="color: #696969;">{$t('onboarding.step1_subtitle')}</p>
 		{:else if step === 2}
-			<h1 class="text-[28px] font-black" style="color: #171717;">{isParent ? 'Танцювальне життя дитини' : 'Твоє танцювальне життя'}</h1>
-			<p class="mt-1 text-[14px] font-medium" style="color: #696969;">Крок 2 з 4 — {isParent ? 'Деталі про дитину' : 'Танцювальні деталі'}</p>
+			<h1 class="text-[28px] font-black" style="color: #171717;">{$t('onboarding.step2_title')}</h1>
+			<p class="mt-1 text-[14px] font-medium" style="color: #696969;">{$t('onboarding.step2_subtitle')}</p>
 		{:else if step === 3}
-			<h1 class="text-[28px] font-black" style="color: #171717;">Кого ти шукаєш?</h1>
-			<p class="mt-1 text-[14px] font-medium" style="color: #696969;">Крок 3 з 4 — {isParent ? 'Пошук для дитини' : 'Твої уподобання'}</p>
+			<h1 class="text-[28px] font-black" style="color: #171717;">{$t('onboarding.step3_title')}</h1>
+			<p class="mt-1 text-[14px] font-medium" style="color: #696969;">{$t('onboarding.step3_subtitle')}</p>
+		{:else if step === 4}
+			<h1 class="text-[28px] font-black" style="color: #171717;">{$t('onboarding.step4_title')}</h1>
+			<p class="mt-1 text-[14px] font-medium" style="color: #696969;">{isParent ? $t('onboarding.step4_subtitle_parent') : $t('onboarding.step4_subtitle_dancer')}</p>
 		{:else}
-			<h1 class="text-[28px] font-black" style="color: #171717;">Майже готово!</h1>
-			<p class="mt-1 text-[14px] font-medium" style="color: #696969;">Крок 4 з 4 — Місцезнаходження та фото</p>
+			<h1 class="text-[28px] font-black" style="color: #171717;">{$t('onboarding.step5_title')}</h1>
+			<p class="mt-1 text-[14px] font-medium" style="color: #696969;">{$t('onboarding.step5_subtitle')}</p>
 		{/if}
 	</div>
 
@@ -507,27 +616,27 @@
 		{#if step === 1}
 			<!-- Account type -->
 			<div class="rounded-[20px] bg-white p-4" style="display: flex; flex-direction: column; gap: 12px;">
-				<label class="text-[11px] font-semibold uppercase tracking-wider" style="color: #aeb4bc;">ТИП ПРОФІЛЮ</label>
+				<label class="text-[11px] font-semibold uppercase tracking-wider" style="color: #aeb4bc;">{$t('onboarding.account_type_label')}</label>
 				<div class="flex gap-2">
 					<button
 						onclick={() => (accountType = 'dancer')}
 						class="flex-1 rounded-[50px] py-2.5 text-[13px] font-semibold transition-all"
 						style="background: {accountType === 'dancer' ? '#8984da' : 'transparent'}; color: {accountType === 'dancer' ? 'white' : '#696969'}; border: 1.5px solid {accountType === 'dancer' ? '#8984da' : '#d1d5db'};"
-					>Я танцюю сам/сама</button>
+					>{$t('onboarding.account_dancer')}</button>
 					<button
 						onclick={() => (accountType = 'parent')}
 						class="flex-1 rounded-[50px] py-2.5 text-[13px] font-semibold transition-all"
 						style="background: {accountType === 'parent' ? '#8984da' : 'transparent'}; color: {accountType === 'parent' ? 'white' : '#696969'}; border: 1.5px solid {accountType === 'parent' ? '#8984da' : '#d1d5db'};"
-					>Я батько/мати</button>
+					>{$t('onboarding.account_parent')}</button>
 				</div>
 			</div>
 
 			<!-- Name -->
 			<div class="rounded-[20px] bg-white p-4" style="display: flex; flex-direction: column; gap: 12px;">
-				<label class="text-[11px] font-semibold uppercase tracking-wider" style="color: #aeb4bc;">{isParent ? "Ім'я дитини" : "Ім'я"}</label>
+				<label class="text-[11px] font-semibold uppercase tracking-wider" style="color: #aeb4bc;">{isParent ? $t('onboarding.name_label_parent') : $t('onboarding.name_label_dancer')}</label>
 				<input
 					type="text"
-					placeholder={isParent ? "Ім'я дитини" : "Ім'я"}
+					placeholder={isParent ? $t('onboarding.name_placeholder_parent') : $t('onboarding.name_placeholder_dancer')}
 					bind:value={firstName}
 					autofocus
 					class="w-full bg-transparent text-[16px] font-semibold outline-none"
@@ -535,7 +644,7 @@
 				/>
 				<input
 					type="text"
-					placeholder={isParent ? 'Прізвище дитини' : 'Прізвище'}
+					placeholder={isParent ? $t('onboarding.surname_placeholder_parent') : $t('onboarding.surname_placeholder_dancer')}
 					bind:value={lastName}
 					class="w-full bg-transparent text-[16px] font-semibold outline-none"
 					style="color: #171717;"
@@ -544,7 +653,7 @@
 
 			<!-- Gender -->
 			<div class="rounded-[20px] bg-white p-4" style="display: flex; flex-direction: column; gap: 12px;">
-				<label class="text-[11px] font-semibold uppercase tracking-wider" style="color: #aeb4bc;">{isParent ? 'Стать дитини' : 'Стать'}</label>
+				<label class="text-[11px] font-semibold uppercase tracking-wider" style="color: #aeb4bc;">{isParent ? $t('onboarding.gender_label_parent') : $t('onboarding.gender_label_dancer')}</label>
 				<div class="flex gap-2">
 					{#each GENDER_OPTIONS as g}
 						<button
@@ -559,7 +668,7 @@
 			<!-- Birth date + Height -->
 			<div class="rounded-[20px] bg-white p-4" style="display: flex; flex-direction: column; gap: 12px;">
 				<div class="flex items-center justify-between">
-					<span class="text-[14px] font-semibold" style="color: #171717;">{isParent ? 'Дата народження дитини' : 'Дата народження'}</span>
+					<span class="text-[14px] font-semibold" style="color: #171717;">{isParent ? $t('onboarding.birth_date_label_parent') : $t('onboarding.birth_date_label_dancer')}</span>
 					<input
 						type="date"
 						bind:value={birthDate}
@@ -571,7 +680,7 @@
 					<p class="text-[12px] font-medium" style="color: #e74c3c;">{ageError}</p>
 				{/if}
 				<div class="flex items-center justify-between" style="border-top: 1px solid #f0f0f0; padding-top: 12px;">
-					<span class="text-[14px] font-semibold" style="color: #171717;">{isParent ? 'Зріст дитини (см)' : 'Зріст (см)'}</span>
+					<span class="text-[14px] font-semibold" style="color: #171717;">{isParent ? $t('onboarding.height_label_parent') : $t('onboarding.height_label_dancer')}</span>
 					<input
 						type="number"
 						placeholder="—"
@@ -587,7 +696,7 @@
 		{:else if step === 2}
 			<!-- Program -->
 			<div class="rounded-[20px] bg-white p-4" style="display: flex; flex-direction: column; gap: 12px;">
-				<label class="text-[11px] font-semibold uppercase tracking-wider" style="color: #aeb4bc;">{isParent ? 'Програма дитини' : 'Програма'}</label>
+				<label class="text-[11px] font-semibold uppercase tracking-wider" style="color: #aeb4bc;">{isParent ? $t('onboarding.program_label_parent') : $t('onboarding.program_label_dancer')}</label>
 				<div class="flex gap-2">
 					{#each PROGRAM_OPTIONS as p}
 						<button
@@ -601,7 +710,7 @@
 
 			<!-- Categories -->
 			<div class="rounded-[20px] bg-white p-4" style="display: flex; flex-direction: column; gap: 12px;">
-				<label class="text-[11px] font-semibold uppercase tracking-wider" style="color: #aeb4bc;">{isParent ? 'КАТЕГОРІЯ ДИТИНИ' : 'КАТЕГОРІЯ'}</label>
+				<label class="text-[11px] font-semibold uppercase tracking-wider" style="color: #aeb4bc;">{isParent ? $t('onboarding.category_label_parent') : $t('onboarding.category_label_dancer')}</label>
 				<div class="flex flex-wrap gap-2">
 					{#each CATEGORIES_UA as cat}
 						<button
@@ -615,24 +724,24 @@
 
 			<!-- Ready to relocate -->
 			<div class="rounded-[20px] bg-white p-4" style="display: flex; flex-direction: column; gap: 12px;">
-				<label class="text-[11px] font-semibold uppercase tracking-wider" style="color: #aeb4bc;">{isParent ? 'ГОТОВА ДИТИНА ПЕРЕЇХАТИ' : 'ГОТОВИЙ/А ПЕРЕЇХАТИ'}</label>
+				<label class="text-[11px] font-semibold uppercase tracking-wider" style="color: #aeb4bc;">{isParent ? $t('onboarding.relocate_label_parent') : $t('onboarding.relocate_label_dancer')}</label>
 				<div class="flex gap-2">
 					<button
 						onclick={() => (readyToRelocate = readyToRelocate === true ? null : true)}
 						class="flex-1 rounded-[50px] py-2.5 text-[13px] font-semibold transition-all"
 						style="background: {readyToRelocate === true ? '#8984da' : 'transparent'}; color: {readyToRelocate === true ? 'white' : '#696969'}; border: 1.5px solid {readyToRelocate === true ? '#8984da' : '#d1d5db'};"
-					>Так</button>
+					>{$t('onboarding.yes')}</button>
 					<button
 						onclick={() => (readyToRelocate = readyToRelocate === false ? null : false)}
 						class="flex-1 rounded-[50px] py-2.5 text-[14px] font-semibold transition-all"
 						style="background: {readyToRelocate === false ? '#8984da' : 'transparent'}; color: {readyToRelocate === false ? 'white' : '#696969'}; border: 1.5px solid {readyToRelocate === false ? '#8984da' : '#d1d5db'};"
-					>Ні</button>
+					>{$t('onboarding.no')}</button>
 				</div>
 			</div>
 
 			<!-- Ready to finance -->
 			<div class="rounded-[20px] bg-white p-4" style="display: flex; flex-direction: column; gap: 12px;">
-				<label class="text-[11px] font-semibold uppercase tracking-wider" style="color: #aeb4bc;">МОЖЛИВІСТЬ ФІНАНСУВАТИ ПАРТНЕРА</label>
+				<label class="text-[11px] font-semibold uppercase tracking-wider" style="color: #aeb4bc;">{$t('onboarding.finance_label')}</label>
 				<div class="flex gap-2">
 					{#each FINANCE_OPTIONS as opt}
 						<button
@@ -646,7 +755,7 @@
 
 			<!-- Goal -->
 			<div class="rounded-[20px] bg-white p-4" style="display: flex; flex-direction: column; gap: 12px;">
-				<label class="text-[11px] font-semibold uppercase tracking-wider" style="color: #aeb4bc;">{isParent ? 'Ціль дитини' : 'Ціль'}</label>
+				<label class="text-[11px] font-semibold uppercase tracking-wider" style="color: #aeb4bc;">{isParent ? $t('onboarding.goal_label_parent') : $t('onboarding.goal_label_dancer')}</label>
 				<div class="grid grid-cols-2 gap-2">
 					{#each GOAL_OPTIONS as g}
 						<button
@@ -660,9 +769,9 @@
 
 			<!-- Bio -->
 			<div class="rounded-[20px] bg-white p-4" style="display: flex; flex-direction: column; gap: 8px;">
-				<label class="text-[11px] font-semibold uppercase tracking-wider" style="color: #aeb4bc;">ПРО СЕБЕ</label>
+				<label class="text-[11px] font-semibold uppercase tracking-wider" style="color: #aeb4bc;">{$t('onboarding.bio_label')}</label>
 				<textarea
-					placeholder="Розкажи про себе…"
+					placeholder={$t('onboarding.bio_placeholder')}
 					bind:value={bio}
 					rows="4"
 					class="w-full resize-none bg-transparent text-[14px] font-medium leading-relaxed outline-none"
@@ -672,7 +781,7 @@
 
 			<!-- User's own location -->
 			<div class="rounded-[20px] bg-white p-4" style="display: flex; flex-direction: column; gap: 12px;">
-				<label class="text-[11px] font-semibold uppercase tracking-wider" style="color: #aeb4bc;">КРАЇНА</label>
+				<label class="text-[11px] font-semibold uppercase tracking-wider" style="color: #aeb4bc;">{$t('onboarding.country_label')}</label>
 				<select
 					bind:value={country}
 					onchange={() => { city = ''; }}
@@ -685,7 +794,7 @@
 					{/each}
 				</select>
 				<div style="border-top: 1px solid #f0f0f0; padding-top: 12px; display: flex; flex-direction: column; gap: 8px;">
-					<label class="text-[11px] font-semibold uppercase tracking-wider" style="color: #aeb4bc;">МІСТО</label>
+					<label class="text-[11px] font-semibold uppercase tracking-wider" style="color: #aeb4bc;">{$t('onboarding.city_label')}</label>
 					{#if CITIES_BY_COUNTRY[country]}
 						<select
 							bind:value={city}
@@ -710,11 +819,102 @@
 			</div>
 
 		{:else if step === 3}
+			<!-- Club search / select / create -->
+			<div class="rounded-[20px] bg-white p-4" style="display: flex; flex-direction: column; gap: 12px;">
+				<label class="text-[11px] font-semibold uppercase tracking-wider" style="color: #aeb4bc;">ТВІЙ КЛУБ</label>
+				<p class="text-[13px] font-medium" style="color: #696969;">Обери клуб, до якого ходиш — або пропусти цей крок</p>
+
+				{#if selectedClubId && !showCreateForm}
+					<div class="flex items-center justify-between rounded-[12px] px-3 py-2.5" style="background: #f0effe;">
+						<div>
+							<p class="text-[14px] font-semibold" style="color: #8984da;">{selectedClubName}</p>
+						</div>
+						<button onclick={() => { selectedClubId = null; selectedClubSlug = ''; selectedClubName = ''; wasJustCreated = false; }}>
+							<i class="fi fi-rr-cross-small" style="font-size: 16px; color: #aeb4bc; line-height: 1;"></i>
+						</button>
+					</div>
+				{:else if !showCreateForm}
+					<input
+						type="search"
+						placeholder="Назва клубу або місто"
+						bind:value={clubSearchQuery}
+						oninput={handleClubSearchInput}
+						class="w-full rounded-[12px] border px-3 py-2.5 text-[14px] font-medium outline-none"
+						style="color: #171717; border-color: #e0e0e0;"
+					/>
+					{#if clubResults.length > 0}
+						<div style="display: flex; flex-direction: column; gap: 4px;">
+							{#each clubResults as club}
+								<button
+									onclick={() => { selectedClubId = club.id; selectedClubSlug = club.slug; selectedClubName = club.name; wasJustCreated = false; clubSearchQuery = ''; clubResults = []; }}
+									class="flex items-center justify-between rounded-[12px] px-3 py-2.5 text-left"
+									style="background: #f8f8f8;"
+								>
+									<div>
+										<p class="text-[14px] font-semibold" style="color: #171717;">{club.name}</p>
+										<p class="text-[12px] font-medium" style="color: #aeb4bc;">{club.city}</p>
+									</div>
+									<i class="fi fi-rr-angle-right" style="font-size: 14px; color: #d1d5db; line-height: 1;"></i>
+								</button>
+							{/each}
+						</div>
+					{/if}
+					<button
+						onclick={() => { showCreateForm = true; newClubCity = city; }}
+						class="text-left text-[13px] font-semibold"
+						style="color: #8984da;"
+					>Не знайшли? Створіть клуб</button>
+				{:else}
+					<!-- Create club inline form -->
+					<div style="display: flex; flex-direction: column; gap: 10px;">
+						<input
+							type="text"
+							placeholder="Назва клубу"
+							bind:value={newClubName}
+							class="w-full rounded-[12px] border px-3 py-2.5 text-[14px] font-medium outline-none"
+							style="color: #171717; border-color: #e0e0e0;"
+						/>
+						<input
+							type="text"
+							placeholder="Вулиця, номер (необов'язково)"
+							bind:value={newClubAddress}
+							class="w-full rounded-[12px] border px-3 py-2.5 text-[14px] font-medium outline-none"
+							style="color: #171717; border-color: #e0e0e0;"
+						/>
+						<input
+							type="text"
+							placeholder="Місто"
+							bind:value={newClubCity}
+							class="w-full rounded-[12px] border px-3 py-2.5 text-[14px] font-medium outline-none"
+							style="color: #171717; border-color: #e0e0e0;"
+						/>
+						<div class="flex gap-2">
+							<button
+								onclick={() => (showCreateForm = false)}
+								class="flex-1 rounded-[50px] py-2.5 text-[13px] font-semibold"
+								style="background: transparent; color: #696969; border: 1.5px solid #d1d5db;"
+							>{$t('onboarding.step_club_form_cancel')}</button>
+							<button
+								onclick={createAndJoinClub}
+								disabled={!newClubName.trim() || isCreatingClub}
+								class="flex-1 rounded-[50px] py-2.5 text-[13px] font-semibold text-white transition-opacity disabled:opacity-50"
+								style="background: #8984da;"
+							>{isCreatingClub ? $t('onboarding.step_club_creating') : $t('onboarding.step_club_form_submit')}</button>
+						</div>
+					</div>
+				{/if}
+			</div>
+
+			{#if !selectedClubId && !showCreateForm}
+				<p class="text-center text-[12px] font-medium" style="color: #aeb4bc;">Можна пропустити і додати клуб пізніше</p>
+			{/if}
+
+		{:else if step === 4}
 			<!-- Preferred gender -->
 			<div class="rounded-[20px] bg-white p-4" style="display: flex; flex-direction: column; gap: 12px;">
-				<label class="text-[11px] font-semibold uppercase tracking-wider" style="color: #aeb4bc;">{isParent ? 'ШУКАЮ ДЛЯ ДИТИНИ' : 'ШУКАЮ'}</label>
+				<label class="text-[11px] font-semibold uppercase tracking-wider" style="color: #aeb4bc;">{$t('onboarding.pref_gender_label')}</label>
 				<div class="flex gap-2">
-					{#each [{ value: 'male', label: 'Чоловік' }, { value: 'female', label: 'Жінка' }] as g}
+					{#each [{ value: 'male', label: $t('onboarding.gender_male') }, { value: 'female', label: $t('onboarding.gender_female') }] as g}
 						<button
 							onclick={() => (prefGender = prefGender === g.value ? '' : g.value)}
 							class="flex-1 rounded-[50px] py-2.5 text-[14px] font-semibold transition-all"
@@ -726,11 +926,11 @@
 
 			<!-- Age range -->
 			<div class="rounded-[20px] bg-white p-4" style="display: flex; flex-direction: column; gap: 12px;">
-				<label class="text-[11px] font-semibold uppercase tracking-wider" style="color: #aeb4bc;">{isParent ? 'ВІК ПАРТНЕРА ДИТИНИ' : 'ВІК ПАРТНЕРА'}</label>
+				<label class="text-[11px] font-semibold uppercase tracking-wider" style="color: #aeb4bc;">{$t('onboarding.pref_age_label')}</label>
 				<div class="flex items-center gap-3">
 					<input
 						type="number"
-						placeholder="Від"
+						placeholder={$t('onboarding.age_from')}
 						bind:value={ageMin}
 						min="4"
 						max="80"
@@ -822,7 +1022,7 @@
 			<div class="rounded-[20px] bg-white p-4" style="display: flex; flex-direction: column; gap: 12px;">
 				<label class="text-[11px] font-semibold uppercase tracking-wider" style="color: #aeb4bc;">ФІНАНСУВАННЯ ПАРТНЕРА</label>
 				<div class="flex gap-2">
-					{#each [{ value: 'no', label: 'Ні' }, { value: 'yes', label: 'Так' }, { value: 'partially', label: 'Частково' }] as f}
+					{#each [{ value: 'no', label: 'Ні' }, { value: 'yes', label: 'Так' }, { value: 'partial', label: 'Частково' }] as f}
 						<button
 							onclick={() => (wantsFinance = wantsFinance === f.value ? '' : f.value)}
 							class="flex-1 rounded-[50px] py-2.5 text-[13px] font-semibold transition-all"
@@ -993,7 +1193,7 @@
 				class="flex h-[50px] flex-1 items-center justify-center rounded-[50px] text-[14px] font-semibold text-white transition-opacity disabled:opacity-50"
 				style="background: #171717;"
 			>
-				Продовжити
+				{$t('onboarding.btn_next')}
 			</button>
 		{:else}
 			<button
@@ -1002,7 +1202,7 @@
 				class="flex h-[50px] flex-1 items-center justify-center rounded-[50px] text-[14px] font-semibold text-white transition-opacity disabled:opacity-50"
 				style="background: #8984da;"
 			>
-				{isSaving ? 'Створення профілю…' : 'Починати знайомства 🎉'}
+				{isSaving ? $t('onboarding.btn_saving') : $t('onboarding.btn_finish')}
 			</button>
 		{/if}
 	</div>

@@ -12,8 +12,6 @@ export async function authFetch(endpoint: string, init: RequestInit = {}): Promi
 		authStore.user = null;
 		authStore.isAuthenticated = false;
 		goto('/login');
-
-		return new Promise(() => {}) as Promise<Response>;
 	}
 
 	return response;
