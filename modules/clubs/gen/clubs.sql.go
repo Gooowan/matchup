@@ -12,6 +12,22 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const addClubTrainer = `-- name: AddClubTrainer :exec
+INSERT INTO club_trainers (club_id, trainer_user_id)
+VALUES ($1, $2)
+ON CONFLICT (club_id, trainer_user_id) DO NOTHING
+`
+
+type AddClubTrainerParams struct {
+	ClubID        pgtype.UUID `db:"club_id" json:"club_id"`
+	TrainerUserID pgtype.UUID `db:"trainer_user_id" json:"trainer_user_id"`
+}
+
+func (q *Queries) AddClubTrainer(ctx context.Context, arg AddClubTrainerParams) error {
+	_, err := q.db.Exec(ctx, addClubTrainer, arg.ClubID, arg.TrainerUserID)
+	return err
+}
+
 const adminListClubs = `-- name: AdminListClubs :many
 SELECT id, name, slug, description, country, city, address, latitude, longitude, website, phone, is_verified, is_active, metadata, owner_user_id, working_hours, created_at, updated_at FROM clubs
 ORDER BY created_at DESC
@@ -100,25 +116,48 @@ func (q *Queries) ClaimClub(ctx context.Context, arg ClaimClubParams) (Club, err
 	return i, err
 }
 
+const countTrainerClubs = `-- name: CountTrainerClubs :one
+SELECT COUNT(*)::int FROM club_trainers WHERE trainer_user_id = $1
+`
+
+func (q *Queries) CountTrainerClubs(ctx context.Context, trainerUserID pgtype.UUID) (int32, error) {
+	row := q.db.QueryRow(ctx, countTrainerClubs, trainerUserID)
+	var column_1 int32
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
+const countUserClubMemberships = `-- name: CountUserClubMemberships :one
+SELECT COUNT(*)::int FROM club_members WHERE user_id = $1
+`
+
+func (q *Queries) CountUserClubMemberships(ctx context.Context, userID pgtype.UUID) (int32, error) {
+	row := q.db.QueryRow(ctx, countUserClubMemberships, userID)
+	var column_1 int32
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const createClub = `-- name: CreateClub :one
-INSERT INTO clubs (name, slug, description, country, city, address, latitude, longitude, website, phone, is_verified, metadata)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
+INSERT INTO clubs (name, slug, description, country, city, address, latitude, longitude, website, phone, is_verified, metadata, working_hours)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
 RETURNING id, name, slug, description, country, city, address, latitude, longitude, website, phone, is_verified, is_active, metadata, owner_user_id, working_hours, created_at, updated_at
 `
 
 type CreateClubParams struct {
-	Name        string      `db:"name" json:"name"`
-	Slug        string      `db:"slug" json:"slug"`
-	Description pgtype.Text `db:"description" json:"description"`
-	Country     string      `db:"country" json:"country"`
-	City        string      `db:"city" json:"city"`
-	Address     pgtype.Text `db:"address" json:"address"`
-	Latitude    float64     `db:"latitude" json:"latitude"`
-	Longitude   float64     `db:"longitude" json:"longitude"`
-	Website     pgtype.Text `db:"website" json:"website"`
-	Phone       pgtype.Text `db:"phone" json:"phone"`
-	IsVerified  pgtype.Bool `db:"is_verified" json:"is_verified"`
-	Metadata    types.JSONB `db:"metadata" json:"metadata"`
+	Name         string      `db:"name" json:"name"`
+	Slug         string      `db:"slug" json:"slug"`
+	Description  pgtype.Text `db:"description" json:"description"`
+	Country      string      `db:"country" json:"country"`
+	City         string      `db:"city" json:"city"`
+	Address      pgtype.Text `db:"address" json:"address"`
+	Latitude     float64     `db:"latitude" json:"latitude"`
+	Longitude    float64     `db:"longitude" json:"longitude"`
+	Website      pgtype.Text `db:"website" json:"website"`
+	Phone        pgtype.Text `db:"phone" json:"phone"`
+	IsVerified   pgtype.Bool `db:"is_verified" json:"is_verified"`
+	Metadata     types.JSONB `db:"metadata" json:"metadata"`
+	WorkingHours types.JSONB `db:"working_hours" json:"working_hours"`
 }
 
 func (q *Queries) CreateClub(ctx context.Context, arg CreateClubParams) (Club, error) {
@@ -135,6 +174,7 @@ func (q *Queries) CreateClub(ctx context.Context, arg CreateClubParams) (Club, e
 		arg.Phone,
 		arg.IsVerified,
 		arg.Metadata,
+		arg.WorkingHours,
 	)
 	var i Club
 	err := row.Scan(
@@ -166,6 +206,22 @@ UPDATE clubs SET is_active = false, updated_at = CURRENT_TIMESTAMP WHERE id = $1
 
 func (q *Queries) DeactivateClub(ctx context.Context, id pgtype.UUID) error {
 	_, err := q.db.Exec(ctx, deactivateClub, id)
+	return err
+}
+
+const enrollTrainerStudent = `-- name: EnrollTrainerStudent :exec
+INSERT INTO trainer_students (trainer_user_id, dancer_user_id)
+VALUES ($1, $2)
+ON CONFLICT (trainer_user_id, dancer_user_id) DO NOTHING
+`
+
+type EnrollTrainerStudentParams struct {
+	TrainerUserID pgtype.UUID `db:"trainer_user_id" json:"trainer_user_id"`
+	DancerUserID  pgtype.UUID `db:"dancer_user_id" json:"dancer_user_id"`
+}
+
+func (q *Queries) EnrollTrainerStudent(ctx context.Context, arg EnrollTrainerStudentParams) error {
+	_, err := q.db.Exec(ctx, enrollTrainerStudent, arg.TrainerUserID, arg.DancerUserID)
 	return err
 }
 
@@ -345,11 +401,94 @@ func (q *Queries) LeaveClub(ctx context.Context, arg LeaveClubParams) error {
 	return err
 }
 
+const listClubDancers = `-- name: ListClubDancers :many
+SELECT
+    cm.user_id,
+    cm.role,
+    cm.joined_at,
+    p.account_type,
+    p.gender,
+    p.birth_date,
+    p.goal,
+    p.program,
+    p.categories,
+    p.country,
+    p.city,
+    p.metadata,
+    u.profile_data
+FROM club_members cm
+JOIN profiles p ON p.user_id = cm.user_id
+JOIN users u ON u.id = cm.user_id
+WHERE cm.club_id = $1
+  AND p.visible = true
+  AND p.account_type IN ('dancer', 'parent')
+ORDER BY cm.joined_at DESC
+LIMIT $3 OFFSET $2
+`
+
+type ListClubDancersParams struct {
+	ClubID    pgtype.UUID `db:"club_id" json:"club_id"`
+	OffsetVal int32       `db:"offset_val" json:"offset_val"`
+	LimitVal  int32       `db:"limit_val" json:"limit_val"`
+}
+
+type ListClubDancersRow struct {
+	UserID      pgtype.UUID      `db:"user_id" json:"user_id"`
+	Role        pgtype.Text      `db:"role" json:"role"`
+	JoinedAt    pgtype.Timestamp `db:"joined_at" json:"joined_at"`
+	AccountType string           `db:"account_type" json:"account_type"`
+	Gender      string           `db:"gender" json:"gender"`
+	BirthDate   pgtype.Date      `db:"birth_date" json:"birth_date"`
+	Goal        string           `db:"goal" json:"goal"`
+	Program     string           `db:"program" json:"program"`
+	Categories  []string         `db:"categories" json:"categories"`
+	Country     pgtype.Text      `db:"country" json:"country"`
+	City        pgtype.Text      `db:"city" json:"city"`
+	Metadata    types.JSONB      `db:"metadata" json:"metadata"`
+	ProfileData types.JSONB      `db:"profile_data" json:"profile_data"`
+}
+
+// Dancers (account_type dancer/parent) who are members of the club.
+func (q *Queries) ListClubDancers(ctx context.Context, arg ListClubDancersParams) ([]ListClubDancersRow, error) {
+	rows, err := q.db.Query(ctx, listClubDancers, arg.ClubID, arg.OffsetVal, arg.LimitVal)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListClubDancersRow
+	for rows.Next() {
+		var i ListClubDancersRow
+		if err := rows.Scan(
+			&i.UserID,
+			&i.Role,
+			&i.JoinedAt,
+			&i.AccountType,
+			&i.Gender,
+			&i.BirthDate,
+			&i.Goal,
+			&i.Program,
+			&i.Categories,
+			&i.Country,
+			&i.City,
+			&i.Metadata,
+			&i.ProfileData,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listClubMembers = `-- name: ListClubMembers :many
 SELECT
     cm.user_id,
     cm.role,
     cm.joined_at,
+    p.account_type,
     p.gender,
     p.birth_date,
     p.goal,
@@ -377,6 +516,7 @@ type ListClubMembersRow struct {
 	UserID      pgtype.UUID      `db:"user_id" json:"user_id"`
 	Role        pgtype.Text      `db:"role" json:"role"`
 	JoinedAt    pgtype.Timestamp `db:"joined_at" json:"joined_at"`
+	AccountType string           `db:"account_type" json:"account_type"`
 	Gender      string           `db:"gender" json:"gender"`
 	BirthDate   pgtype.Date      `db:"birth_date" json:"birth_date"`
 	Goal        string           `db:"goal" json:"goal"`
@@ -401,6 +541,7 @@ func (q *Queries) ListClubMembers(ctx context.Context, arg ListClubMembersParams
 			&i.UserID,
 			&i.Role,
 			&i.JoinedAt,
+			&i.AccountType,
 			&i.Gender,
 			&i.BirthDate,
 			&i.Goal,
@@ -421,12 +562,70 @@ func (q *Queries) ListClubMembers(ctx context.Context, arg ListClubMembersParams
 	return items, nil
 }
 
+const listClubTrainers = `-- name: ListClubTrainers :many
+SELECT
+    ct.trainer_user_id,
+    ct.joined_at,
+    p.gender,
+    p.categories,
+    p.metadata,
+    u.profile_data
+FROM club_trainers ct
+JOIN profiles p ON p.user_id = ct.trainer_user_id
+JOIN users u ON u.id = ct.trainer_user_id
+WHERE ct.club_id = $1 AND p.visible = true
+ORDER BY ct.joined_at ASC
+LIMIT $3 OFFSET $2
+`
+
+type ListClubTrainersParams struct {
+	ClubID    pgtype.UUID `db:"club_id" json:"club_id"`
+	OffsetVal int32       `db:"offset_val" json:"offset_val"`
+	LimitVal  int32       `db:"limit_val" json:"limit_val"`
+}
+
+type ListClubTrainersRow struct {
+	TrainerUserID pgtype.UUID      `db:"trainer_user_id" json:"trainer_user_id"`
+	JoinedAt      pgtype.Timestamp `db:"joined_at" json:"joined_at"`
+	Gender        string           `db:"gender" json:"gender"`
+	Categories    []string         `db:"categories" json:"categories"`
+	Metadata      types.JSONB      `db:"metadata" json:"metadata"`
+	ProfileData   types.JSONB      `db:"profile_data" json:"profile_data"`
+}
+
+func (q *Queries) ListClubTrainers(ctx context.Context, arg ListClubTrainersParams) ([]ListClubTrainersRow, error) {
+	rows, err := q.db.Query(ctx, listClubTrainers, arg.ClubID, arg.OffsetVal, arg.LimitVal)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListClubTrainersRow
+	for rows.Next() {
+		var i ListClubTrainersRow
+		if err := rows.Scan(
+			&i.TrainerUserID,
+			&i.JoinedAt,
+			&i.Gender,
+			&i.Categories,
+			&i.Metadata,
+			&i.ProfileData,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listClubs = `-- name: ListClubs :many
 SELECT id, name, slug, description, country, city, address, latitude, longitude, website, phone, is_verified, is_active, metadata, owner_user_id, working_hours, created_at, updated_at FROM clubs
 WHERE is_active = true
   AND (NULLIF($1::varchar, '') IS NULL OR country = $1)
   AND (NULLIF($2::varchar, '') IS NULL OR city ILIKE '%' || $2 || '%')
-  AND (NULLIF($3::varchar, '') IS NULL OR name ILIKE '%' || $3 || '%' OR city ILIKE '%' || $3 || '%')
+  AND (NULLIF($3::varchar, '') IS NULL OR name ILIKE '%' || $3 || '%' OR city ILIKE '%' || $3 || '%' OR address ILIKE '%' || $3 || '%')
 ORDER BY is_verified DESC, name ASC
 LIMIT $5 OFFSET $4
 `
@@ -567,6 +766,57 @@ func (q *Queries) ListClubsNearby(ctx context.Context, arg ListClubsNearbyParams
 	return items, nil
 }
 
+const listDancerTrainers = `-- name: ListDancerTrainers :many
+SELECT
+    ts.trainer_user_id,
+    ts.enrolled_at,
+    p.gender,
+    p.categories,
+    p.metadata,
+    u.profile_data
+FROM trainer_students ts
+JOIN profiles p ON p.user_id = ts.trainer_user_id
+JOIN users u ON u.id = ts.trainer_user_id
+WHERE ts.dancer_user_id = $1 AND p.visible = true
+ORDER BY ts.enrolled_at ASC
+`
+
+type ListDancerTrainersRow struct {
+	TrainerUserID pgtype.UUID      `db:"trainer_user_id" json:"trainer_user_id"`
+	EnrolledAt    pgtype.Timestamp `db:"enrolled_at" json:"enrolled_at"`
+	Gender        string           `db:"gender" json:"gender"`
+	Categories    []string         `db:"categories" json:"categories"`
+	Metadata      types.JSONB      `db:"metadata" json:"metadata"`
+	ProfileData   types.JSONB      `db:"profile_data" json:"profile_data"`
+}
+
+func (q *Queries) ListDancerTrainers(ctx context.Context, dancerUserID pgtype.UUID) ([]ListDancerTrainersRow, error) {
+	rows, err := q.db.Query(ctx, listDancerTrainers, dancerUserID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListDancerTrainersRow
+	for rows.Next() {
+		var i ListDancerTrainersRow
+		if err := rows.Scan(
+			&i.TrainerUserID,
+			&i.EnrolledAt,
+			&i.Gender,
+			&i.Categories,
+			&i.Metadata,
+			&i.ProfileData,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listOwnedClubs = `-- name: ListOwnedClubs :many
 SELECT id, name, slug, description, country, city, address, latitude, longitude, website, phone, is_verified, is_active, metadata, owner_user_id, working_hours, created_at, updated_at FROM clubs WHERE owner_user_id = $1 AND is_active = true ORDER BY name ASC
 `
@@ -610,37 +860,194 @@ func (q *Queries) ListOwnedClubs(ctx context.Context, ownerUserID pgtype.UUID) (
 	return items, nil
 }
 
+const listTrainerClubs = `-- name: ListTrainerClubs :many
+SELECT c.id, c.name, c.slug, c.description, c.country, c.city, c.address, c.latitude, c.longitude, c.website, c.phone, c.is_verified, c.is_active, c.metadata, c.owner_user_id, c.working_hours, c.created_at, c.updated_at FROM clubs c
+JOIN club_trainers ct ON ct.club_id = c.id
+WHERE ct.trainer_user_id = $1 AND c.is_active = true
+ORDER BY ct.joined_at ASC
+`
+
+func (q *Queries) ListTrainerClubs(ctx context.Context, trainerUserID pgtype.UUID) ([]Club, error) {
+	rows, err := q.db.Query(ctx, listTrainerClubs, trainerUserID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []Club
+	for rows.Next() {
+		var i Club
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Slug,
+			&i.Description,
+			&i.Country,
+			&i.City,
+			&i.Address,
+			&i.Latitude,
+			&i.Longitude,
+			&i.Website,
+			&i.Phone,
+			&i.IsVerified,
+			&i.IsActive,
+			&i.Metadata,
+			&i.OwnerUserID,
+			&i.WorkingHours,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTrainerStudents = `-- name: ListTrainerStudents :many
+SELECT
+    ts.dancer_user_id,
+    ts.enrolled_at,
+    p.gender,
+    p.birth_date,
+    p.goal,
+    p.program,
+    p.categories,
+    p.country,
+    p.city,
+    p.metadata,
+    u.profile_data
+FROM trainer_students ts
+JOIN profiles p ON p.user_id = ts.dancer_user_id
+JOIN users u ON u.id = ts.dancer_user_id
+WHERE ts.trainer_user_id = $1 AND p.visible = true
+ORDER BY ts.enrolled_at DESC
+`
+
+type ListTrainerStudentsRow struct {
+	DancerUserID pgtype.UUID      `db:"dancer_user_id" json:"dancer_user_id"`
+	EnrolledAt   pgtype.Timestamp `db:"enrolled_at" json:"enrolled_at"`
+	Gender       string           `db:"gender" json:"gender"`
+	BirthDate    pgtype.Date      `db:"birth_date" json:"birth_date"`
+	Goal         string           `db:"goal" json:"goal"`
+	Program      string           `db:"program" json:"program"`
+	Categories   []string         `db:"categories" json:"categories"`
+	Country      pgtype.Text      `db:"country" json:"country"`
+	City         pgtype.Text      `db:"city" json:"city"`
+	Metadata     types.JSONB      `db:"metadata" json:"metadata"`
+	ProfileData  types.JSONB      `db:"profile_data" json:"profile_data"`
+}
+
+func (q *Queries) ListTrainerStudents(ctx context.Context, trainerUserID pgtype.UUID) ([]ListTrainerStudentsRow, error) {
+	rows, err := q.db.Query(ctx, listTrainerStudents, trainerUserID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListTrainerStudentsRow
+	for rows.Next() {
+		var i ListTrainerStudentsRow
+		if err := rows.Scan(
+			&i.DancerUserID,
+			&i.EnrolledAt,
+			&i.Gender,
+			&i.BirthDate,
+			&i.Goal,
+			&i.Program,
+			&i.Categories,
+			&i.Country,
+			&i.City,
+			&i.Metadata,
+			&i.ProfileData,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const manageClub = `-- name: ManageClub :exec
 UPDATE clubs
-SET description   = $1,
-    address       = $2,
-    phone         = $3,
-    website       = $4,
-    working_hours = $5,
+SET name          = COALESCE(NULLIF($1, ''), name),
+    description   = $2,
+    address       = $3,
+    phone         = $4,
+    website       = $5,
+    working_hours = $6,
+    metadata      = CASE
+                      WHEN $7::text != '' THEN
+                        COALESCE(metadata, '{}')::jsonb || jsonb_build_object('logo_url', $7::text)
+                      ELSE metadata
+                    END,
+    latitude      = CASE WHEN $8::double precision != 0 THEN $8 ELSE latitude END,
+    longitude     = CASE WHEN $9::double precision != 0 THEN $9 ELSE longitude END,
     updated_at    = CURRENT_TIMESTAMP
-WHERE id = $6 AND owner_user_id = $7
+WHERE id = $10 AND owner_user_id = $11
 `
 
 type ManageClubParams struct {
+	Name         interface{} `db:"name" json:"name"`
 	Description  pgtype.Text `db:"description" json:"description"`
 	Address      pgtype.Text `db:"address" json:"address"`
 	Phone        pgtype.Text `db:"phone" json:"phone"`
 	Website      pgtype.Text `db:"website" json:"website"`
 	WorkingHours types.JSONB `db:"working_hours" json:"working_hours"`
+	LogoUrl      string      `db:"logo_url" json:"logo_url"`
+	Latitude     float64     `db:"latitude" json:"latitude"`
+	Longitude    float64     `db:"longitude" json:"longitude"`
 	ID           pgtype.UUID `db:"id" json:"id"`
 	OwnerUserID  pgtype.UUID `db:"owner_user_id" json:"owner_user_id"`
 }
 
 func (q *Queries) ManageClub(ctx context.Context, arg ManageClubParams) error {
 	_, err := q.db.Exec(ctx, manageClub,
+		arg.Name,
 		arg.Description,
 		arg.Address,
 		arg.Phone,
 		arg.Website,
 		arg.WorkingHours,
+		arg.LogoUrl,
+		arg.Latitude,
+		arg.Longitude,
 		arg.ID,
 		arg.OwnerUserID,
 	)
+	return err
+}
+
+const removeClubTrainer = `-- name: RemoveClubTrainer :exec
+DELETE FROM club_trainers WHERE club_id = $1 AND trainer_user_id = $2
+`
+
+type RemoveClubTrainerParams struct {
+	ClubID        pgtype.UUID `db:"club_id" json:"club_id"`
+	TrainerUserID pgtype.UUID `db:"trainer_user_id" json:"trainer_user_id"`
+}
+
+func (q *Queries) RemoveClubTrainer(ctx context.Context, arg RemoveClubTrainerParams) error {
+	_, err := q.db.Exec(ctx, removeClubTrainer, arg.ClubID, arg.TrainerUserID)
+	return err
+}
+
+const unenrollTrainerStudent = `-- name: UnenrollTrainerStudent :exec
+DELETE FROM trainer_students
+WHERE trainer_user_id = $1 AND dancer_user_id = $2
+`
+
+type UnenrollTrainerStudentParams struct {
+	TrainerUserID pgtype.UUID `db:"trainer_user_id" json:"trainer_user_id"`
+	DancerUserID  pgtype.UUID `db:"dancer_user_id" json:"dancer_user_id"`
+}
+
+func (q *Queries) UnenrollTrainerStudent(ctx context.Context, arg UnenrollTrainerStudentParams) error {
+	_, err := q.db.Exec(ctx, unenrollTrainerStudent, arg.TrainerUserID, arg.DancerUserID)
 	return err
 }
 

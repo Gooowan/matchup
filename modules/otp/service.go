@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	OTPLength     = 8
+	OTPLength     = 5
 	OTPExpiration = 15 * time.Minute
 	MaxAttempts   = 5
 	OTPKeyPrefix  = "otp:user"
@@ -150,15 +150,15 @@ func (s *OTPService) ValidateOTP(ctx context.Context, userID string, purpose str
 }
 
 func (s *OTPService) generateOTPCode() (string, error) {
-	min := int64(10000000)
-	max := int64(99999999)
+	min := int64(10000)
+	max := int64(99999)
 
 	n, err := rand.Int(rand.Reader, big.NewInt(max-min+1))
 	if err != nil {
 		return "", err
 	}
 
-	return fmt.Sprintf("%08d", n.Int64()+min), nil
+	return fmt.Sprintf("%05d", n.Int64()+min), nil
 }
 
 func (s *OTPService) buildOTPKey(userID string, purpose string) string {

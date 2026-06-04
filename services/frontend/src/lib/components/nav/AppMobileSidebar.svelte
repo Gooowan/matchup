@@ -56,8 +56,7 @@
 
 {#if isOpen}
 	<div
-		class="bg-linear-to-b absolute inset-0 z-[9999] flex h-screen w-screen flex-col from-[#000] via-[#000]/50 to-[#000] backdrop-blur-xl"
-		style="height: 100vh; height: 100dvh;"
+		class="bg-linear-to-b absolute inset-0 z-[9999] flex h-[100dvh] w-[100dvw] flex-col from-[#000] via-[#000]/50 to-[#000] backdrop-blur-xl"
 	>
 		<!-- Header -->
 		<div class="flex items-center justify-between border-b p-4">

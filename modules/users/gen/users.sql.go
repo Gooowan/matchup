@@ -16,7 +16,7 @@ const createUser = `-- name: CreateUser :one
 INSERT INTO users(email, email_verification_token, PASSWORD, inviter_id, profile_data, metadata)
     VALUES ($1, $2, $3, $4, $5::jsonb, $6::jsonb)
 RETURNING
-    id, email, inviter_id, metadata, profile_data, created_at, role, password, auth_nonce, forgot_password_token, email_verification_token
+    id, email, inviter_id, metadata, profile_data, created_at, role, password, auth_nonce, forgot_password_token, forgot_password_token_expires_at, email_verification_token
 `
 
 type CreateUserParams struct {
@@ -49,6 +49,7 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 		&i.Password,
 		&i.AuthNonce,
 		&i.ForgotPasswordToken,
+		&i.ForgotPasswordTokenExpiresAt,
 		&i.EmailVerificationToken,
 	)
 	return i, err
@@ -56,7 +57,7 @@ func (q *Queries) CreateUser(ctx context.Context, arg CreateUserParams) (User, e
 
 const getUser = `-- name: GetUser :one
 SELECT
-    id, email, inviter_id, metadata, profile_data, created_at, role, password, auth_nonce, forgot_password_token, email_verification_token
+    id, email, inviter_id, metadata, profile_data, created_at, role, password, auth_nonce, forgot_password_token, forgot_password_token_expires_at, email_verification_token
 FROM
     users
 WHERE
@@ -77,6 +78,7 @@ func (q *Queries) GetUser(ctx context.Context, userID pgtype.UUID) (User, error)
 		&i.Password,
 		&i.AuthNonce,
 		&i.ForgotPasswordToken,
+		&i.ForgotPasswordTokenExpiresAt,
 		&i.EmailVerificationToken,
 	)
 	return i, err
@@ -84,7 +86,7 @@ func (q *Queries) GetUser(ctx context.Context, userID pgtype.UUID) (User, error)
 
 const getUserByEmail = `-- name: GetUserByEmail :one
 SELECT
-    id, email, inviter_id, metadata, profile_data, created_at, role, password, auth_nonce, forgot_password_token, email_verification_token
+    id, email, inviter_id, metadata, profile_data, created_at, role, password, auth_nonce, forgot_password_token, forgot_password_token_expires_at, email_verification_token
 FROM
     users
 WHERE
@@ -105,6 +107,7 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email pgtype.Text) (User, 
 		&i.Password,
 		&i.AuthNonce,
 		&i.ForgotPasswordToken,
+		&i.ForgotPasswordTokenExpiresAt,
 		&i.EmailVerificationToken,
 	)
 	return i, err
@@ -112,7 +115,7 @@ func (q *Queries) GetUserByEmail(ctx context.Context, email pgtype.Text) (User, 
 
 const getUserByEmailVerificationToken = `-- name: GetUserByEmailVerificationToken :one
 SELECT
-    id, email, inviter_id, metadata, profile_data, created_at, role, password, auth_nonce, forgot_password_token, email_verification_token
+    id, email, inviter_id, metadata, profile_data, created_at, role, password, auth_nonce, forgot_password_token, forgot_password_token_expires_at, email_verification_token
 FROM
     users
 WHERE
@@ -133,6 +136,7 @@ func (q *Queries) GetUserByEmailVerificationToken(ctx context.Context, emailVeri
 		&i.Password,
 		&i.AuthNonce,
 		&i.ForgotPasswordToken,
+		&i.ForgotPasswordTokenExpiresAt,
 		&i.EmailVerificationToken,
 	)
 	return i, err
@@ -140,11 +144,12 @@ func (q *Queries) GetUserByEmailVerificationToken(ctx context.Context, emailVeri
 
 const getUserByForgotPasswordToken = `-- name: GetUserByForgotPasswordToken :one
 SELECT
-    id, email, inviter_id, metadata, profile_data, created_at, role, password, auth_nonce, forgot_password_token, email_verification_token
+    id, email, inviter_id, metadata, profile_data, created_at, role, password, auth_nonce, forgot_password_token, forgot_password_token_expires_at, email_verification_token
 FROM
     users
 WHERE
     forgot_password_token = $1
+    AND forgot_password_token_expires_at > NOW()
 `
 
 func (q *Queries) GetUserByForgotPasswordToken(ctx context.Context, forgotPasswordToken pgtype.Text) (User, error) {
@@ -161,6 +166,7 @@ func (q *Queries) GetUserByForgotPasswordToken(ctx context.Context, forgotPasswo
 		&i.Password,
 		&i.AuthNonce,
 		&i.ForgotPasswordToken,
+		&i.ForgotPasswordTokenExpiresAt,
 		&i.EmailVerificationToken,
 	)
 	return i, err
@@ -221,18 +227,20 @@ const updateUserForgotPasswordToken = `-- name: UpdateUserForgotPasswordToken :e
 UPDATE
     users
 SET
-    forgot_password_token = $1
+    forgot_password_token = $1,
+    forgot_password_token_expires_at = $2
 WHERE
-    id = $2
+    id = $3
 `
 
 type UpdateUserForgotPasswordTokenParams struct {
-	ForgotPasswordToken pgtype.Text `db:"forgot_password_token" json:"forgot_password_token"`
-	UserID              pgtype.UUID `db:"user_id" json:"user_id"`
+	ForgotPasswordToken          pgtype.Text      `db:"forgot_password_token" json:"forgot_password_token"`
+	ForgotPasswordTokenExpiresAt pgtype.Timestamp `db:"forgot_password_token_expires_at" json:"forgot_password_token_expires_at"`
+	UserID                       pgtype.UUID      `db:"user_id" json:"user_id"`
 }
 
 func (q *Queries) UpdateUserForgotPasswordToken(ctx context.Context, arg UpdateUserForgotPasswordTokenParams) error {
-	_, err := q.db.Exec(ctx, updateUserForgotPasswordToken, arg.ForgotPasswordToken, arg.UserID)
+	_, err := q.db.Exec(ctx, updateUserForgotPasswordToken, arg.ForgotPasswordToken, arg.ForgotPasswordTokenExpiresAt, arg.UserID)
 	return err
 }
 

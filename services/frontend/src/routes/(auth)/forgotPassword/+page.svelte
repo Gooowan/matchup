@@ -2,6 +2,7 @@
 	import { authFetch } from '$lib/utils/authFetch';
 	import { authStore } from '$stores/auth.svelte';
 	import { onMount } from 'svelte';
+	import { parseApiError } from '$lib/utils/parseApiError';
 
 	let email = $state('');
 	let isLoading = $state(false);
@@ -25,7 +26,7 @@
 			if (resp.ok) {
 				emailSent = true;
 			} else {
-				errorMsg = response.error || 'Не вдалося надіслати листа. Спробуй ще раз.';
+				errorMsg = parseApiError(response, resp.status);
 			}
 		} catch {
 			errorMsg = 'Помилка мережі. Спробуй ще раз.';

@@ -1,11 +1,13 @@
 package feed
 
 import (
+	"errors"
 	"net/http"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
 
+	corehttp "github.com/Gooowan/matchup/modules/core/http"
 	"github.com/Gooowan/matchup/modules/core/logging"
 	"github.com/Gooowan/matchup/modules/core/types"
 	"github.com/Gooowan/matchup/modules/core/utils"
@@ -37,13 +39,25 @@ func (c *FeedController) GetFeed(ctx *gin.Context) {
 
 	candidates, err := c.svc.GetFeed(ctx.Request.Context(), user.ID, limit)
 	if err != nil {
+		if errors.Is(err, ErrNoProfile) {
+			// Signal the frontend to show the "complete your profile" state.
+			ctx.JSON(http.StatusOK, types.Resp{
+				Data: gin.H{
+					"candidates":  []recgen.FeedCandidateDTO{},
+					"no_profile":  true,
+				},
+			})
+			return
+		}
 		ctx.JSON(http.StatusBadRequest, types.Resp{Error: err.Error()})
 		return
 	}
 
 	dtos := make([]recgen.FeedCandidateDTO, len(candidates))
-	for i, c := range candidates {
-		dtos[i] = c.ToFeedDTO()
+	for i, ranked := range candidates {
+		dto := ranked.Row.ToFeedDTO()
+		dto.Source = ranked.Source
+		dtos[i] = dto
 	}
 
 	ctx.JSON(http.StatusOK, types.Resp{Data: gin.H{"candidates": dtos}})
@@ -61,8 +75,7 @@ func (c *FeedController) Swipe(ctx *gin.Context) {
 		Action       string `json:"action" binding:"required,oneof=LIKE PASS"`
 		Source       string `json:"source"`
 	}
-	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, types.Resp{Error: err.Error()})
+	if !corehttp.BindJSON(ctx, &req) {
 		return
 	}
 
@@ -99,8 +112,7 @@ func (c *FeedController) Hide(ctx *gin.Context) {
 		TargetUserID string `json:"target_user_id" binding:"required"`
 		Reason       string `json:"reason"`
 	}
-	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, types.Resp{Error: err.Error()})
+	if !corehttp.BindJSON(ctx, &req) {
 		return
 	}
 

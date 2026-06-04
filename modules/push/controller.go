@@ -6,6 +6,7 @@ import (
 	"github.com/gin-gonic/gin"
 
 	"github.com/Gooowan/matchup/modules/core/types"
+	corehttp "github.com/Gooowan/matchup/modules/core/http"
 	"github.com/Gooowan/matchup/modules/users/auth"
 )
 
@@ -32,8 +33,7 @@ func (c *Controller) registerToken(ctx *gin.Context) {
 		Token    string `json:"token" binding:"required"`
 		Platform string `json:"platform"`
 	}
-	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, types.Resp{Error: err.Error()})
+	if !corehttp.BindJSON(ctx, &req) {
 		return
 	}
 	if req.Platform == "" {

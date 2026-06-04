@@ -14,6 +14,7 @@ CREATE TABLE users(
     password varchar(64),
     auth_nonce int NOT NULL DEFAULT 0,
     forgot_password_token varchar(64) UNIQUE,
+    forgot_password_token_expires_at timestamp,
     email_verification_token varchar(64) UNIQUE
 );
 
@@ -22,6 +23,20 @@ CREATE INDEX idx_users_email ON users(email);
 CREATE INDEX idx_users_email_verification_token ON users(email_verification_token);
 
 CREATE INDEX idx_users_forgot_password_token ON users(forgot_password_token);
+
+-- OAuth / external identity providers. One user can have multiple linked identities
+-- (e.g. password + Google + WebAuthn later). Each provider+subject pair is unique.
+CREATE TABLE user_identities(
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    provider varchar(32) NOT NULL,          -- e.g. 'google', 'okta', 'webauthn'
+    provider_subject varchar(255) NOT NULL, -- provider's unique user identifier (sub claim)
+    email varchar(255),                     -- email from the provider (informational)
+    created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(provider, provider_subject)
+);
+
+CREATE INDEX idx_user_identities_user_id ON user_identities(user_id);
 
 -- Seed root user (used as initial inviter / admin)
 INSERT INTO users (id, email, inviter_id, metadata, profile_data, role, password, auth_nonce)
@@ -100,14 +115,38 @@ CREATE TABLE club_members (
 CREATE INDEX idx_club_members_user ON club_members(user_id);
 CREATE INDEX idx_club_members_club ON club_members(club_id);
 
+-- Club ↔ Trainer relationship (many-to-many: trainer teaches at club)
+CREATE TABLE club_trainers (
+    club_id         uuid        NOT NULL REFERENCES clubs(id) ON DELETE CASCADE,
+    trainer_user_id uuid        NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    joined_at       timestamp   NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (club_id, trainer_user_id)
+);
+
+CREATE INDEX idx_club_trainers_club    ON club_trainers(club_id);
+CREATE INDEX idx_club_trainers_trainer ON club_trainers(trainer_user_id);
+
+-- Trainer ↔ Dancer relationship (many-to-many: trainer teaches dancer)
+CREATE TABLE trainer_students (
+    trainer_user_id uuid        NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    dancer_user_id  uuid        NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    enrolled_at     timestamp   NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (trainer_user_id, dancer_user_id)
+);
+
+CREATE INDEX idx_trainer_students_trainer ON trainer_students(trainer_user_id);
+CREATE INDEX idx_trainer_students_dancer  ON trainer_students(dancer_user_id);
+
 
 -- Module: modules/recommendation
 -- Recommendation module schema
 
--- Dancer profiles (1:1 with users)
+-- Dancer/trainer/parent profiles (1:1 with users; account_type discriminates entity kind)
 CREATE TABLE profiles(
     id                 uuid          PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id            uuid          NOT NULL REFERENCES users(id) UNIQUE,
+    -- Entity type: dancer | parent | trainer | club
+    account_type       varchar(20)   NOT NULL DEFAULT 'dancer',
     -- Geo location
     latitude           double precision,
     longitude          double precision,
@@ -134,6 +173,9 @@ CREATE TABLE profiles(
 );
 
 CREATE INDEX idx_profiles_user_id      ON profiles(user_id);
+CREATE INDEX idx_profiles_account_type ON profiles(account_type);
+CREATE INDEX idx_profiles_dancers      ON profiles(account_type) WHERE account_type IN ('dancer', 'parent');
+CREATE INDEX idx_profiles_trainers     ON profiles(account_type) WHERE account_type = 'trainer';
 CREATE INDEX idx_profiles_dance_styles ON profiles USING GIN(dance_styles);
 CREATE INDEX idx_profiles_coords       ON profiles(latitude, longitude);
 CREATE INDEX idx_profiles_visible      ON profiles(visible) WHERE visible = true;
@@ -212,19 +254,51 @@ WHERE
 
 -- Module: modules/chat
 -- Chat module schema
-
--- Chats (created on mutual match)
+--
+-- Architecture: polymorphic 1:1 chat table.
+--   Two chat kinds share a single `chats` table distinguished by which nullable
+--   columns are populated:
+--
+--   DM (user ↔ user):
+--     user1_id + user2_id are set, club_id IS NULL.
+--     Created automatically on mutual LIKE in the feed swipe flow.
+--
+--   Club chat (user ↔ club):
+--     user1_id (the dancer who opened the thread) + club_id are set, user2_id IS NULL.
+--     Created via POST /clubs/:slug/chat (idempotent create-or-get).
+--     Access for the club side is granted to clubs.owner_user_id.
+--
+-- Known limitations (intentional deferred scope):
+--   - Only the club OWNER can read/reply to club chats; staff/member roles are not
+--     supported without a chat_participants table.
+--   - There is no "send as club entity" — messages always carry a user sender_id.
+--   - Group chat (many users in one thread) is not supported; extend to a
+--     chat_participants(chat_id, participant_type, participant_id) table if needed.
+--   - Unclaimed clubs can receive dancer messages, but no one can reply until
+--     owner_user_id is set.
+--
+-- Chats. Two kinds:
+--   DM:        user1_id + user2_id set, club_id NULL (created on mutual match)
+--   Club chat: user1_id (the dancer) + club_id set, user2_id NULL until/unless
+--              we need to pin a specific owner. The club side is answered by any
+--              user who owns club_id, so unclaimed clubs can still receive chats.
 CREATE TABLE chats(
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
     user1_id uuid NOT NULL REFERENCES users(id),
-    user2_id uuid NOT NULL REFERENCES users(id),
-    created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(user1_id, user2_id)
+    user2_id uuid REFERENCES users(id),
+    club_id uuid REFERENCES clubs(id) ON DELETE CASCADE,
+    created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+-- One DM per user pair; one club chat per (dancer, club).
+CREATE UNIQUE INDEX uq_chats_dm ON chats(user1_id, user2_id) WHERE club_id IS NULL;
+CREATE UNIQUE INDEX uq_chats_club ON chats(user1_id, club_id) WHERE club_id IS NOT NULL;
 
 CREATE INDEX idx_chats_user1 ON chats(user1_id);
 
 CREATE INDEX idx_chats_user2 ON chats(user2_id);
+
+CREATE INDEX idx_chats_club ON chats(club_id);
 
 -- Messages
 CREATE TABLE messages(
@@ -233,10 +307,41 @@ CREATE TABLE messages(
     sender_id uuid NOT NULL REFERENCES users(id),
     type varchar(20) NOT NULL DEFAULT 'TEXT',
     content text NOT NULL,
+    -- Moderation: NULL = visible, 'hidden' = soft-deleted by admin, 'flagged' = under review
+    moderation_status varchar(20),
+    deleted_at timestamp,
     created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE INDEX idx_messages_chat_created ON messages(chat_id, created_at);
+
+-- Message-level reports (reporters flag specific messages for admin review).
+-- Stores a content snapshot so the original message text is preserved even if
+-- the message is later deleted/hidden.
+CREATE TABLE message_reports(
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    message_id uuid NOT NULL REFERENCES messages(id) ON DELETE CASCADE,
+    chat_id uuid NOT NULL REFERENCES chats(id) ON DELETE CASCADE,
+    reporter_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    reported_user_id uuid NOT NULL REFERENCES users(id),
+    category varchar(50) NOT NULL,
+    comment text,
+    content_snapshot text NOT NULL,  -- message text at time of report
+    status varchar(20) NOT NULL DEFAULT 'open',  -- open | resolved | dismissed
+    resolved_by uuid REFERENCES users(id),
+    resolved_at timestamp,
+    created_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_message_reports_status ON message_reports(status, created_at DESC);
+
+-- Tracks the last time each participant read a chat, used for unread counts
+CREATE TABLE chat_reads (
+    chat_id     uuid NOT NULL REFERENCES chats(id) ON DELETE CASCADE,
+    user_id     uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    last_read_at timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (chat_id, user_id)
+);
 
 
 -- Module: modules/map
@@ -279,6 +384,21 @@ CREATE TABLE reports(
 
 CREATE INDEX idx_reports_reporter ON reports(reporter_id);
 CREATE INDEX idx_reports_reported ON reports(reported_id);
+
+-- Immutable audit trail for admin actions (ban, hide message, resolve report, etc.).
+-- Rows are never updated or deleted; the table is append-only.
+CREATE TABLE admin_audit_log(
+    id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    admin_id    uuid NOT NULL REFERENCES users(id),
+    action      varchar(64)  NOT NULL,  -- e.g. 'ban_user', 'hide_message', 'resolve_report'
+    target_type varchar(32)  NOT NULL,  -- 'user' | 'message' | 'report'
+    target_id   varchar(255) NOT NULL,  -- UUID string of the affected row
+    metadata    jsonb,                  -- additional context (old role, report category, etc.)
+    created_at  timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_admin_audit_log_admin ON admin_audit_log(admin_id);
+CREATE INDEX idx_admin_audit_log_created ON admin_audit_log(created_at DESC);
 
 -- Module: modules/subscriptions
 CREATE TABLE subscriptions (

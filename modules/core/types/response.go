@@ -7,8 +7,9 @@ import (
 )
 
 type Resp struct {
-	Error any `json:"error,omitempty"`
-	Data  any `json:"data"`
+	ErrorCode string `json:"error_code,omitempty"`
+	Error     any    `json:"error,omitempty"`
+	Data      any    `json:"data"`
 }
 
 type PaginatedResp[T any] struct {

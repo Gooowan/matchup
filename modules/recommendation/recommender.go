@@ -27,8 +27,12 @@ func (r *Recommender) GetCandidates(ctx context.Context, params FeedParams) ([]C
 	seen := make(map[[16]byte]bool)
 	results := make([]Candidate, 0, params.Limit)
 
-	tierNames := []string{"tier1", "tier2", "tier3"}
-	providers := []CandidateProvider{r.Tier1, r.Tier2, r.Tier3}
+	// Pipeline order: mutual_match (Tier3) → filter_match (Tier2) → proximity (Tier1).
+	// Tier3 shows profiles who match each other's preferences (best quality).
+	// Tier2 shows profiles who match MY preferences (one-way).
+	// Tier1 shows profiles by distance only with gender filter (fallback).
+	tierNames := []string{"mutual_match", "filter_match", "proximity"}
+	providers := []CandidateProvider{r.Tier3, r.Tier2, r.Tier1}
 
 	for i, provider := range providers {
 		if int32(len(results)) >= params.Limit {
@@ -59,6 +63,7 @@ func (r *Recommender) GetCandidates(ctx context.Context, params FeedParams) ([]C
 			}
 			if !seen[c.UserID.Bytes] {
 				seen[c.UserID.Bytes] = true
+				c.Source = tier // annotate which tier provided this candidate
 				results = append(results, c)
 				added++
 			}

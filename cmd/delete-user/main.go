@@ -147,21 +147,24 @@ func main() {
 		desc string
 		sql  string
 	}{
-		{"user_subscriptions", `DELETE FROM user_subscriptions WHERE user_id = $1::uuid`},
-		{"reports (reporter)",  `DELETE FROM reports WHERE reporter_id = $1::uuid`},
-		{"reports (reported)", `DELETE FROM reports WHERE reported_id = $1::uuid`},
-		{"blocks",             `DELETE FROM blocks WHERE blocker_id = $1::uuid OR blocked_id = $1::uuid`},
-		{"messages (sender)",  `DELETE FROM messages WHERE sender_id = $1::uuid`},
-		{"messages (chats)",   `DELETE FROM messages WHERE chat_id IN (SELECT id FROM chats WHERE user1_id = $1::uuid OR user2_id = $1::uuid)`},
-		{"chats",              `DELETE FROM chats WHERE user1_id = $1::uuid OR user2_id = $1::uuid`},
-		{"matches",            `DELETE FROM matches WHERE from_user_id = $1::uuid OR to_user_id = $1::uuid`},
-		{"recommendation_likes_log", `DELETE FROM recommendation_likes_log WHERE user_id = $1::uuid OR liked_id = $1::uuid`},
-		{"user_locations",     `DELETE FROM user_locations WHERE user_id = $1::uuid`},
-		{"media",              `DELETE FROM media WHERE owner_id = $1::uuid`},
-		{"user_preferences",   `DELETE FROM user_preferences WHERE user_id = $1::uuid`},
-		{"profiles",           `DELETE FROM profiles WHERE user_id = $1::uuid`},
-		{"club_members",       `DELETE FROM club_members WHERE user_id = $1::uuid`},
-		{"users",              `DELETE FROM users WHERE id = $1::uuid`},
+		{"user_subscriptions",        `DELETE FROM user_subscriptions WHERE user_id = $1::uuid`},
+		{"reports (reporter)",         `DELETE FROM reports WHERE reporter_id = $1::uuid`},
+		{"reports (reported)",         `DELETE FROM reports WHERE reported_id = $1::uuid`},
+		{"blocks",                     `DELETE FROM blocks WHERE blocker_id = $1::uuid OR blocked_id = $1::uuid`},
+		{"messages (sender)",          `DELETE FROM messages WHERE sender_id = $1::uuid`},
+		{"messages (chats)",           `DELETE FROM messages WHERE chat_id IN (SELECT id FROM chats WHERE user1_id = $1::uuid OR user2_id = $1::uuid)`},
+		{"chats",                      `DELETE FROM chats WHERE user1_id = $1::uuid OR user2_id = $1::uuid`},
+		{"matches",                    `DELETE FROM matches WHERE from_user_id = $1::uuid OR to_user_id = $1::uuid`},
+		{"recommendation_likes_log",   `DELETE FROM recommendation_likes_log WHERE user_id = $1::uuid OR liked_id = $1::uuid`},
+		{"user_locations",             `DELETE FROM user_locations WHERE user_id = $1::uuid`},
+		{"media",                      `DELETE FROM media WHERE owner_id = $1::uuid`},
+		{"user_preferences",           `DELETE FROM user_preferences WHERE user_id = $1::uuid`},
+		{"profiles",                   `DELETE FROM profiles WHERE user_id = $1::uuid`},
+		{"club_members",               `DELETE FROM club_members WHERE user_id = $1::uuid`},
+		// Clear inviter_id FK — no ON DELETE clause, so must be nullified before
+		// removing the user row or the FK constraint will reject the delete.
+		{"users (clear inviter refs)", `UPDATE users SET inviter_id = NULL WHERE inviter_id = $1::uuid`},
+		{"users",                      `DELETE FROM users WHERE id = $1::uuid`},
 	}
 
 	for _, step := range steps {

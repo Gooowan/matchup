@@ -8,6 +8,8 @@
 	import { t } from '$lib/locale';
 	import toast from 'svelte-french-toast';
 
+	const MAX_CLUBS = 5;
+
 	interface Club {
 		id: string;
 		slug: string;
@@ -28,8 +30,9 @@
 	let showSearchSheet = $state(false);
 	let showCreateSheet = $state(false);
 
-	let userCity = $derived((authStore.user?.profile_data?.city as string) ?? '');
-	let userCountry = $derived((authStore.user?.profile_data?.country as string) ?? 'Ukraine');
+	let accountType = $derived(authStore.user?.profile_data?.account_type as string | undefined);
+	let isTrainer = $derived(accountType === 'trainer');
+	let atClubLimit = $derived(joinedClubs.length >= MAX_CLUBS);
 
 	onMount(async () => {
 		await loadMyClubs();
@@ -86,7 +89,7 @@
 			const resp = await authFetch(`/clubs/${club.slug}/join`, { method: 'DELETE' });
 			if (resp.ok) {
 				joinedClubs = joinedClubs.filter((c) => c.id !== club.id);
-				if (primaryClubId === club.id) {
+				if (!isTrainer && primaryClubId === club.id) {
 					primaryClubId = null;
 					await authFetch('/me/profile', {
 						method: 'PUT',
@@ -112,8 +115,8 @@
 
 	async function handleJoined(club: Club) {
 		await loadMyClubs();
-		// Make the newly joined club primary if user had none
-		if (!primaryClubId) {
+		// Make the newly joined club primary if dancer/parent had none
+		if (!isTrainer && !primaryClubId) {
 			await setPrimary(club);
 		}
 	}
@@ -121,9 +124,9 @@
 	async function handleCreated(slug: string) {
 		showCreateSheet = false;
 		await loadMyClubs();
-		// Find the newly created club and make it primary
+		// Find the newly created club and make it primary (dancer/parent only)
 		const created = joinedClubs.find((c) => c.slug === slug);
-		if (created && !primaryClubId) {
+		if (created && !isTrainer && !primaryClubId) {
 			await setPrimary(created);
 		}
 	}
@@ -184,22 +187,24 @@
 
 								<!-- Actions -->
 								<div class="flex flex-shrink-0 items-center gap-1">
-									<!-- Star: set primary -->
-									<button
-										onclick={() => setPrimary(club)}
-										disabled={primaryClubId === club.id || settingPrimaryId === club.id}
-										class="flex h-[34px] w-[34px] items-center justify-center rounded-full transition-opacity disabled:opacity-40"
-										aria-label={$t('settings.clubs_make_primary')}
-									>
-										{#if settingPrimaryId === club.id}
-											<div class="h-4 w-4 animate-spin rounded-full border-2" style="border-color: rgba(174,180,188,0.3); border-top-color: #8984da;"></div>
-										{:else}
-											<i
-												class="fi {primaryClubId === club.id ? 'fi-sr-star' : 'fi-rr-star'}"
-												style="font-size: 18px; color: {primaryClubId === club.id ? '#8984da' : '#aeb4bc'}; line-height: 1;"
-											></i>
-										{/if}
-									</button>
+									<!-- Star: set primary (dancers/parents only) -->
+									{#if !isTrainer}
+										<button
+											onclick={() => setPrimary(club)}
+											disabled={primaryClubId === club.id || settingPrimaryId === club.id}
+											class="flex h-[34px] w-[34px] items-center justify-center rounded-full transition-opacity disabled:opacity-40"
+											aria-label={$t('settings.clubs_make_primary')}
+										>
+											{#if settingPrimaryId === club.id}
+												<div class="h-4 w-4 animate-spin rounded-full border-2" style="border-color: rgba(174,180,188,0.3); border-top-color: #8984da;"></div>
+											{:else}
+												<i
+													class="fi {primaryClubId === club.id ? 'fi-sr-star' : 'fi-rr-star'}"
+													style="font-size: 18px; color: {primaryClubId === club.id ? '#8984da' : '#aeb4bc'}; line-height: 1;"
+												></i>
+											{/if}
+										</button>
+									{/if}
 
 									<!-- Leave -->
 									<button
@@ -226,23 +231,31 @@
 				<p class="px-4 pt-4 pb-2 text-[11px] font-semibold uppercase tracking-wider" style="color: #aeb4bc;">
 					{$t('settings.clubs_section_actions')}
 				</p>
-				<div class="mu-divider flex flex-col" style="border-top-width: 1px; border-top-style: solid;">
-					<button
-						class="flex items-center gap-3 px-4 py-3 text-left"
-						onclick={() => (showSearchSheet = true)}
-					>
-						<i class="fi fi-rr-search mu-text-primary" style="font-size: 18px;"></i>
-						<span class="mu-text-primary text-[14px] font-semibold">{$t('settings.clubs_find_existing')}</span>
-					</button>
-					<button
-						class="mu-divider flex items-center gap-3 px-4 py-3 text-left"
-						style="border-top-width: 1px; border-top-style: solid;"
-						onclick={() => (showCreateSheet = true)}
-					>
-						<i class="fi fi-rr-add mu-text-primary" style="font-size: 18px;"></i>
-						<span class="mu-text-primary text-[14px] font-semibold">{$t('settings.clubs_create_new')}</span>
-					</button>
-				</div>
+				{#if atClubLimit}
+					<div class="px-4 pb-4 pt-1">
+						<p class="text-center text-[13px] font-medium" style="color: #aeb4bc;">
+							{$t('settings.clubs_limit_reached', { default: `Ти вже у ${MAX_CLUBS} клубах — максимум досягнуто.` })}
+						</p>
+					</div>
+				{:else}
+					<div class="mu-divider flex flex-col" style="border-top-width: 1px; border-top-style: solid;">
+						<button
+							class="flex items-center gap-3 px-4 py-3 text-left"
+							onclick={() => (showSearchSheet = true)}
+						>
+							<i class="fi fi-rr-search mu-text-primary" style="font-size: 18px;"></i>
+							<span class="mu-text-primary text-[14px] font-semibold">{$t('settings.clubs_find_existing')}</span>
+						</button>
+						<button
+							class="mu-divider flex items-center gap-3 px-4 py-3 text-left"
+							style="border-top-width: 1px; border-top-style: solid;"
+							onclick={() => (showCreateSheet = true)}
+						>
+							<i class="fi fi-rr-add mu-text-primary" style="font-size: 18px;"></i>
+							<span class="mu-text-primary text-[14px] font-semibold">{$t('settings.clubs_create_new')}</span>
+						</button>
+					</div>
+				{/if}
 			</div>
 		</div>
 	{/if}
@@ -260,8 +273,6 @@
 <CreateClubSheet
 	open={showCreateSheet}
 	coords={null}
-	defaultCity={userCity}
-	defaultCountry={userCountry}
 	onclose={() => (showCreateSheet = false)}
 	oncreated={handleCreated}
 />

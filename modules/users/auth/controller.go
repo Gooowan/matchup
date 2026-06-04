@@ -1,20 +1,30 @@
 package auth
 
 import (
-	"fmt"
+	"context"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/Gooowan/matchup/modules/core/types"
+	corehttp "github.com/Gooowan/matchup/modules/core/http"
 	"github.com/Gooowan/matchup/modules/core/utils"
 )
 
+// LockoutRecorder is implemented by ratelimit.RLService; kept as an interface
+// here so the auth package does not import the ratelimit package.
+type LockoutRecorder interface {
+	RecordLoginFailure(ctx context.Context, email string)
+	ClearLoginFailures(ctx context.Context, email string)
+}
+
 type AuthController struct {
-	authService *AuthService
+	authService     *AuthService
+	lockoutRecorder LockoutRecorder
 }
 
 func NewAuthController(authService *AuthService) *AuthController {
@@ -23,19 +33,27 @@ func NewAuthController(authService *AuthService) *AuthController {
 	}
 }
 
+// SetLockoutRecorder wires in the Redis-backed lockout tracker after construction
+// (avoids an import cycle between auth and ratelimit).
+func (c *AuthController) SetLockoutRecorder(r LockoutRecorder) {
+	c.lockoutRecorder = r
+}
+
 func (c *AuthController) Login(ctx *gin.Context) {
 	var req struct {
 		Email    string `json:"email" binding:"required,email"`
 		Password string `json:"password" binding:"required"`
 	}
 
-	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, types.Resp{Error: err.Error()})
+	if !corehttp.BindJSON(ctx, &req) {
 		return
 	}
 
 	token, expiresAt, user, err := c.authService.Login(ctx.Request.Context(), req.Email, req.Password)
 	if err != nil {
+		if c.lockoutRecorder != nil {
+			c.lockoutRecorder.RecordLoginFailure(ctx.Request.Context(), req.Email)
+		}
 		switch err {
 		case ErrInvalidUser, ErrInvalidPassword:
 			ctx.JSON(http.StatusBadRequest, types.Resp{Error: "Invalid email or password"})
@@ -48,6 +66,9 @@ func (c *AuthController) Login(ctx *gin.Context) {
 			return
 		}
 	}
+	if c.lockoutRecorder != nil {
+		c.lockoutRecorder.ClearLoginFailures(ctx.Request.Context(), req.Email)
+	}
 
 	// Set HttpOnly cookie for cross-subdomain authentication
 	// For cross-domain setup, we need to set the domain to the parent domain
@@ -58,6 +79,7 @@ func (c *AuthController) Login(ctx *gin.Context) {
 		// If no domain is set, use empty string (current domain only)
 		domain = ""
 	}
+	ctx.SetSameSite(http.SameSiteLaxMode)
 	ctx.SetCookie("auth_token", token, int(time.Until(expiresAt).Seconds()), "/", domain, true, true)
 
 	if user.ProfileData != nil {
@@ -77,13 +99,17 @@ func (c *AuthController) Login(ctx *gin.Context) {
 
 func (c *AuthController) Register(ctx *gin.Context) {
 	var req RegistrationRequest
-	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, types.Resp{Error: err.Error()})
+	if !corehttp.BindJSON(ctx, &req) {
 		return
 	}
 
 	user, err := c.authService.Register(ctx.Request.Context(), &req)
 	if err != nil {
+		// Surface "email already in use" as 409 so the frontend can show a useful message.
+		if strings.Contains(err.Error(), "unique") || strings.Contains(err.Error(), "already") || strings.Contains(err.Error(), "duplicate") {
+			ctx.JSON(http.StatusConflict, types.Resp{Error: "Ця адреса вже використовується"})
+			return
+		}
 		ctx.JSON(http.StatusInternalServerError, types.Resp{Error: "Failed to create account"})
 		return
 	}
@@ -96,8 +122,7 @@ func (c *AuthController) CheckEmail(ctx *gin.Context) {
 		Email string `json:"email" binding:"required,email"`
 	}
 
-	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, types.Resp{Error: err.Error()})
+	if !corehttp.BindJSON(ctx, &req) {
 		return
 	}
 
@@ -121,8 +146,7 @@ func (c *AuthController) CheckInviter(ctx *gin.Context) {
 		InviterID string `json:"inviter_id" binding:"required"`
 	}
 
-	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, types.Resp{Error: err.Error()})
+	if !corehttp.BindJSON(ctx, &req) {
 		return
 	}
 
@@ -146,14 +170,13 @@ func (c *AuthController) ForgotPassword(ctx *gin.Context) {
 		Email string `json:"email" binding:"required,email"`
 	}
 
-	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, types.Resp{Error: err.Error()})
+	if !corehttp.BindJSON(ctx, &req) {
 		return
 	}
 
 	err := c.authService.RequestPasswordReset(ctx.Request.Context(), req.Email)
 	if err != nil {
-		ctx.JSON(http.StatusInternalServerError, types.Resp{Error: fmt.Sprintf("Failed to process password reset request: %s", err.Error())})
+		ctx.JSON(http.StatusInternalServerError, types.Resp{ErrorCode: "RESET_FAILED", Error: "Failed to process password reset request"})
 		return
 	}
 
@@ -166,8 +189,7 @@ func (c *AuthController) ChangePassword(ctx *gin.Context) {
 		NewPassword string `json:"new_password" binding:"required"`
 	}
 
-	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, types.Resp{Error: err.Error()})
+	if !corehttp.BindJSON(ctx, &req) {
 		return
 	}
 
@@ -197,14 +219,13 @@ func (c *AuthController) ResetPassword(ctx *gin.Context) {
 		Password string `json:"password" binding:"required"`
 	}
 
-	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, types.Resp{Error: err.Error()})
+	if !corehttp.BindJSON(ctx, &req) {
 		return
 	}
 
 	err := c.authService.PasswordReset(ctx.Request.Context(), req.Token, req.Password)
 	if err != nil {
-		ctx.JSON(http.StatusBadRequest, types.Resp{Error: err.Error()})
+		ctx.JSON(http.StatusBadRequest, types.Resp{ErrorCode: "INVALID_RESET_TOKEN", Error: "Invalid or expired reset link"})
 		return
 	}
 
@@ -218,9 +239,28 @@ func (c *AuthController) Logout(ctx *gin.Context) {
 		// If no domain is set, use empty string (current domain only)
 		domain = ""
 	}
+	ctx.SetSameSite(http.SameSiteLaxMode)
 	ctx.SetCookie("auth_token", "", -1, "/", domain, true, true)
 
 	ctx.JSON(http.StatusOK, types.Resp{Data: "ok"})
+}
+
+// RegisterRoutesWithLockout registers routes with a separate lockout middleware
+// and a per-minute rate limiter both applied to /login.
+func (c *AuthController) RegisterRoutesWithLockout(rg *gin.RouterGroup, lockout, authRateLimit gin.HandlerFunc, registerRateLimit ...gin.HandlerFunc) {
+	rg.POST("/login", lockout, authRateLimit, c.Login)
+	regHandlers := []gin.HandlerFunc{c.Register}
+	if len(registerRateLimit) > 0 {
+		regHandlers = append([]gin.HandlerFunc{registerRateLimit[0]}, regHandlers...)
+	}
+	rg.POST("/register", regHandlers...)
+	rg.POST("/logout", c.Logout)
+
+	rg.POST("/check/email", c.CheckEmail)
+	rg.POST("/check/inviter", c.CheckInviter)
+
+	rg.POST("/password/forgot", c.ForgotPassword)
+	rg.POST("/password/reset", c.ResetPassword)
 }
 
 func (c *AuthController) RegisterRoutes(rg *gin.RouterGroup, authRateLimit gin.HandlerFunc, registerRateLimit ...gin.HandlerFunc) {

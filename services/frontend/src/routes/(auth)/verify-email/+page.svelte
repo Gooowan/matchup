@@ -5,7 +5,7 @@
 	import { goto } from '$app/navigation';
 
 	let email = $derived(page.url.searchParams.get('email') ?? '');
-	let digits = $state<string[]>(Array(8).fill(''));
+	let digits = $state<string[]>(Array(5).fill(''));
 	let inputs: HTMLInputElement[] = [];
 	let isLoading = $state(false);
 	let isResending = $state(false);
@@ -16,7 +16,7 @@
 		const val = (e.target as HTMLInputElement).value.replace(/\D/g, '');
 		digits[i] = val.slice(-1);
 		digits = [...digits];
-		if (val && i < 7) inputs[i + 1]?.focus();
+		if (val && i < 4) inputs[i + 1]?.focus();
 	}
 
 	function handleKeydown(i: number, e: KeyboardEvent) {
@@ -28,16 +28,16 @@
 	function handlePaste(e: ClipboardEvent) {
 		e.preventDefault();
 		const pasted = e.clipboardData?.getData('text').replace(/\D/g, '') ?? '';
-		if (pasted.length >= 8) {
-			digits = pasted.slice(0, 8).split('');
+		if (pasted.length >= 5) {
+			digits = pasted.slice(0, 5).split('');
 		}
 	}
 
 	async function handleVerify() {
 		errorMsg = '';
 		const code = digits.join('');
-		if (code.length < 8) {
-			errorMsg = 'Введи повний 8-значний код';
+		if (code.length < 5) {
+			errorMsg = 'Введи повний 5-значний код';
 			return;
 		}
 		isLoading = true;
@@ -125,7 +125,7 @@
 
 	<button
 		onclick={handleVerify}
-		disabled={isLoading || digits.join('').length < 8}
+		disabled={isLoading || digits.join('').length < 5}
 		class="mb-4 w-full max-w-sm py-3 text-[14px] font-semibold text-white transition-opacity disabled:opacity-60"
 		style="border-radius: 50px; background: #696969;"
 	>

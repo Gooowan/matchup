@@ -1,12 +1,39 @@
 <script lang="ts">
 	import { authStore } from '$stores/auth.svelte';
 	import { browser } from '$app/environment';
+	import { onMount } from 'svelte';
+	import { authFetch } from '$lib/utils/authFetch';
 
 	let isDark = $state(false);
+	let ownsClubs = $state(false);
+	let subscriptionName = $state<string | null>(null);
 
 	if (browser) {
 		isDark = document.documentElement.classList.contains('dark');
 	}
+
+	onMount(async () => {
+		try {
+			const resp = await authFetch('/me/owned-clubs');
+			if (resp.ok) {
+				const body = await resp.json();
+				ownsClubs = Array.isArray(body.data) && body.data.length > 0;
+			}
+		} catch {
+			// non-fatal
+		}
+
+		// Load real subscription tier; show "Безкоштовна" only when confirmed absent.
+		try {
+			const subResp = await authFetch('/subscriptions/my/active');
+			if (subResp.ok) {
+				const subBody = await subResp.json();
+				subscriptionName = subBody.data?.subscription_name ?? null;
+			}
+		} catch {
+			// non-fatal — stays null → shows "Безкоштовна"
+		}
+	});
 
 	function toggleTheme() {
 		isDark = !isDark;
@@ -28,9 +55,20 @@
 			: 'Твій профіль'
 	);
 	let avatarUrl = $derived(user?.profile_data?.avatar as string | undefined);
+	let accountType = $derived(user?.profile_data?.account_type as string | undefined);
+	// Trainers can join/browse clubs like dancers; only club-type accounts
+	// manage entirely via the Business panel and skip this page.
+	let showMyClubs = $derived(accountType !== 'club');
+	// Show business panel for: club accounts (always), and anyone who owns at least one club.
+	let showBusinessPanel = $derived(accountType === 'club' || ownsClubs);
+	// Club accounts manage identity entirely in the Business panel; no dancer-style profile page.
+	let showEditProfile = $derived(accountType !== 'club');
 </script>
 
-<div class="mu-screen flex h-[100dvh] flex-col overflow-hidden">
+<div
+	class="mu-screen"
+	style="height: 100dvh; overflow-y: auto; -webkit-overflow-scrolling: touch;"
+>
 	<div class="pt-safe"></div>
 
 	<!-- Header -->
@@ -38,8 +76,11 @@
 		<h1 class="mu-text-primary text-[24px] font-black">Налаштування</h1>
 	</div>
 
-	<!-- Scrollable content -->
-	<div class="flex flex-1 flex-col overflow-y-auto px-4 pb-[100px]" style="gap: 16px;">
+	<!-- Content — scrolls with the whole page wrapper above -->
+	<div
+		class="flex flex-col px-4"
+		style="gap: 16px; padding-bottom: calc(env(safe-area-inset-bottom) + 100px);"
+	>
 		<!-- Profile card -->
 		<div class="mu-card flex items-center gap-4 rounded-[20px] p-4">
 			<div
@@ -98,6 +139,7 @@
 				АКАУНТ
 			</p>
 			<div class="mu-divider flex flex-col" style="border-top-width: 1px; border-top-style: solid;">
+			{#if showEditProfile}
 				<a href="/settings/profile" class="flex items-center justify-between px-4 py-3">
 					<div class="flex items-center gap-3">
 						<i class="fi fi-rr-user-pen mu-text-primary" style="font-size: 18px;"></i>
@@ -105,30 +147,35 @@
 					</div>
 					<i class="fi fi-rr-angle-right" style="font-size: 14px; color: #aeb4bc;"></i>
 				</a>
+			{/if}
+				{#if showMyClubs}
+					<a
+						href="/settings/clubs"
+						class="mu-divider flex items-center justify-between px-4 py-3"
+						style="border-top-width: 1px; border-top-style: solid;"
+					>
+						<div class="flex items-center gap-3">
+							<i class="fi fi-rr-bank mu-text-primary" style="font-size: 18px;"></i>
+							<span class="mu-text-primary text-[14px] font-semibold">Мої клуби</span>
+						</div>
+						<i class="fi fi-rr-angle-right" style="font-size: 14px; color: #aeb4bc;"></i>
+					</a>
+				{/if}
+				{#if showBusinessPanel}
+					<a
+						href="/business"
+						class="mu-divider flex items-center justify-between px-4 py-3"
+						style="border-top-width: 1px; border-top-style: solid;"
+					>
+						<div class="flex items-center gap-3">
+							<i class="fi fi-rr-store-alt mu-text-primary" style="font-size: 18px;"></i>
+							<span class="mu-text-primary text-[14px] font-semibold">Бізнес-панель</span>
+						</div>
+						<i class="fi fi-rr-angle-right" style="font-size: 14px; color: #aeb4bc;"></i>
+					</a>
+				{/if}
 				<a
-					href="/settings/clubs"
-					class="mu-divider flex items-center justify-between px-4 py-3"
-					style="border-top-width: 1px; border-top-style: solid;"
-				>
-					<div class="flex items-center gap-3">
-						<i class="fi fi-rr-bank mu-text-primary" style="font-size: 18px;"></i>
-						<span class="mu-text-primary text-[14px] font-semibold">Мої клуби</span>
-					</div>
-					<i class="fi fi-rr-angle-right" style="font-size: 14px; color: #aeb4bc;"></i>
-				</a>
-				<a
-					href="/business"
-					class="mu-divider flex items-center justify-between px-4 py-3"
-					style="border-top-width: 1px; border-top-style: solid;"
-				>
-					<div class="flex items-center gap-3">
-						<i class="fi fi-rr-store-alt mu-text-primary" style="font-size: 18px;"></i>
-						<span class="mu-text-primary text-[14px] font-semibold">Бізнес-панель</span>
-					</div>
-					<i class="fi fi-rr-angle-right" style="font-size: 14px; color: #aeb4bc;"></i>
-				</a>
-				<a
-					href="/forgotPassword"
+					href="/settings/password"
 					class="mu-divider flex items-center justify-between px-4 py-3"
 					style="border-top-width: 1px; border-top-style: solid;"
 				>
@@ -155,7 +202,9 @@
 						<i class="fi fi-rr-diamond" style="font-size: 18px; color: #8984da;"></i>
 						<span class="mu-text-primary text-[14px] font-semibold">Підписка</span>
 					</div>
-					<span class="text-[13px] font-medium" style="color: #aeb4bc;">Безкоштовна</span>
+					<span class="text-[13px] font-medium" style="color: {subscriptionName ? '#8984da' : '#aeb4bc'};">
+					{subscriptionName ?? 'Безкоштовна'}
+				</span>
 				</div>
 				<a
 					href="/settings/subscription"

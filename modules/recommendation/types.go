@@ -40,6 +40,19 @@ type FilterParams struct {
 	WantsPartnerToFinance   *string
 }
 
+// MyProfileData holds the current user's own profile attributes needed for
+// mutual-match filtering (checking if MY profile passes a candidate's prefs).
+type MyProfileData struct {
+	Gender     string
+	BirthDate  pgtype.Date
+	HeightCm   pgtype.Int2
+	Goal       string
+	Program    string
+	Categories []string
+	City       string
+	Country    string
+}
+
 // FeedParams is the input to every CandidateProvider.
 type FeedParams struct {
 	UserID     pgtype.UUID
@@ -50,6 +63,8 @@ type FeedParams struct {
 	Filters    FilterParams
 	ExcludeIDs []pgtype.UUID
 	Limit      int32
+	// MyProfile holds the current user's profile data for mutual-match (Tier3).
+	MyProfile  *MyProfileData
 }
 
 // CandidateProvider is the interface every recommendation tier implements.

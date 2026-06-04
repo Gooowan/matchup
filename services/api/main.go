@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	cryptotls "crypto/tls"
 	"embed"
 	"net/http"
 	"os"
@@ -18,6 +19,7 @@ import (
 	"github.com/Gooowan/matchup/modules/chat"
 	"github.com/Gooowan/matchup/modules/clubs"
 	"github.com/Gooowan/matchup/modules/core/geocoding"
+	"github.com/Gooowan/matchup/modules/core/gmaps"
 	"github.com/Gooowan/matchup/modules/push"
 	"github.com/Gooowan/matchup/modules/core/db"
 	"github.com/Gooowan/matchup/modules/core/logging"
@@ -43,8 +45,69 @@ import (
 //go:embed templates/*.html
 var emailTemplates embed.FS
 
+// metricsAuthMiddleware protects the /metrics endpoint with a bearer token
+// supplied via the METRICS_TOKEN environment variable.  If the variable is
+// empty the endpoint is disabled (returns 404) so it is never accidentally
+// exposed without authentication.
+func metricsAuthMiddleware() gin.HandlerFunc {
+	token := os.Getenv("METRICS_TOKEN")
+	return func(c *gin.Context) {
+		if token == "" {
+			c.Status(http.StatusNotFound)
+			c.Abort()
+			return
+		}
+		auth := c.GetHeader("Authorization")
+		if auth != "Bearer "+token {
+			c.Header("WWW-Authenticate", `Bearer realm="metrics"`)
+			c.Status(http.StatusUnauthorized)
+			c.Abort()
+			return
+		}
+		c.Next()
+	}
+}
+
+// productionGuard refuses to start when dangerous placeholder values are
+// detected while running in release mode, preventing accidental use of
+// .env.example defaults in production.
+func productionGuard(logger interface{ Error(string, ...any) }) {
+	if os.Getenv("GIN_MODE") != "release" {
+		return
+	}
+	dangerous := map[string]string{
+		"JWT_SECRET":        "CHANGE_ME_use_openssl_rand_hex_32_output_here",
+		"POSTGRES_PASSWORD": "CHANGE_ME_strong_db_password",
+		"MINIO_ACCESS_KEY":  "CHANGE_ME_minio_access_key",
+		"MINIO_SECRET_KEY":  "CHANGE_ME_minio_secret_key",
+	}
+	for key, placeholder := range dangerous {
+		if val := os.Getenv(key); val == placeholder || val == "" {
+			logger.Error("refusing to start: unsafe placeholder or empty value in production",
+				"env_var", key)
+			os.Exit(1)
+		}
+	}
+	// Warn (but do not block) when SSL is explicitly disabled in release mode.
+	// Set ALLOW_DB_SSL_DISABLE=true to suppress this warning when a managed
+	// proxy (e.g. Cloud SQL Auth Proxy, RDS Proxy) terminates TLS externally.
+	if os.Getenv("DB_SSL_MODE") == "disable" && os.Getenv("ALLOW_DB_SSL_DISABLE") != "true" {
+		logger.Error("security warning: DB_SSL_MODE=disable in production — database traffic is unencrypted. " +
+			"Set DB_SSL_MODE=require or ALLOW_DB_SSL_DISABLE=true to acknowledge.",
+			"env_var", "DB_SSL_MODE")
+		os.Exit(1)
+	}
+}
+
 func main() {
 	logger := logging.Init()
+
+	// Set Gin mode before anything else so internal framework logging respects it.
+	if os.Getenv("GIN_MODE") == "release" {
+		gin.SetMode(gin.ReleaseMode)
+	}
+
+	productionGuard(logger)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -75,9 +138,15 @@ func main() {
 		os.Exit(1)
 	}
 
-	redisClient := redis.NewClient(&redis.Options{
+	redisOpts := &redis.Options{
 		Addr: redisAddress,
-	})
+	}
+	if os.Getenv("REDIS_TLS_ENABLED") == "true" {
+		redisOpts.TLSConfig = &cryptotls.Config{
+			MinVersion: cryptotls.VersionTLS12,
+		}
+	}
+	redisClient := redis.NewClient(redisOpts)
 	defer redisClient.Close()
 
 	allowOrigins := os.Getenv("ALLOW_ORIGINS")
@@ -167,7 +236,10 @@ func main() {
 	subscriptionSvc := subscriptions.NewSubscriptionService(dbpool)
 
 	authController := auth.NewAuthController(authService)
+	authController.SetLockoutRecorder(rlService)
 	userController := controllers.NewUserController(coreService)
+	userController.SetOTPService(otpService)
+	userController.SetAuthService(authService)
 	filesController := files.NewFilesController(coreService, fileService)
 	fileAdminController := files.NewFileAdminController(fileService)
 	adminController := core.NewAdminController(coreService)
@@ -179,7 +251,8 @@ func main() {
 	mapCtrl := mapmod.NewMapController(mapSvc)
 	moderationCtrl := moderation.NewModerationController(moderationSvc, coreService)
 	subscriptionCtrl := subscriptions.NewSubscriptionController(subscriptionSvc)
-	clubCtrl := clubs.NewClubController(clubSvc, chatSvc, geocoder)
+	placesClient := gmaps.NewGooglePlacesClient(os.Getenv("GOOGLE_PLACES_API_KEY"))
+	clubCtrl := clubs.NewClubController(clubSvc, chatSvc, geocoder, placesClient)
 
 	r := gin.New()
 	r.Use(gin.Recovery())
@@ -204,7 +277,10 @@ func main() {
 		c.JSON(http.StatusOK, gin.H{"status": "ok"})
 	})
 
-	r.GET("/metrics", gin.WrapH(promhttp.Handler()))
+	// Protect /metrics with a bearer token.  If METRICS_TOKEN is not set in
+	// production the productionGuard check above will already refuse to start;
+	// here we fall back to refusing all requests so the endpoint is never open.
+	r.GET("/metrics", metricsAuthMiddleware(), gin.WrapH(promhttp.Handler()))
 
 	userAuth := auth.RequireAuth(authService)
 	adminAuth := auth.RequireAdmin(authService)
@@ -212,12 +288,21 @@ func main() {
 	adminGroup := r.Group("/admin")
 	adminController.RegisterRoutes(adminGroup, adminAuth)
 	fileAdminController.RegisterRoutes(adminGroup, adminAuth)
+	// Chat moderation admin routes (registered after chatCtrl is created below)
+	// Stored as a closure to avoid forward reference issues.
+	var registerAdminChatRoutes func()
 
 	otpAuthController := auth.NewOTPAuthController(authService, otpService)
+	googleAuthController := auth.NewGoogleAuthController(authService)
 
 	authGroup := r.Group("/auth")
-	authController.RegisterRoutes(authGroup, rlService.LoginRateLimiter, rlService.RegisterRateLimiter)
+	// loginChain: lockout check first, then sliding-window rate limiter.
+	authController.RegisterRoutesWithLockout(authGroup,
+		rlService.LoginLockoutMiddleware(),
+		rlService.LoginRateLimiter,
+		rlService.RegisterRateLimiter)
 	otpAuthController.RegisterRoutes(authGroup)
+	googleAuthController.RegisterRoutes(authGroup)
 
 	userGroup := r.Group("/user")
 	userController.RegisterRoutes(userGroup, userAuth, filesController, authController, rlService.UploadRateLimiter)
@@ -231,6 +316,13 @@ func main() {
 
 	chatsGroup := r.Group("/chats")
 	chatCtrl.RegisterRoutes(chatsGroup, userAuth, rlService.MessageRateLimiter)
+
+	registerAdminChatRoutes = func() {
+		adminChatGroup := adminGroup.Group("/chats")
+		adminChatGroup.Use(adminAuth)
+		chatCtrl.RegisterAdminRoutes(adminChatGroup)
+	}
+	registerAdminChatRoutes()
 
 	mapGroup := r.Group("/map")
 	mapCtrl.RegisterRoutes(mapGroup, userAuth)

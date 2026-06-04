@@ -14,7 +14,7 @@ import (
 const createMessage = `-- name: CreateMessage :one
 INSERT INTO messages(chat_id, sender_id, type, content)
     VALUES ($1, $2, $3, $4)
-RETURNING id, chat_id, sender_id, type, content, created_at
+RETURNING id, chat_id, sender_id, type, content, moderation_status, deleted_at, created_at
 `
 
 type CreateMessageParams struct {
@@ -38,14 +38,62 @@ func (q *Queries) CreateMessage(ctx context.Context, arg CreateMessageParams) (M
 		&i.SenderID,
 		&i.Type,
 		&i.Content,
+		&i.ModerationStatus,
+		&i.DeletedAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const createMessageReport = `-- name: CreateMessageReport :one
+INSERT INTO message_reports(message_id, chat_id, reporter_id, reported_user_id, category, comment, content_snapshot)
+    VALUES ($1, $2, $3, $4, $5, $6, $7)
+RETURNING id, message_id, chat_id, reporter_id, reported_user_id, category, comment, content_snapshot, status, resolved_by, resolved_at, created_at
+`
+
+type CreateMessageReportParams struct {
+	MessageID       pgtype.UUID `db:"message_id" json:"message_id"`
+	ChatID          pgtype.UUID `db:"chat_id" json:"chat_id"`
+	ReporterID      pgtype.UUID `db:"reporter_id" json:"reporter_id"`
+	ReportedUserID  pgtype.UUID `db:"reported_user_id" json:"reported_user_id"`
+	Category        string      `db:"category" json:"category"`
+	Comment         pgtype.Text `db:"comment" json:"comment"`
+	ContentSnapshot string      `db:"content_snapshot" json:"content_snapshot"`
+}
+
+func (q *Queries) CreateMessageReport(ctx context.Context, arg CreateMessageReportParams) (MessageReport, error) {
+	row := q.db.QueryRow(ctx, createMessageReport,
+		arg.MessageID,
+		arg.ChatID,
+		arg.ReporterID,
+		arg.ReportedUserID,
+		arg.Category,
+		arg.Comment,
+		arg.ContentSnapshot,
+	)
+	var i MessageReport
+	err := row.Scan(
+		&i.ID,
+		&i.MessageID,
+		&i.ChatID,
+		&i.ReporterID,
+		&i.ReportedUserID,
+		&i.Category,
+		&i.Comment,
+		&i.ContentSnapshot,
+		&i.Status,
+		&i.ResolvedBy,
+		&i.ResolvedAt,
 		&i.CreatedAt,
 	)
 	return i, err
 }
 
 const getLatestMessage = `-- name: GetLatestMessage :one
-SELECT id, chat_id, sender_id, type, content, created_at FROM messages
+SELECT id, chat_id, sender_id, type, content, moderation_status, deleted_at, created_at FROM messages
 WHERE chat_id = $1
+  AND deleted_at IS NULL
+  AND (moderation_status IS NULL OR moderation_status != 'hidden')
 ORDER BY created_at DESC
 LIMIT 1
 `
@@ -59,14 +107,115 @@ func (q *Queries) GetLatestMessage(ctx context.Context, chatID pgtype.UUID) (Mes
 		&i.SenderID,
 		&i.Type,
 		&i.Content,
+		&i.ModerationStatus,
+		&i.DeletedAt,
 		&i.CreatedAt,
 	)
 	return i, err
 }
 
+const getMessageByID = `-- name: GetMessageByID :one
+SELECT id, chat_id, sender_id, type, content, moderation_status, deleted_at, created_at FROM messages WHERE id = $1 LIMIT 1
+`
+
+func (q *Queries) GetMessageByID(ctx context.Context, id pgtype.UUID) (Message, error) {
+	row := q.db.QueryRow(ctx, getMessageByID, id)
+	var i Message
+	err := row.Scan(
+		&i.ID,
+		&i.ChatID,
+		&i.SenderID,
+		&i.Type,
+		&i.Content,
+		&i.ModerationStatus,
+		&i.DeletedAt,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const hideMessage = `-- name: HideMessage :exec
+UPDATE messages
+SET moderation_status = 'hidden', deleted_at = NOW()
+WHERE id = $1
+`
+
+func (q *Queries) HideMessage(ctx context.Context, id pgtype.UUID) error {
+	_, err := q.db.Exec(ctx, hideMessage, id)
+	return err
+}
+
+const listMessageReports = `-- name: ListMessageReports :many
+SELECT mr.id, mr.message_id, mr.chat_id, mr.reporter_id, mr.reported_user_id, mr.category, mr.comment, mr.content_snapshot, mr.status, mr.resolved_by, mr.resolved_at, mr.created_at, m.content AS current_content
+FROM message_reports mr
+JOIN messages m ON m.id = mr.message_id
+WHERE mr.status = $1
+ORDER BY mr.created_at DESC
+LIMIT $3 OFFSET $2
+`
+
+type ListMessageReportsParams struct {
+	Status    string `db:"status" json:"status"`
+	OffsetVal int32  `db:"offset_val" json:"offset_val"`
+	LimitVal  int32  `db:"limit_val" json:"limit_val"`
+}
+
+type ListMessageReportsRow struct {
+	ID              pgtype.UUID      `db:"id" json:"id"`
+	MessageID       pgtype.UUID      `db:"message_id" json:"message_id"`
+	ChatID          pgtype.UUID      `db:"chat_id" json:"chat_id"`
+	ReporterID      pgtype.UUID      `db:"reporter_id" json:"reporter_id"`
+	ReportedUserID  pgtype.UUID      `db:"reported_user_id" json:"reported_user_id"`
+	Category        string           `db:"category" json:"category"`
+	Comment         pgtype.Text      `db:"comment" json:"comment"`
+	ContentSnapshot string           `db:"content_snapshot" json:"content_snapshot"`
+	Status          string           `db:"status" json:"status"`
+	ResolvedBy      pgtype.UUID      `db:"resolved_by" json:"resolved_by"`
+	ResolvedAt      pgtype.Timestamp `db:"resolved_at" json:"resolved_at"`
+	CreatedAt       pgtype.Timestamp `db:"created_at" json:"created_at"`
+	CurrentContent  string           `db:"current_content" json:"current_content"`
+}
+
+func (q *Queries) ListMessageReports(ctx context.Context, arg ListMessageReportsParams) ([]ListMessageReportsRow, error) {
+	rows, err := q.db.Query(ctx, listMessageReports, arg.Status, arg.OffsetVal, arg.LimitVal)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListMessageReportsRow
+	for rows.Next() {
+		var i ListMessageReportsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.MessageID,
+			&i.ChatID,
+			&i.ReporterID,
+			&i.ReportedUserID,
+			&i.Category,
+			&i.Comment,
+			&i.ContentSnapshot,
+			&i.Status,
+			&i.ResolvedBy,
+			&i.ResolvedAt,
+			&i.CreatedAt,
+			&i.CurrentContent,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listMessages = `-- name: ListMessages :many
-SELECT id, chat_id, sender_id, type, content, created_at FROM messages
-WHERE chat_id = $1 AND created_at < $2
+SELECT id, chat_id, sender_id, type, content, moderation_status, deleted_at, created_at FROM messages
+WHERE chat_id = $1
+  AND created_at < $2
+  AND deleted_at IS NULL
+  AND (moderation_status IS NULL OR moderation_status != 'hidden')
 ORDER BY created_at DESC
 LIMIT $3
 `
@@ -92,6 +241,8 @@ func (q *Queries) ListMessages(ctx context.Context, arg ListMessagesParams) ([]M
 			&i.SenderID,
 			&i.Type,
 			&i.Content,
+			&i.ModerationStatus,
+			&i.DeletedAt,
 			&i.CreatedAt,
 		); err != nil {
 			return nil, err
@@ -102,4 +253,21 @@ func (q *Queries) ListMessages(ctx context.Context, arg ListMessagesParams) ([]M
 		return nil, err
 	}
 	return items, nil
+}
+
+const resolveMessageReport = `-- name: ResolveMessageReport :exec
+UPDATE message_reports
+SET status = $1, resolved_by = $2, resolved_at = NOW()
+WHERE id = $3
+`
+
+type ResolveMessageReportParams struct {
+	Status     string      `db:"status" json:"status"`
+	ResolvedBy pgtype.UUID `db:"resolved_by" json:"resolved_by"`
+	ID         pgtype.UUID `db:"id" json:"id"`
+}
+
+func (q *Queries) ResolveMessageReport(ctx context.Context, arg ResolveMessageReportParams) error {
+	_, err := q.db.Exec(ctx, resolveMessageReport, arg.Status, arg.ResolvedBy, arg.ID)
+	return err
 }

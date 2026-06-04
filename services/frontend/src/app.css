@@ -17,6 +17,16 @@
 	--mu-bubble-received: #706f77;
 	--mu-handle: #aeb4bc;
 	--mu-avatar-border: #313131;
+
+	/* ── Z-index ladder (documented constants) ─────────────────────────────
+	 *  card stack: 10–13
+	 *  overlays/gradients: 30
+	 *  page header: 40
+	 *  MatchPopup / lightbox: 100–200
+	 * ─────────────────────────────────────────────────────────────────── */
+
+	/* Shared clearance above BottomNav (≈76 px nav + ~25 px safe area) */
+	--bottom-nav-clearance: 101px;
 }
 
 @theme inline {
@@ -78,6 +88,22 @@
 .mu-screen {
 	background: var(--mu-bg-light);
 }
+
+/* Gradient fade that sits above the fixed bottom nav so scrolling content
+   softly disappears underneath it rather than hard-clipping. */
+.nav-fade {
+	pointer-events: none;
+	position: fixed;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	height: 90px;
+	z-index: 49;
+	background: linear-gradient(to top, var(--mu-bg-light) 0%, transparent 100%);
+}
+html.dark .nav-fade {
+	background: linear-gradient(to top, var(--mu-bg-dark) 0%, transparent 100%);
+}
 .mu-card {
 	background: white;
 }
@@ -88,6 +114,7 @@
 	color: var(--mu-text-muted);
 }
 
+html.dark,
 html.dark body {
 	background: var(--mu-bg-dark);
 	color: var(--mu-text-dark);

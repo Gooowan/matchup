@@ -42,3 +42,25 @@ CREATE TABLE club_members (
 
 CREATE INDEX idx_club_members_user ON club_members(user_id);
 CREATE INDEX idx_club_members_club ON club_members(club_id);
+
+-- Club ↔ Trainer relationship (many-to-many: trainer teaches at club)
+CREATE TABLE club_trainers (
+    club_id         uuid        NOT NULL REFERENCES clubs(id) ON DELETE CASCADE,
+    trainer_user_id uuid        NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    joined_at       timestamp   NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (club_id, trainer_user_id)
+);
+
+CREATE INDEX idx_club_trainers_club    ON club_trainers(club_id);
+CREATE INDEX idx_club_trainers_trainer ON club_trainers(trainer_user_id);
+
+-- Trainer ↔ Dancer relationship (many-to-many: trainer teaches dancer)
+CREATE TABLE trainer_students (
+    trainer_user_id uuid        NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    dancer_user_id  uuid        NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    enrolled_at     timestamp   NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (trainer_user_id, dancer_user_id)
+);
+
+CREATE INDEX idx_trainer_students_trainer ON trainer_students(trainer_user_id);
+CREATE INDEX idx_trainer_students_dancer  ON trainer_students(dancer_user_id);

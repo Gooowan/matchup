@@ -8,6 +8,7 @@ import (
 
 	"github.com/Gooowan/matchup/modules/core/logging"
 	"github.com/Gooowan/matchup/modules/core/types"
+	corehttp "github.com/Gooowan/matchup/modules/core/http"
 	"github.com/Gooowan/matchup/modules/core/utils"
 	gen "github.com/Gooowan/matchup/modules/subscriptions/gen"
 	"github.com/Gooowan/matchup/modules/users/auth"
@@ -47,8 +48,7 @@ func (c *SubscriptionController) CreatePlan(ctx *gin.Context) {
 		DurationDays int32  `json:"duration_days" binding:"required,min=1"`
 		PriceCents   int64  `json:"price_cents" binding:"min=0"`
 	}
-	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, types.Resp{Error: err.Error()})
+	if !corehttp.BindJSON(ctx, &req) {
 		return
 	}
 
@@ -107,8 +107,7 @@ func (c *SubscriptionController) UpdatePlan(ctx *gin.Context) {
 		PriceCents   int64  `json:"price_cents" binding:"min=0"`
 		IsActive     bool   `json:"is_active"`
 	}
-	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, types.Resp{Error: err.Error()})
+	if !corehttp.BindJSON(ctx, &req) {
 		return
 	}
 
@@ -149,8 +148,7 @@ func (c *SubscriptionController) AssignSubscription(ctx *gin.Context) {
 		UserID         string `json:"user_id" binding:"required"`
 		SubscriptionID string `json:"subscription_id" binding:"required"`
 	}
-	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, types.Resp{Error: err.Error()})
+	if !corehttp.BindJSON(ctx, &req) {
 		return
 	}
 

@@ -29,21 +29,21 @@
 			<i class="fi fi-rr-cross text-white" style="font-size: 24px; line-height: 1;"></i>
 		</button>
 
-		<!-- Content -->
+		<!-- Content — scrollable so "Chat now" is always reachable on short screens -->
 		<div
-			class="flex flex-col items-center"
-			style="margin-top: max(env(safe-area-inset-top), 54px); gap: 40px; padding: 0 16px;"
+			class="flex flex-1 flex-col items-center overflow-y-auto"
+			style="margin-top: max(env(safe-area-inset-top), 54px); padding: 0 16px 32px; gap: min(40px, 4dvh);"
 			transition:scale={{ start: 0.9, duration: 350, delay: 100 }}
 		>
 			<!-- Heading -->
 			<h1 class="text-center text-[40px] font-black text-white leading-tight">{$t('feed.match_title')}</h1>
 
 			<!-- Photos + logo -->
-			<div class="relative flex items-center justify-center" style="height: 200px; width: 343px;">
+			<div class="relative flex flex-shrink-0 items-center justify-center" style="height: min(200px, 22dvh); width: 343px;">
 				<!-- Left photo (tilted -9.46°) -->
 				<div
 					class="absolute overflow-hidden rounded-[20px]"
-					style="width: 160px; height: 200px; transform: rotate(-9.46deg); left: 0;"
+					style="width: 160px; height: min(200px, 22dvh); transform: rotate(-9.46deg); left: 0;"
 				>
 					<img
 						src={myPhoto || '/placeholder-avatar.jpg'}
@@ -54,7 +54,7 @@
 				<!-- Right photo (tilted +9.04°) -->
 				<div
 					class="absolute overflow-hidden rounded-[20px]"
-					style="width: 160px; height: 200px; transform: rotate(9.04deg); right: 0;"
+					style="width: 160px; height: min(200px, 22dvh); transform: rotate(9.04deg); right: 0;"
 				>
 					<img
 						src={theirProfile?.photoUrl || '/placeholder-avatar.jpg'}
@@ -83,12 +83,18 @@
 
 			<!-- Chat now button -->
 			<button
-				class="flex items-center justify-center rounded-[50px] bg-white px-4 mix-blend-plus-lighter"
-				style="height: 40px; width: 163px;"
+				class="flex items-center justify-center rounded-[50px] px-4"
+				style="height: 40px; width: 163px; background: rgba(255,255,255,0.92); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);"
 				onclick={onchat}
 			>
 				<span class="text-[14px] font-semibold" style="color: #171717;">{$t('feed.match_chat')}</span>
 			</button>
+
+			<!-- Continue browsing -->
+			<button
+				onclick={onclose}
+				class="text-[14px] font-medium text-white opacity-70"
+			>{$t('feed.match_continue')}</button>
 		</div>
 	</div>
 {/if}

@@ -41,11 +41,14 @@
 	const pos = spring({ x: 0, y: 0, rot: 0 }, { stiffness: 0.15, damping: 0.85 });
 
 	let dragging = $state(false);
+	let committed = false;
+	let didDrag = false;
 	let startX = 0;
 	let startY = 0;
 	let cardEl: HTMLElement;
 
 	const SWIPE_THRESHOLD = 120;
+	const TAP_THRESHOLD = 8;
 
 	// Overlay opacity tied to drag distance
 	let swipeDir = $derived(
@@ -55,16 +58,24 @@
 
 	function onPointerDown(e: PointerEvent) {
 		if (!isTop) return;
+		// Ignore if triggered from a button that should handle its own click
+		// (e.g. like/pass/view-profile buttons) but allow drags from those areas.
 		dragging = true;
+		didDrag = false;
 		startX = e.clientX - $pos.x;
 		startY = e.clientY - $pos.y;
-		cardEl.setPointerCapture(e.pointerId);
+		// Pointer capture ensures we receive move/up even when the pointer leaves
+		// the card element (critical on iOS/Capacitor).
+		try { cardEl.setPointerCapture(e.pointerId); } catch { /* ignore */ }
 	}
 
 	function onPointerMove(e: PointerEvent) {
 		if (!dragging) return;
 		const dx = e.clientX - startX;
 		const dy = e.clientY - startY;
+		if (Math.abs(dx) > TAP_THRESHOLD || Math.abs(dy) > TAP_THRESHOLD) {
+			didDrag = true;
+		}
 		pos.set({ x: dx, y: dy, rot: dx / 20 }, { hard: false });
 	}
 
@@ -83,6 +94,8 @@
 	}
 
 	function commitSwipe(dir: 'right' | 'left') {
+		if (committed) return;
+		committed = true;
 		const targetX = dir === 'right' ? window.innerWidth + 200 : -(window.innerWidth + 200);
 		pos.set({ x: targetX, y: $pos.y, rot: dir === 'right' ? 15 : -15 }, { hard: false });
 		setTimeout(() => {
@@ -101,7 +114,9 @@
 	bind:this={cardEl}
 	class="absolute"
 	style="
-		{fullScreen ? 'inset: 0;' : 'width: 343px; height: 581px; left: 16px; top: 114px;'}
+		{fullScreen
+			? 'inset: 0;'
+			: 'left: 16px; right: 16px; top: min(114px, 14dvh); bottom: calc(var(--bottom-nav-clearance, 101px) + 16px);'}
 		z-index: {zIndex};
 		transform: translate({$pos.x}px, {$pos.y}px) rotate({$pos.rot}deg);
 		touch-action: none;
@@ -174,6 +189,19 @@
 			</div>
 		{/if}
 
+		<!-- Transparent tap zone over the photo area to open the full profile.
+		     pointer-events: none while dragging so the tap zone never swallows drag events. -->
+		{#if isTop}
+			<div
+				class="absolute left-0 right-0 top-0"
+				style="bottom: calc(max(env(safe-area-inset-bottom), 8px) + 160px); background: transparent; pointer-events: {dragging ? 'none' : 'auto'}; cursor: pointer;"
+				role="button"
+				tabindex="-1"
+				aria-label="View full profile"
+				onclick={(e) => { e.stopPropagation(); if (!didDrag) onviewprofile?.(profile.id); }}
+			></div>
+		{/if}
+
 		<!-- 3-dot menu button -->
 		<button
 			class="absolute flex items-center justify-center rounded-full"
@@ -187,74 +215,77 @@
 		<!-- Profile info overlay -->
 		<div
 			class="absolute right-4 left-4 flex flex-col"
-			style="bottom: calc(max(env(safe-area-inset-bottom), 8px) + 80px); gap: 24px;"
+			style="bottom: calc(max(env(safe-area-inset-bottom), 8px) + {fullScreen ? 'var(--bottom-nav-clearance, 80px)' : '8px'}); gap: 12px;"
 		>
-			<!-- Name -->
+			<!-- Name + age -->
 			<div class="flex items-baseline gap-0">
-				<span class="text-[20px] font-black leading-tight text-white tracking-tight"
-					>{profile.name}</span>
-				<span class="text-[20px] font-black leading-tight text-white" style="letter-spacing: -1px;"
-					>, {profile.age}</span>
+				<span class="text-[26px] font-black leading-tight text-white tracking-tight">{profile.name}</span>
+				<span class="text-[26px] font-black leading-tight text-white" style="letter-spacing: -1px;">, {profile.age}</span>
 			</div>
 
-			<!-- Tag pills -->
-			<div class="flex flex-wrap gap-2">
-				{#each profile.tags as tag}
-					<span class="card-pill">{tag}</span>
-				{/each}
-			</div>
+			<!-- Tag pills + info rows in one compact block -->
+			<div class="flex flex-col gap-8px" style="gap: 8px;">
+				<!-- Tag pills -->
+				{#if profile.tags.length > 0}
+					<div class="flex flex-wrap gap-1.5">
+						{#each profile.tags as tag}
+							<span class="card-pill">{tag}</span>
+						{/each}
+					</div>
+				{/if}
 
-			<!-- Info rows -->
-			<div class="flex flex-col gap-2">
-				{#if profile.location}
-					<div class="flex items-center gap-1.5">
-						<i class="fi fi-rr-marker text-white" style="font-size: 15px; line-height: 1; flex-shrink: 0;"></i>
-						<span class="text-[12px] font-medium text-white">{profile.location}</span>
-					</div>
-				{/if}
-				{#if profile.school}
-					<div class="flex items-center gap-1.5">
-						<i class="fi fi-rr-bank text-white" style="font-size: 15px; line-height: 1; flex-shrink: 0;"></i>
-						<span class="text-[12px] font-medium text-white">{profile.school}</span>
-					</div>
-				{/if}
-				{#if profile.goals}
-					<div class="flex items-start gap-1.5">
-						<i class="fi fi-rr-star text-white" style="font-size: 15px; line-height: 1; flex-shrink: 0; margin-top: 1px;"></i>
-						<span class="text-[12px] font-medium text-white leading-snug">{profile.goals}</span>
-					</div>
-				{/if}
+				<!-- Info rows -->
+				<div class="flex flex-col gap-1">
+					{#if profile.location}
+						<div class="flex items-center gap-1.5">
+							<i class="fi fi-rr-marker text-white" style="font-size: 13px; line-height: 1; flex-shrink: 0;"></i>
+							<span class="text-[12px] font-medium text-white opacity-90">{profile.location}</span>
+						</div>
+					{/if}
+					{#if profile.school}
+						<div class="flex items-center gap-1.5">
+							<i class="fi fi-rr-bank text-white" style="font-size: 13px; line-height: 1; flex-shrink: 0;"></i>
+							<span class="text-[12px] font-medium text-white opacity-90">{profile.school}</span>
+						</div>
+					{/if}
+					{#if profile.goals}
+						<div class="flex items-center gap-1.5">
+							<i class="fi fi-rr-star text-white" style="font-size: 13px; line-height: 1; flex-shrink: 0;"></i>
+							<span class="text-[12px] font-medium text-white opacity-90">{profile.goals}</span>
+						</div>
+					{/if}
+				</div>
 			</div>
 
 			<!-- Action buttons -->
-			<div class="flex items-center gap-2">
+			<div class="flex items-center gap-2" style="margin-top: 4px;">
 				<!-- Pass -->
 				<button
-					class="flex flex-1 items-center justify-center gap-1.5 rounded-[50px] mix-blend-plus-lighter"
-					style="height: 38px; background: linear-gradient(43.36deg, rgb(142,161,223) 2%, rgba(142,161,223,0) 41.6%), white;"
-					onclick={() => swipeLeft()}
+					class="flex flex-1 items-center justify-center gap-1.5 rounded-[50px]"
+					style="height: 44px; background: rgba(255,255,255,0.92); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);"
+					onclick={(e) => { e.stopPropagation(); swipeLeft(); }}
 				>
 					<i class="fi fi-rr-cross" style="font-size: 15px; line-height: 1; color: #171717;"></i>
-					<span class="text-[12px] font-semibold" style="color: #171717;">{$t('swipe.pass')}</span>
+					<span class="text-[13px] font-semibold" style="color: #171717;">{$t('swipe.pass')}</span>
 				</button>
 
 				<!-- View Profile -->
 				<button
-					class="flex items-center justify-center rounded-[50px] bg-white px-4 mix-blend-plus-lighter"
-					style="height: 38px;"
-					onclick={() => onviewprofile?.(profile.id)}
+					class="flex items-center justify-center rounded-[50px] px-4"
+					style="height: 44px; background: rgba(255,255,255,0.92); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);"
+					onclick={(e) => { e.stopPropagation(); onviewprofile?.(profile.id); }}
 				>
-					<span class="text-[12px] font-semibold" style="color: #171717;">{$t('swipe.view_profile')}</span>
+					<span class="text-[13px] font-semibold" style="color: #171717;">{$t('swipe.view_profile')}</span>
 				</button>
 
 				<!-- Like -->
 				<button
-					class="flex flex-1 items-center justify-center gap-1.5 rounded-[50px] mix-blend-plus-lighter"
-					style="height: 38px; background: linear-gradient(-41.99deg, rgb(251,194,235) 0.2%, rgba(251,194,235,0) 50.5%), white;"
-					onclick={() => swipeRight()}
+					class="flex flex-1 items-center justify-center gap-1.5 rounded-[50px]"
+					style="height: 44px; background: rgba(255,255,255,0.92); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);"
+					onclick={(e) => { e.stopPropagation(); swipeRight(); }}
 				>
 					<i class="fi fi-rr-heart" style="font-size: 15px; line-height: 1; color: #171717;"></i>
-					<span class="text-[12px] font-semibold" style="color: #171717;">{$t('swipe.like')}</span>
+					<span class="text-[13px] font-semibold" style="color: #171717;">{$t('swipe.like')}</span>
 				</button>
 			</div>
 		</div>

@@ -42,13 +42,15 @@ SELECT
 FROM
     users
 WHERE
-    forgot_password_token = @forgot_password_token;
+    forgot_password_token = @forgot_password_token
+    AND forgot_password_token_expires_at > NOW();
 
 -- name: UpdateUserForgotPasswordToken :exec
 UPDATE
     users
 SET
-    forgot_password_token = @forgot_password_token
+    forgot_password_token = @forgot_password_token,
+    forgot_password_token_expires_at = @forgot_password_token_expires_at
 WHERE
     id = @user_id;
 

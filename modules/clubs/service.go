@@ -66,16 +66,18 @@ func generateSlug(name string) string {
 }
 
 type CreateClubParams struct {
-	Name        string
-	Description string
-	Country     string
-	City        string
-	Address     string
-	Latitude    float64
-	Longitude   float64
-	Website     string
-	Phone       string
-	IsVerified  bool
+	Name         string
+	Description  string
+	Country      string
+	City         string
+	Address      string
+	Latitude     float64
+	Longitude    float64
+	Website      string
+	Phone        string
+	IsVerified   bool
+	Metadata     types.JSONB
+	WorkingHours types.JSONB
 }
 
 func (s *ClubService) uniqueSlug(ctx context.Context, base string) string {
@@ -101,18 +103,19 @@ func (s *ClubService) CreateClub(ctx context.Context, p CreateClubParams) (gen.C
 	slug := s.uniqueSlug(ctx, generateSlug(p.Name))
 
 	return s.Queries.CreateClub(ctx, gen.CreateClubParams{
-		Name:        p.Name,
-		Slug:        slug,
-		Description: pgtype.Text{String: p.Description, Valid: p.Description != ""},
-		Country:     p.Country,
-		City:        p.City,
-		Address:     pgtype.Text{String: p.Address, Valid: p.Address != ""},
-		Latitude:    p.Latitude,
-		Longitude:   p.Longitude,
-		Website:     pgtype.Text{String: p.Website, Valid: p.Website != ""},
-		Phone:       pgtype.Text{String: p.Phone, Valid: p.Phone != ""},
-		IsVerified:  pgtype.Bool{Bool: p.IsVerified, Valid: true},
-		Metadata:    types.JSONB{},
+		Name:         p.Name,
+		Slug:         slug,
+		Description:  pgtype.Text{String: p.Description, Valid: p.Description != ""},
+		Country:      p.Country,
+		City:         p.City,
+		Address:      pgtype.Text{String: p.Address, Valid: p.Address != ""},
+		Latitude:     p.Latitude,
+		Longitude:    p.Longitude,
+		Website:      pgtype.Text{String: p.Website, Valid: p.Website != ""},
+		Phone:        pgtype.Text{String: p.Phone, Valid: p.Phone != ""},
+		IsVerified:   pgtype.Bool{Bool: p.IsVerified, Valid: true},
+		Metadata:     p.Metadata,
+		WorkingHours: p.WorkingHours,
 	})
 }
 
@@ -233,27 +236,61 @@ func (s *ClubService) ClaimClub(ctx context.Context, clubID, userID pgtype.UUID)
 }
 
 type ManageClubParams struct {
+	Name         string
 	Description  string
 	Address      string
 	Phone        string
 	Website      string
 	WorkingHours types.JSONB
+	LogoUrl      string
+	Latitude     float64
+	Longitude    float64
 }
 
-// ManageClub lets the owner update their club's business details.
+// ManageClub lets the owner update their club's business details. An empty Name
+// leaves the existing name unchanged (see COALESCE/NULLIF in the query).
 func (s *ClubService) ManageClub(ctx context.Context, clubID, ownerID pgtype.UUID, p ManageClubParams) error {
 	return s.Queries.ManageClub(ctx, gen.ManageClubParams{
 		ID:           clubID,
 		OwnerUserID:  ownerID,
+		Name:         p.Name,
 		Description:  pgtype.Text{String: p.Description, Valid: p.Description != ""},
 		Address:      pgtype.Text{String: p.Address, Valid: p.Address != ""},
 		Phone:        pgtype.Text{String: p.Phone, Valid: p.Phone != ""},
 		Website:      pgtype.Text{String: p.Website, Valid: p.Website != ""},
 		WorkingHours: p.WorkingHours,
+		LogoUrl:      p.LogoUrl,
+		Latitude:     p.Latitude,
+		Longitude:    p.Longitude,
 	})
 }
 
 // ListOwnedClubs returns all active clubs owned by the given user.
 func (s *ClubService) ListOwnedClubs(ctx context.Context, userID pgtype.UUID) ([]gen.Club, error) {
 	return s.Queries.ListOwnedClubs(ctx, userID)
+}
+
+// ListClubDancers returns only dancer/parent members of a club (not trainers).
+func (s *ClubService) ListClubDancers(ctx context.Context, clubID pgtype.UUID, limit, offset int32) ([]gen.ListClubDancersRow, error) {
+	return s.Queries.ListClubDancers(ctx, gen.ListClubDancersParams{
+		ClubID:    clubID,
+		LimitVal:  limit,
+		OffsetVal: offset,
+	})
+}
+
+// AddClubTrainer links a trainer profile to a club.
+func (s *ClubService) AddClubTrainer(ctx context.Context, clubID, trainerUserID pgtype.UUID) error {
+	return s.Queries.AddClubTrainer(ctx, gen.AddClubTrainerParams{
+		ClubID:        clubID,
+		TrainerUserID: trainerUserID,
+	})
+}
+
+// RemoveClubTrainer removes a trainer from a club.
+func (s *ClubService) RemoveClubTrainer(ctx context.Context, clubID, trainerUserID pgtype.UUID) error {
+	return s.Queries.RemoveClubTrainer(ctx, gen.RemoveClubTrainerParams{
+		ClubID:        clubID,
+		TrainerUserID: trainerUserID,
+	})
 }

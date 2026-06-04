@@ -42,7 +42,13 @@ func JWTMiddleware(authService *AuthService) gin.HandlerFunc {
 
 		user, err := authService.ValidateJwtToken(c.Request.Context(), tokenString)
 		if err != nil {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or expired session", "error_code": "UNAUTHORIZED"})
+			c.Abort()
+			return
+		}
+
+		if user.Role == "banned" {
+			c.JSON(http.StatusForbidden, gin.H{"error": "Your account has been suspended", "error_code": "BANNED"})
 			c.Abort()
 			return
 		}
@@ -92,7 +98,13 @@ func RequireRole(authService *AuthService, requiredRole string) gin.HandlerFunc 
 
 		user, err := authService.ValidateJwtToken(c.Request.Context(), tokenString)
 		if err != nil {
-			c.JSON(http.StatusUnauthorized, gin.H{"error": err.Error()})
+			c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid or expired session", "error_code": "UNAUTHORIZED"})
+			c.Abort()
+			return
+		}
+
+		if user.Role == "banned" {
+			c.JSON(http.StatusForbidden, gin.H{"error": "Your account has been suspended", "error_code": "BANNED"})
 			c.Abort()
 			return
 		}

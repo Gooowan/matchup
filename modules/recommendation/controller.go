@@ -8,8 +8,10 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	clubsgen "github.com/Gooowan/matchup/modules/clubs/gen"
+	"github.com/Gooowan/matchup/modules/core/geocoding"
 	"github.com/Gooowan/matchup/modules/core/logging"
 	"github.com/Gooowan/matchup/modules/core/types"
+	corehttp "github.com/Gooowan/matchup/modules/core/http"
 	"github.com/Gooowan/matchup/modules/core/utils"
 	gen "github.com/Gooowan/matchup/modules/recommendation/gen"
 	"github.com/Gooowan/matchup/modules/users/auth"
@@ -48,27 +50,26 @@ func (c *RecommendationController) CreateOrUpdateProfile(ctx *gin.Context) {
 
 	var req struct {
 		DanceStyles    []string `json:"dance_styles"`
-		Latitude       float64  `json:"latitude"`
-		Longitude      float64  `json:"longitude"`
+		Latitude       float64  `json:"latitude"  binding:"omitempty,latitude"`
+		Longitude      float64  `json:"longitude" binding:"omitempty,longitude"`
 		Visible        *bool    `json:"visible"`
-		Gender         string   `json:"gender"`
-		BirthDate      string   `json:"birth_date"`
-		HeightCm       *int16   `json:"height_cm"`
-		Goal           string   `json:"goal"`
-		Program        string   `json:"program"`
+		Gender         string   `json:"gender"     binding:"omitempty,max=20"`
+		BirthDate      string   `json:"birth_date" binding:"omitempty,datetime=2006-01-02"`
+		HeightCm       *int16   `json:"height_cm"  binding:"omitempty,min=100,max=250"`
+		Goal           string   `json:"goal"       binding:"omitempty,max=50"`
+		Program        string   `json:"program"    binding:"omitempty,max=50"`
 		Categories     []string `json:"categories"`
-		Country        string   `json:"country"`
-		City           string   `json:"city"`
+		Country        string   `json:"country"    binding:"omitempty,max=100"`
+		City           string   `json:"city"       binding:"omitempty,max=100"`
 		PrimaryClubID  *string  `json:"primary_club_id"`
 		ReadyToRelocate *bool   `json:"ready_to_relocate"`
-		ReadyToFinance  string  `json:"ready_to_finance"`
+		ReadyToFinance  string  `json:"ready_to_finance" binding:"omitempty,max=20"`
 		// Non-filterable fields stored in metadata JSONB
-		Bio         string `json:"bio"`
-		AccountType string `json:"account_type"`
-		Role        string `json:"role"`
+		Bio         string `json:"bio"          binding:"omitempty,max=1000"`
+		AccountType string `json:"account_type" binding:"omitempty,max=20"`
+		Role        string `json:"role"         binding:"omitempty,max=20"`
 	}
-	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, types.Resp{Error: err.Error()})
+	if !corehttp.BindJSON(ctx, &req) {
 		return
 	}
 
@@ -85,10 +86,10 @@ func (c *RecommendationController) CreateOrUpdateProfile(ctx *gin.Context) {
 		}
 	}
 
-	visible := true
-	if req.Visible != nil {
-		visible = *req.Visible
-	}
+	// visible defaults to true only for new profiles;
+	// for updates, the existing value is preserved when the field is omitted.
+	// Set a sentinel; resolved below once we know if this is create or update.
+	var visibleOverride *bool = req.Visible
 
 	categoriesProvided := req.Categories != nil
 	if req.Categories == nil {
@@ -98,8 +99,11 @@ func (c *RecommendationController) CreateOrUpdateProfile(ctx *gin.Context) {
 		req.DanceStyles = []string{}
 	}
 
-	// If primary_club_id is provided, derive city/country from the club.
+	// Resolve primary club and derive city/country + coordinates from it.
+	// Coordinates are always locked to the club (or city centroid) — never client-supplied.
 	var resolvedPrimaryClubID pgtype.UUID
+	var clubLat, clubLng float64
+	var clubResolved bool
 	if req.PrimaryClubID != nil && *req.PrimaryClubID != "" {
 		if clubID, err := utils.StringToUUID(*req.PrimaryClubID); err == nil {
 			clubQueries := clubsgen.New(c.svc.DB)
@@ -107,19 +111,34 @@ func (c *RecommendationController) CreateOrUpdateProfile(ctx *gin.Context) {
 				req.Country = club.Country
 				req.City = club.City
 				resolvedPrimaryClubID = clubID
+				if club.Latitude != 0 || club.Longitude != 0 {
+					clubLat, clubLng = club.Latitude, club.Longitude
+					clubResolved = true
+				}
 			}
 		}
+	}
+	// When no club (or club has no coords), fall back to city centroid.
+	if !clubResolved {
+		country := req.Country
+		city := req.City
+		clubLat, clubLng = geocoding.CityLatLng(country, city)
 	}
 
 	existing, err := c.svc.Queries.GetProfileByUserID(ctx.Request.Context(), user.ID)
 	if err != nil {
-		// Create
+		// Create: default visible = true when not specified.
+		createVisible := true
+		if visibleOverride != nil {
+			createVisible = *visibleOverride
+		}
 		params := gen.CreateProfileParams{
 			UserID:        user.ID,
+			AccountType:   orDefault(req.AccountType, "dancer"),
 			DanceStyles:   req.DanceStyles,
-			Latitude:      pgtype.Float8{Float64: req.Latitude, Valid: req.Latitude != 0},
-			Longitude:     pgtype.Float8{Float64: req.Longitude, Valid: req.Longitude != 0},
-			Visible:       visible,
+			Latitude:      pgtype.Float8{Float64: clubLat, Valid: true},
+			Longitude:     pgtype.Float8{Float64: clubLng, Valid: true},
+			Visible:       createVisible,
 			Gender:        req.Gender,
 			Goal:          orDefault(req.Goal, "hobby"),
 			Program:       orDefault(req.Program, "standard"),
@@ -151,9 +170,8 @@ func (c *RecommendationController) CreateOrUpdateProfile(ctx *gin.Context) {
 		if req.Bio != "" {
 			params.Metadata["bio"] = req.Bio
 		}
-		if req.AccountType != "" {
-			params.Metadata["account_type"] = req.AccountType
-		}
+		// Keep metadata in sync for guard checks that still read from JSONB.
+		params.Metadata["account_type"] = params.AccountType
 		if req.Role != "" {
 			params.Metadata["role"] = req.Role
 		}
@@ -168,19 +186,15 @@ func (c *RecommendationController) CreateOrUpdateProfile(ctx *gin.Context) {
 		return
 	}
 
-	// Update — keep existing values where new request omits them
+	// Update — keep existing values where new request omits them.
+	// Coordinates are always re-derived from the club (or city centroid), never from client.
 	styles := req.DanceStyles
 	if styles == nil {
 		styles = existing.DanceStyles
 	}
-	lat := pgtype.Float8{Float64: req.Latitude, Valid: req.Latitude != 0}
-	if !lat.Valid {
-		lat = existing.Latitude
-	}
-	lon := pgtype.Float8{Float64: req.Longitude, Valid: req.Longitude != 0}
-	if !lon.Valid {
-		lon = existing.Longitude
-	}
+	// Re-compute coords; if the club/city hasn't changed they'll be the same value.
+	lat := pgtype.Float8{Float64: clubLat, Valid: true}
+	lon := pgtype.Float8{Float64: clubLng, Valid: true}
 
 	// Merge bio into existing metadata
 	metadata := existing.Metadata
@@ -203,12 +217,26 @@ func (c *RecommendationController) CreateOrUpdateProfile(ctx *gin.Context) {
 		primaryClubID = existing.PrimaryClubID
 	}
 
+	// Update: preserve existing visibility when the field is omitted in the request.
+	updateVisible := existing.Visible
+	if visibleOverride != nil {
+		updateVisible = *visibleOverride
+	}
+
+	// Resolve account_type: use request value if provided, fall back to existing column.
+	updatedAccountType := existing.AccountType
+	if req.AccountType != "" {
+		updatedAccountType = req.AccountType
+	}
+	metadata["account_type"] = updatedAccountType
+
 	params := gen.UpdateProfileParams{
 		UserID:        user.ID,
+		AccountType:   updatedAccountType,
 		DanceStyles:   styles,
 		Latitude:      lat,
 		Longitude:     lon,
-		Visible:       visible,
+		Visible:       updateVisible,
 		Gender:        orDefault(req.Gender, existing.Gender),
 		Goal:          orDefault(req.Goal, existing.Goal),
 		Program:       orDefault(req.Program, existing.Program),
@@ -318,21 +346,32 @@ func (c *RecommendationController) UpdatePreferences(ctx *gin.Context) {
 		WantsPartnerToRelocate *bool    `json:"wants_partner_to_relocate"`
 		WantsPartnerToFinance  string   `json:"wants_partner_to_finance"`
 	}
-	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, types.Resp{Error: err.Error()})
+	if !corehttp.BindJSON(ctx, &req) {
 		return
 	}
 
-	if req.PreferredCategories == nil {
-		req.PreferredCategories = []string{}
+	// Load existing preferences so we only override supplied fields (prevents
+	// a partial PUT from wiping previously saved age/height/etc.).
+	existing, _ := c.svc.Queries.GetPreferences(ctx.Request.Context(), user.ID)
+	params := gen.UpsertPreferencesParams{
+		UserID:                 user.ID,
+		PreferredGender:        existing.PreferredGender,
+		AgeMin:                 existing.AgeMin,
+		AgeMax:                 existing.AgeMax,
+		HeightMin:              existing.HeightMin,
+		HeightMax:              existing.HeightMax,
+		PreferredGoal:          existing.PreferredGoal,
+		PreferredProgram:       existing.PreferredProgram,
+		PreferredCategories:    existing.PreferredCategories,
+		PreferredCountry:       existing.PreferredCountry,
+		PreferredCity:          existing.PreferredCity,
+		WantsPartnerToRelocate: existing.WantsPartnerToRelocate,
+		WantsPartnerToFinance:  existing.WantsPartnerToFinance,
+		Metadata:               types.JSONB{},
+		Data:                   types.JSONB{},
 	}
 
-	params := gen.UpsertPreferencesParams{
-		UserID:              user.ID,
-		PreferredCategories: req.PreferredCategories,
-		Metadata:            types.JSONB{},
-		Data:                types.JSONB{},
-	}
+	// Override only the fields explicitly provided in the request.
 	if req.PreferredGender != "" {
 		params.PreferredGender = pgtype.Text{String: req.PreferredGender, Valid: true}
 	}
@@ -353,6 +392,9 @@ func (c *RecommendationController) UpdatePreferences(ctx *gin.Context) {
 	}
 	if req.PreferredProgram != "" {
 		params.PreferredProgram = pgtype.Text{String: req.PreferredProgram, Valid: true}
+	}
+	if req.PreferredCategories != nil {
+		params.PreferredCategories = req.PreferredCategories
 	}
 	if req.PreferredCountry != "" {
 		params.PreferredCountry = pgtype.Text{String: req.PreferredCountry, Valid: true}
@@ -377,6 +419,34 @@ func (c *RecommendationController) UpdatePreferences(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, types.Resp{Data: prefs.ToDTO()})
 }
 
+// ResetPreferences clears all filter columns to NULL and re-seeds the locked
+// default city (Київ), so the feed shows the full proximity pool again.
+func (c *RecommendationController) ResetPreferences(ctx *gin.Context) {
+	user, ok := auth.GetUserFromContext(ctx)
+	if !ok {
+		ctx.JSON(http.StatusUnauthorized, types.Resp{Error: "Unauthorized"})
+		return
+	}
+
+	params := gen.UpsertPreferencesParams{
+		UserID: user.ID,
+		// All filter columns intentionally left as zero-values (NULL) to remove filters.
+		// Re-seed the locked city so the feed doesn't fall back to a global pool.
+		PreferredCity: pgtype.Text{String: "Київ", Valid: true},
+		Metadata:      types.JSONB{},
+		Data:          types.JSONB{},
+	}
+
+	prefs, err := c.svc.Queries.UpsertPreferences(ctx.Request.Context(), params)
+	if err != nil {
+		logging.FromContext(ctx.Request.Context()).Error("failed to reset preferences", "error", err)
+		ctx.JSON(http.StatusInternalServerError, types.Resp{Error: "Failed to reset preferences"})
+		return
+	}
+
+	ctx.JSON(http.StatusOK, types.Resp{Data: prefs.ToDTO()})
+}
+
 func (c *RecommendationController) AddMedia(ctx *gin.Context) {
 	user, ok := auth.GetUserFromContext(ctx)
 	if !ok {
@@ -387,8 +457,7 @@ func (c *RecommendationController) AddMedia(ctx *gin.Context) {
 	var req struct {
 		URL string `json:"url" binding:"required"`
 	}
-	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, types.Resp{Error: err.Error()})
+	if !corehttp.BindJSON(ctx, &req) {
 		return
 	}
 
@@ -411,8 +480,7 @@ func (c *RecommendationController) RemoveMedia(ctx *gin.Context) {
 	var req struct {
 		URL string `json:"url" binding:"required"`
 	}
-	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, types.Resp{Error: err.Error()})
+	if !corehttp.BindJSON(ctx, &req) {
 		return
 	}
 
@@ -425,6 +493,36 @@ func (c *RecommendationController) RemoveMedia(ctx *gin.Context) {
 	ctx.JSON(http.StatusOK, types.Resp{Data: "ok"})
 }
 
+func (c *RecommendationController) ListTrainers(ctx *gin.Context) {
+	limit := int32(20)
+	offset := int32(0)
+	if l := ctx.Query("limit"); l != "" {
+		if v, err := utils.ParseInt32(l); err == nil && v > 0 && v <= 100 {
+			limit = v
+		}
+	}
+	if o := ctx.Query("offset"); o != "" {
+		if v, err := utils.ParseInt32(o); err == nil && v >= 0 {
+			offset = v
+		}
+	}
+
+	trainers, err := c.svc.Queries.ListTrainers(ctx.Request.Context(), gen.ListTrainersParams{
+		LimitVal:  limit,
+		OffsetVal: offset,
+	})
+	if err != nil {
+		logging.FromContext(ctx.Request.Context()).Error("failed to list trainers", "error", err)
+		ctx.JSON(http.StatusInternalServerError, types.Resp{Error: "Failed to list trainers"})
+		return
+	}
+	dtos := make([]gen.TrainerCardDTO, 0, len(trainers))
+	for _, t := range trainers {
+		dtos = append(dtos, t.ToTrainerCardDTO())
+	}
+	ctx.JSON(http.StatusOK, types.Resp{Data: dtos})
+}
+
 func (c *RecommendationController) RegisterRoutes(rg *gin.RouterGroup, userAuth gin.HandlerFunc) {
 	rg.Use(userAuth)
 	rg.GET("/profile", c.GetProfile)
@@ -434,6 +532,8 @@ func (c *RecommendationController) RegisterRoutes(rg *gin.RouterGroup, userAuth 
 	rg.DELETE("/profile/media", c.RemoveMedia)
 	rg.GET("/preferences", c.GetPreferences)
 	rg.PUT("/preferences", c.UpdatePreferences)
+	rg.DELETE("/preferences", c.ResetPreferences)
+	rg.GET("/trainers", c.ListTrainers)
 }
 
 // orDefault returns val if non-empty, otherwise fallback.

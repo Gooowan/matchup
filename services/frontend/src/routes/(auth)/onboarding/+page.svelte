@@ -4,8 +4,12 @@
 	import { authFetch } from '$lib/utils/authFetch';
 	import { authStore } from '$stores/auth.svelte';
 	import { captureOnboardingComplete } from '$lib/analytics/posthog';
-	import toast from 'svelte-french-toast';
-	import { t } from '$lib/locale';
+	import type { AccountType } from '$lib/types/accountType';
+	import { isRestrictedAccountType } from '$lib/types/accountType';
+import toast from 'svelte-french-toast';
+import { t } from '$lib/locale';
+import { formatUkrainianPhone } from '$lib/utils/phone';
+import { parseApiError } from '$lib/utils/parseApiError';
 
 	const STORAGE_KEY = 'matchup_onboarding';
 
@@ -38,6 +42,10 @@
 		{ value: 'youth', label: $t('onboarding.category_youth') },
 		{ value: 'adult', label: $t('onboarding.category_adult') }
 	]);
+	// FUTURE (multi-country): these lists power the country/city pickers. For v1 the
+	// country picker is locked to Ukraine (see the `disabled` <select> below and the
+	// `country` default 'Україна'). To expand beyond UA: remove the `disabled` attr
+	// on the country <select> in step 2 — the rest already keys off `country`.
 	const COUNTRIES = [
 		'Україна', 'Польща', 'Германія', 'Чехія', 'Австрія', 'Угорщина', 'Румунія',
 		'Словаччина', 'Болгарія', 'Хорватія', 'Франція', 'Іспанія', 'Португалія',
@@ -80,7 +88,10 @@
 	const TOTAL_STEPS = 5;
 
 	// Step 1: Basic info
-	let accountType = $state<'dancer' | 'parent'>('dancer');
+	// account_type may be 'dancer' | 'parent' | 'trainer' | 'club' — the latter
+	// two branch into a tailored single-step flow at the bottom of this file.
+	let accountType = $state<AccountType>('dancer');
+	let isRestricted = $derived(isRestrictedAccountType(accountType));
 	let firstName = $state('');
 	let lastName = $state('');
 	let gender = $state('');
@@ -118,13 +129,80 @@
 	let isCreatingClub = $state(false);
 	let newClubName = $state('');
 	let newClubAddress = $state('');
-	let newClubCity = $state('');
 	let wasJustCreated = $state(false);
 	let clubSearchTimer: ReturnType<typeof setTimeout> | null = null;
 
+	// Trainer onboarding: optional club affiliation (up to 5).
+	let trainerClubSearchQuery = $state('');
+	let trainerClubSearchResults = $state<Array<{ id: string; slug: string; name: string; city: string }>>([]);
+	let trainerJoinedClubs = $state<Array<{ id: string; slug: string; name: string; city: string }>>([]);
+	let trainerJoiningSlug = $state<string | null>(null);
+	let trainerClubSearchTimer: ReturnType<typeof setTimeout> | null = null;
+
+	async function searchTrainerClubs() {
+		const q = trainerClubSearchQuery.trim();
+		if (q.length < 2) { trainerClubSearchResults = []; return; }
+		try {
+			const params = new URLSearchParams({ q, limit: '10' });
+			const resp = await fetch(`${import.meta.env.VITE_API_URL}/clubs?${params}`);
+			if (resp.ok) {
+				const body = await resp.json();
+				trainerClubSearchResults = ((body.data ?? []) as Array<{ id: string; slug: string; name: string; city: string }>)
+					.filter((c) => !trainerJoinedClubs.some((j) => j.id === c.id));
+			}
+		} catch { /* non-fatal */ }
+	}
+
+	async function trainerJoinClub(club: { id: string; slug: string; name: string; city: string }) {
+		if (trainerJoinedClubs.length >= 5) return;
+		trainerJoiningSlug = club.slug;
+		try {
+			const resp = await authFetch(`/clubs/${club.slug}/join`, { method: 'POST' });
+			if (resp.ok) {
+				trainerJoinedClubs = [...trainerJoinedClubs, club];
+				trainerClubSearchResults = trainerClubSearchResults.filter((c) => c.id !== club.id);
+			}
+		} catch { /* non-fatal */ } finally {
+			trainerJoiningSlug = null;
+		}
+	}
+
+	// Google Maps import state (inline create form + club restricted flow)
+	let showGmapsInputOnboarding = $state(false);
+	let gmapsURLOnboarding = $state('');
+	let isImportingGmaps = $state(false);
+	let newClubPhotos = $state<string[]>([]);
+	let newClubLat = $state<number | null>(null);
+	let newClubLng = $state<number | null>(null);
+
+	// Club onboarding extra fields (restricted club account flow)
+	let newClubWebsite = $state('');
+	let newClubPhone = $state('');
+	let newClubDescription = $state('');
+
+	const WORKING_DAYS = [
+		{ key: 'mon', label: 'Пн' },
+		{ key: 'tue', label: 'Вт' },
+		{ key: 'wed', label: 'Ср' },
+		{ key: 'thu', label: 'Чт' },
+		{ key: 'fri', label: 'Пт' },
+		{ key: 'sat', label: 'Сб' },
+		{ key: 'sun', label: 'Нд' }
+	] as const;
+	type DayKey = (typeof WORKING_DAYS)[number]['key'];
+	interface WorkingHoursDay { key: DayKey; label: string; enabled: boolean; open: string; close: string; }
+	let newClubWorkingHoursDays = $state<WorkingHoursDay[]>(
+		WORKING_DAYS.map((d) => ({ ...d, enabled: false, open: '09:00', close: '21:00' }))
+	);
+
 	// Step 4: Location + photo
-	let city = $state('');
-	let country = $state('Україна'); // locked to Ukraine for v1; remove disabled attr below when unlocking
+	// v1: locked to Kyiv / Ukraine. To open multi-city support: remove the
+	// HARDCODED_* constants, restore the dropdown UI below, and re-enable saving
+	// the selected city/country.
+	const HARDCODED_CITY = 'Київ';
+	const HARDCODED_COUNTRY = 'Україна';
+	let city = $state(HARDCODED_CITY);
+	let country = $state(HARDCODED_COUNTRY);
 	let avatarFile = $state<File | null>(null);
 	let avatarPreview = $state('');
 	let fileInput = $state<HTMLInputElement | null>(null);
@@ -137,6 +215,10 @@
 	let isSaving = $state(false);
 
 	onMount(() => {
+		// Seed accountType from the user's profile_data (set on register).
+		const initialType = (authStore.user?.profile_data?.account_type as AccountType | undefined) ?? undefined;
+		if (initialType) accountType = initialType;
+
 		try {
 			const raw = sessionStorage.getItem(STORAGE_KEY);
 			if (!raw) return;
@@ -171,6 +253,10 @@
 			if (s.selectedClubSlug) selectedClubSlug = s.selectedClubSlug;
 			if (s.selectedClubName) selectedClubName = s.selectedClubName;
 			if (s.wasJustCreated) wasJustCreated = s.wasJustCreated;
+			if (s.newClubWebsite) newClubWebsite = s.newClubWebsite;
+			if (s.newClubPhone) newClubPhone = s.newClubPhone;
+			if (s.newClubDescription) newClubDescription = s.newClubDescription;
+			if (s.newClubWorkingHoursDays) newClubWorkingHoursDays = s.newClubWorkingHoursDays;
 		} catch {
 			// ignore corrupt storage
 		}
@@ -186,9 +272,17 @@
 				prefGender, ageMin, ageMax, heightMin, heightMax,
 				prefGoal, prefProgram, prefCategories, prefCountry, prefCity,
 				wantsFinance,
-				city, country
+				city, country,
+				newClubWebsite, newClubPhone, newClubDescription, newClubWorkingHoursDays
 			})
 		);
+	});
+
+	// Load clubs immediately when the user reaches the club step
+	$effect(() => {
+		if (step === 3 && !selectedClubId && !showCreateForm) {
+			searchClubs();
+		}
 	});
 
 	function getAge(dateStr: string): number {
@@ -202,6 +296,7 @@
 	}
 
 	let isParent = $derived(accountType === 'parent');
+	let isAmateur = $derived(goal === 'hobby');
 
 	let ageError = $derived(
 		birthDate && !isParent && getAge(birthDate) < 18
@@ -387,35 +482,12 @@
 		extraPhotoPreviews = extraPhotoPreviews.filter((_, idx) => idx !== i);
 	}
 
-	const UA_CITY_CENTROIDS: Record<string, { lat: number; lng: number }> = {
-		'Київ': { lat: 50.4501, lng: 30.5234 },
-		'Львів': { lat: 49.8397, lng: 24.0297 },
-		'Одеса': { lat: 46.4825, lng: 30.7233 },
-		'Харків': { lat: 49.9935, lng: 36.2304 },
-		'Дніпро': { lat: 48.4647, lng: 35.0462 }
-	};
-
-	async function geocodeClub(address: string, cityName: string): Promise<{ lat: number; lng: number }> {
-		try {
-			const q = encodeURIComponent(`${cityName}, Ukraine${address ? ', ' + address : ''}`);
-			const resp = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${q}&limit=1`);
-			if (resp.ok) {
-				const results = await resp.json();
-				if (results.length > 0) {
-					return { lat: parseFloat(results[0].lat), lng: parseFloat(results[0].lon) };
-				}
-			}
-		} catch { /* fallback */ }
-		return UA_CITY_CENTROIDS[cityName] ?? { lat: 50.4501, lng: 30.5234 };
-	}
-
 	function handleClubSearchInput() {
 		if (clubSearchTimer) clearTimeout(clubSearchTimer);
 		clubSearchTimer = setTimeout(searchClubs, 300);
 	}
 
 	async function searchClubs() {
-		if (!clubSearchQuery.trim()) { clubResults = []; return; }
 		try {
 			const resp = await authFetch(`/clubs?q=${encodeURIComponent(clubSearchQuery)}&limit=20`);
 			if (resp.ok) {
@@ -427,23 +499,129 @@
 		} catch { clubResults = []; }
 	}
 
+	function handleClubPhoneInput(e: Event) {
+		const target = e.currentTarget as HTMLInputElement;
+		newClubPhone = formatUkrainianPhone(target.value);
+	}
+	function handleClubPhonePaste(e: ClipboardEvent) {
+		const text = e.clipboardData?.getData('text') ?? '';
+		if (!text) return;
+		e.preventDefault();
+		newClubPhone = formatUkrainianPhone(text);
+	}
+	function toggleWorkingDay(key: DayKey) {
+		newClubWorkingHoursDays = newClubWorkingHoursDays.map((d) =>
+			d.key === key ? { ...d, enabled: !d.enabled } : d
+		);
+	}
+	function setWorkingHour(key: DayKey, field: 'open' | 'close', value: string) {
+		newClubWorkingHoursDays = newClubWorkingHoursDays.map((d) =>
+			d.key === key ? { ...d, [field]: value } : d
+		);
+	}
+
+	// Maps English day names from the Places API to the short keys used in
+	// newClubWorkingHoursDays, then parses the "HH:MM AM – HH:MM PM" strings
+	// into 24h "HH:MM" open/close values and marks the day as enabled.
+	const GMAPS_DAY_KEY: Record<string, DayKey> = {
+		monday: 'mon', tuesday: 'tue', wednesday: 'wed',
+		thursday: 'thu', friday: 'fri', saturday: 'sat', sunday: 'sun'
+	};
+	function parseHours12(h12: string): string {
+		// Parses "9:00 AM", "12:00 PM", "6:30 PM" → "09:00", "12:00", "18:30"
+		const m = h12.trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)$/i);
+		if (!m) return h12.trim().slice(0, 5); // fallback: return as-is up to 5 chars
+		let [, hStr, min, period] = m;
+		let h = parseInt(hStr, 10);
+		if (period.toUpperCase() === 'AM') { if (h === 12) h = 0; }
+		else { if (h !== 12) h += 12; }
+		return `${String(h).padStart(2, '0')}:${min}`;
+	}
+	function applyGmapsHours(days: WorkingHoursDay[], hours: Record<string, string>): WorkingHoursDay[] {
+		return days.map((d) => {
+			const match = Object.entries(hours).find(([k]) => GMAPS_DAY_KEY[k.toLowerCase()] === d.key);
+			if (!match) return d;
+			const [, rangeStr] = match;
+			// "9:00 AM – 9:00 PM"  or "Closed" / "24 hours" etc.
+			const parts = rangeStr.split('–').map((s) => s.trim());
+			if (parts.length === 2) {
+				return { ...d, enabled: true, open: parseHours12(parts[0]), close: parseHours12(parts[1]) };
+			}
+			// "Closed" → keep disabled; "24 hours" → 00:00–23:59
+			if (rangeStr.toLowerCase().includes('24 hour')) {
+				return { ...d, enabled: true, open: '00:00', close: '23:59' };
+			}
+			return d; // "Closed" or unrecognised — leave disabled
+		});
+	}
+
+	async function importFromGmapsOnboarding() {
+		if (!gmapsURLOnboarding.trim()) return;
+		isImportingGmaps = true;
+		try {
+			const resp = await authFetch('/me/clubs/parse-gmaps', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ url: gmapsURLOnboarding.trim() })
+			});
+			if (resp.ok) {
+				const { data } = await resp.json();
+				if (data.name)      newClubName      = data.name;
+				if (data.address)   newClubAddress   = data.address;
+				if (data.website)   newClubWebsite   = data.website;
+				if (data.phone)     newClubPhone     = formatUkrainianPhone(data.phone);
+				if (data.latitude)  newClubLat       = data.latitude;
+				if (data.longitude) newClubLng       = data.longitude;
+				// Pre-populate working hours toggles from Google's weekday_text.
+				if (data.working_hours && Object.keys(data.working_hours).length > 0) {
+					newClubWorkingHoursDays = applyGmapsHours(newClubWorkingHoursDays, data.working_hours);
+				}
+				newClubPhotos = data.photos ?? [];
+				showGmapsInputOnboarding = false;
+				gmapsURLOnboarding = '';
+				toast.success('Заповнено з Google Maps');
+			} else {
+				toast.error('Не вдалося отримати дані з цього посилання');
+			}
+		} catch {
+			toast.error('Не вдалося отримати дані з цього посилання');
+		} finally {
+			isImportingGmaps = false;
+		}
+	}
+
 	async function createAndJoinClub() {
 		if (!newClubName.trim()) return;
 		isCreatingClub = true;
 		try {
-			const clubCity = newClubCity.trim() || city;
-			const geocoded = await geocodeClub(newClubAddress, clubCity);
+		const registerBody: Record<string, unknown> = {
+			name: newClubName.trim(),
+			country: 'Ukraine',
+			city: 'Kyiv',
+			address: newClubAddress.trim() || undefined
+		};
+		// Coord priority: GMaps import > server geocoding (address) > Kyiv centroid.
+		// Sending (0,0) triggers Nominatim on the server; on failure it falls back to
+		// the Kyiv centroid automatically.
+		if (newClubLat !== null && newClubLng !== null) {
+			registerBody.latitude = newClubLat;
+			registerBody.longitude = newClubLng;
+		} else if (newClubAddress.trim()) {
+			// Let the server geocode the address.
+			registerBody.latitude = 0;
+			registerBody.longitude = 0;
+		} else {
+			// No address — use Kyiv centroid so the club still appears on the map.
+			registerBody.latitude = 50.4501;
+			registerBody.longitude = 30.5234;
+		}
+			if (newClubPhotos.length > 0) {
+				registerBody.photos = newClubPhotos;
+			}
 			const resp = await authFetch('/clubs/register', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
-				body: JSON.stringify({
-					name: newClubName.trim(),
-					country: 'Ukraine',
-					city: clubCity,
-					address: newClubAddress.trim() || undefined,
-					latitude: geocoded.lat,
-					longitude: geocoded.lng
-				})
+				body: JSON.stringify(registerBody)
 			});
 			if (resp.ok) {
 				const body = await resp.json();
@@ -451,11 +629,20 @@
 				selectedClubSlug = body.data?.slug ?? '';
 				selectedClubName = newClubName.trim();
 				wasJustCreated = true;
+				// Join as member + claim ownership so the creator can edit the club later.
+				if (selectedClubSlug) {
+					try {
+						await authFetch(`/clubs/${selectedClubSlug}/join`, { method: 'POST' });
+					} catch { /* non-fatal */ }
+					try {
+						await authFetch(`/clubs/${selectedClubSlug}/claim`, { method: 'POST' });
+					} catch { /* non-fatal */ }
+				}
 				showCreateForm = false;
 				toast.success('Клуб створено!');
 			} else {
 				const body = await resp.json().catch(() => ({}));
-				toast.error((body as { error?: string }).error ?? 'Помилка створення клубу');
+				toast.error(parseApiError(body, resp.status));
 			}
 		} catch {
 			toast.error('Помилка. Спробуй ще раз.');
@@ -465,9 +652,139 @@
 	}
 
 	function canAdvance(): boolean {
-		if (step === 1) return firstName.length >= 2 && lastName.length >= 2 && !!gender && !ageError;
-		if (step === 2) return !!danceProgram;
+		if (step === 1) return firstName.length >= 2 && lastName.length >= 2 && !!gender && !!birthDate && !ageError;
+		if (step === 2) return !!goal && !!danceProgram;
 		return true;
+	}
+
+	// --- Tailored finish handlers for restricted account types (trainer / club) ---
+
+	async function handleFinishTrainer() {
+		if (firstName.trim().length < 2) {
+			toast.error($t('onboarding.first_name_error'));
+			return;
+		}
+		isSaving = true;
+		try {
+			const nameBody: Record<string, unknown> = { first_name: firstName };
+			if (lastName.trim()) nameBody.last_name = lastName.trim();
+			const userResp = await authFetch('/user/profile/update', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify(nameBody)
+			});
+			if (!userResp.ok) throw new Error('Не вдалось зберегти профіль');
+
+			if (avatarFile) await authStore.uploadAvatar(avatarFile);
+
+			const profileBody: Record<string, unknown> = {
+				account_type: 'trainer',
+				categories: userCategories
+			};
+			if (gender) profileBody.gender = gender;
+			if (bio) profileBody.bio = bio;
+
+			const profileResp = await authFetch('/me/profile', {
+				method: 'PUT',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify(profileBody)
+			});
+			if (!profileResp.ok) throw new Error('Не вдалось зберегти профіль');
+
+			captureOnboardingComplete();
+			sessionStorage.removeItem(STORAGE_KEY);
+			await authStore.checkAuth();
+			goto('/settings');
+		} catch (err) {
+			toast.error(err instanceof Error ? err.message : 'Щось пішло не так. Спробуй ще раз.');
+		} finally {
+			isSaving = false;
+		}
+	}
+
+	async function handleFinishClub() {
+		if (newClubName.trim().length < 2) {
+			toast.error('Введіть назву клубу');
+			return;
+		}
+		isSaving = true;
+		try {
+			const displayName = newClubName.trim();
+
+			// 1. Save the club name as first_name so existing app guards (which require
+			//    first_name) pass. Clubs don't have a surname, so we omit last_name.
+			const userResp = await authFetch('/user/profile/update', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ first_name: displayName })
+			});
+			if (!userResp.ok) throw new Error('Не вдалось зберегти профіль');
+
+			if (avatarFile) await authStore.uploadAvatar(avatarFile);
+
+			// 2. Persist account_type on the profile so the nav/route guards apply.
+			const profileResp = await authFetch('/me/profile', {
+				method: 'PUT',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ account_type: 'club' })
+			});
+			if (!profileResp.ok) throw new Error('Не вдалось зберегти профіль');
+
+		// 3. Create the club (UA/Kyiv hardcoded).
+		// Coord priority: GMaps import > server geocoding (address) > Kyiv centroid.
+		const clubBody: Record<string, unknown> = {
+			name: displayName,
+			country: 'Ukraine',
+			city: 'Kyiv'
+		};
+		if (newClubAddress.trim()) clubBody.address = newClubAddress.trim();
+		if (newClubWebsite.trim()) clubBody.website = newClubWebsite.trim();
+		if (newClubPhone.trim()) clubBody.phone = newClubPhone.trim();
+		if (newClubDescription.trim()) clubBody.description = newClubDescription.trim();
+		if (newClubPhotos.length > 0) clubBody.photos = newClubPhotos;
+		const workingHoursObj: Record<string, { open: string; close: string } | null> = {};
+		let hasWorkingHours = false;
+		for (const day of newClubWorkingHoursDays) {
+			if (day.enabled) { workingHoursObj[day.key] = { open: day.open, close: day.close }; hasWorkingHours = true; }
+		}
+		if (hasWorkingHours) clubBody.working_hours = workingHoursObj;
+		if (newClubLat !== null && newClubLng !== null) {
+			clubBody.latitude = newClubLat;
+			clubBody.longitude = newClubLng;
+		} else if (newClubAddress.trim()) {
+			// Let the server geocode the address; centroid is the server-side fallback.
+			clubBody.latitude = 0;
+			clubBody.longitude = 0;
+		} else {
+			clubBody.latitude = 50.4501;
+			clubBody.longitude = 30.5234;
+		}
+
+			const clubResp = await authFetch('/clubs/register', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify(clubBody)
+			});
+			if (clubResp.ok) {
+				const data = await clubResp.json();
+				const slug = data.data?.slug ?? data.slug ?? '';
+				if (slug) {
+					// Try to claim ownership; non-fatal if it fails.
+					try {
+						await authFetch(`/clubs/${slug}/claim`, { method: 'POST' });
+					} catch { /* non-fatal */ }
+				}
+			}
+
+			captureOnboardingComplete();
+			sessionStorage.removeItem(STORAGE_KEY);
+			await authStore.checkAuth();
+			goto('/settings');
+		} catch (err) {
+			toast.error(err instanceof Error ? err.message : 'Щось пішло не так. Спробуй ще раз.');
+		} finally {
+			isSaving = false;
+		}
 	}
 
 	async function handleFinish() {
@@ -476,7 +793,7 @@
 			const r = await authFetch(path, init);
 			if (!r.ok) {
 				const b = await r.json().catch(() => ({}));
-				throw new Error((b as { error?: string }).error ?? `Request to ${path} failed (${r.status})`);
+				throw new Error(parseApiError(b, r.status));
 			}
 			return r;
 		}
@@ -514,11 +831,11 @@
 				body: JSON.stringify(body)
 			});
 
-			if (selectedClubId && !wasJustCreated && selectedClubSlug) {
+			if (selectedClubId && selectedClubSlug) {
 				try {
 					await postOrThrow(`/clubs/${selectedClubSlug}/join`, { method: 'POST' });
 				} catch {
-					// non-fatal: profile already saved
+					// non-fatal: profile already saved; JoinClub is idempotent (ON CONFLICT DO NOTHING)
 				}
 			}
 
@@ -572,6 +889,381 @@
 	}
 </script>
 
+{#if isRestricted}
+	<!-- Tailored single-step flow for trainer & club accounts -->
+	<div class="flex h-[100dvh] flex-col px-6 pt-safe pb-safe" style="background: #dae1eb; overflow: hidden;">
+		<div class="flex-shrink-0 pt-14 pb-8">
+			<h1 class="text-[28px] font-black" style="color: #171717;">
+				{accountType === 'trainer' ? 'Профіль тренера' : 'Профіль клубу'}
+			</h1>
+			<p class="mt-1 text-[14px] font-medium" style="color: #696969;">
+				{accountType === 'trainer'
+					? 'Заповніть основні дані, щоб клієнти могли вас знайти'
+					: 'Розкажіть про ваш клуб'}
+			</p>
+		</div>
+
+		<div
+			class="flex-1 min-h-0 overflow-y-auto"
+			style="display: flex; flex-direction: column; gap: 16px; padding-bottom: 24px; -webkit-overflow-scrolling: touch;"
+		>
+			<!-- Avatar -->
+			<div class="rounded-[20px] bg-white ob-card p-4" style="background: white; display: flex; flex-direction: column; gap: 12px;">
+				<label class="text-[11px] font-semibold uppercase tracking-wider" style="color: #aeb4bc;">
+					{accountType === 'trainer' ? 'Фото' : 'Лого клубу'}
+				</label>
+				<div class="flex items-center gap-4">
+					<button
+						type="button"
+						onclick={() => fileInput?.click()}
+						class="relative flex h-[72px] w-[72px] flex-shrink-0 items-center justify-center overflow-hidden rounded-[16px]"
+						style="background: #dae1eb;"
+						aria-label="Завантажити фото"
+					>
+						{#if avatarPreview}
+							<img src={avatarPreview} alt="Avatar" class="h-full w-full object-cover" />
+						{:else}
+							<i class="fi fi-rr-camera" style="font-size: 24px; color: #aeb4bc; line-height: 1;"></i>
+						{/if}
+					</button>
+					<input
+						bind:this={fileInput}
+						type="file"
+						accept="image/*"
+						class="hidden"
+						onchange={handleAvatarChange}
+					/>
+					<p class="text-[13px] font-medium" style="color: #696969;">
+						{avatarPreview ? 'Натисніть, щоб замінити' : 'Натисніть, щоб завантажити'}
+					</p>
+				</div>
+			</div>
+
+		{#if accountType === 'trainer'}
+			<!-- Trainer: name + bio + gender + categories -->
+			<div class="rounded-[20px] bg-white ob-card p-4" style="background: white; display: flex; flex-direction: column; gap: 12px;">
+				<label class="text-[11px] font-semibold uppercase tracking-wider" style="color: #aeb4bc;">ІМ'Я ТА ПРІЗВИЩЕ</label>
+				<input
+					type="text"
+					placeholder="Ім'я"
+					bind:value={firstName}
+					class="w-full rounded-[12px] border px-3 py-2.5 text-[14px] font-medium outline-none"
+					style="color: #171717; border-color: #e0e0e0;"
+				/>
+				<input
+					type="text"
+					placeholder="Прізвище (необов'язково)"
+					bind:value={lastName}
+					class="w-full rounded-[12px] border px-3 py-2.5 text-[14px] font-medium outline-none"
+					style="color: #171717; border-color: #e0e0e0;"
+				/>
+			</div>
+
+			<div class="rounded-[20px] bg-white ob-card p-4" style="display: flex; flex-direction: column; gap: 12px;">
+				<label class="text-[11px] font-semibold uppercase tracking-wider" style="color: #aeb4bc;">СТАТЬ</label>
+				<div class="flex gap-2">
+					{#each [{ value: 'male', label: 'Чоловік' }, { value: 'female', label: 'Жінка' }, { value: 'other', label: 'Інше' }] as g}
+						{@const sel = gender === g.value}
+						<button
+							type="button"
+							onclick={() => (gender = g.value)}
+							class="flex-1 rounded-[50px] py-2 text-[13px] font-semibold transition-all"
+							style="background: {sel ? '#8984da' : 'transparent'}; color: {sel ? 'white' : '#696969'}; border: 1.5px solid {sel ? '#8984da' : '#d1d5db'};"
+						>{g.label}</button>
+					{/each}
+				</div>
+			</div>
+
+			<div class="rounded-[20px] bg-white ob-card p-4" style="display: flex; flex-direction: column; gap: 12px;">
+				<label class="text-[11px] font-semibold uppercase tracking-wider" style="color: #aeb4bc;">ПРО ВАС</label>
+				<textarea
+					placeholder="Коротко про досвід і спеціалізацію"
+					bind:value={bio}
+					rows="3"
+					class="w-full rounded-[12px] border px-3 py-2.5 text-[14px] font-medium outline-none"
+					style="color: #171717; border-color: #e0e0e0; resize: none;"
+				></textarea>
+			</div>
+
+			<div class="rounded-[20px] bg-white ob-card p-4" style="display: flex; flex-direction: column; gap: 12px;">
+				<label class="text-[11px] font-semibold uppercase tracking-wider" style="color: #aeb4bc;">КАТЕГОРІЇ</label>
+				<div class="flex flex-wrap gap-2">
+					{#each CATEGORIES_UA as c}
+						{@const selected = userCategories.includes(c.value)}
+						<button
+							type="button"
+							onclick={() => toggleUserCategory(c.value)}
+							class="rounded-[50px] px-3 py-1.5 text-[12px] font-semibold transition-all"
+							style="background: {selected ? '#8984da' : 'transparent'}; color: {selected ? 'white' : '#696969'}; border: 1.5px solid {selected ? '#8984da' : '#d1d5db'};"
+						>{c.label}</button>
+					{/each}
+				</div>
+			</div>
+		<!-- Trainer: optional club affiliation -->
+		{#if accountType === 'trainer' && trainerJoinedClubs.length < 5}
+			<div class="rounded-[20px] bg-white ob-card p-4" style="display: flex; flex-direction: column; gap: 12px;">
+				<div class="flex items-center justify-between">
+					<label class="text-[11px] font-semibold uppercase tracking-wider" style="color: #aeb4bc;">МОЇ КЛУБИ (НЕОБОВ'ЯЗКОВО)</label>
+					{#if trainerJoinedClubs.length > 0}
+						<span class="text-[11px] font-semibold" style="color: #8984da;">{trainerJoinedClubs.length}/5</span>
+					{/if}
+				</div>
+
+				{#each trainerJoinedClubs as club}
+					<div class="flex items-center gap-2 rounded-[10px] px-3 py-2" style="background: rgba(137,132,218,0.1);">
+						<i class="fi fi-rr-bank" style="font-size: 14px; color: #8984da; line-height: 1;"></i>
+						<span class="flex-1 truncate text-[13px] font-semibold" style="color: #171717;">{club.name}</span>
+						<button
+							type="button"
+							onclick={() => { trainerJoinedClubs = trainerJoinedClubs.filter((c) => c.id !== club.id); }}
+							class="flex h-6 w-6 items-center justify-center"
+						>
+							<i class="fi fi-rr-cross-small" style="font-size: 16px; color: #aeb4bc; line-height: 1;"></i>
+						</button>
+					</div>
+				{/each}
+
+				<input
+					type="text"
+					placeholder="Знайти клуб…"
+					bind:value={trainerClubSearchQuery}
+					oninput={() => {
+						if (trainerClubSearchTimer) clearTimeout(trainerClubSearchTimer);
+						trainerClubSearchTimer = setTimeout(searchTrainerClubs, 300);
+					}}
+					class="w-full rounded-[12px] border px-3 py-2.5 text-[14px] font-medium outline-none"
+					style="color: #171717; border-color: #e0e0e0;"
+				/>
+
+				{#if trainerClubSearchResults.length > 0}
+					<div class="flex flex-col gap-1">
+						{#each trainerClubSearchResults.slice(0, 5) as club}
+							<button
+								type="button"
+								onclick={() => trainerJoinClub(club)}
+								disabled={trainerJoiningSlug === club.slug}
+								class="flex items-center gap-2 rounded-[10px] px-3 py-2 text-left transition-opacity disabled:opacity-50"
+								style="background: rgba(0,0,0,0.04);"
+							>
+								<i class="fi fi-rr-bank" style="font-size: 14px; color: #aeb4bc; line-height: 1;"></i>
+								<span class="flex-1 truncate text-[13px] font-medium" style="color: #171717;">{club.name}</span>
+								<span class="text-[12px]" style="color: #aeb4bc;">{club.city}</span>
+								<i class="fi fi-rr-plus" style="font-size: 14px; color: #8984da; line-height: 1;"></i>
+							</button>
+						{/each}
+					</div>
+				{/if}
+			</div>
+		{/if}
+
+		{:else}
+			<!-- Club: Google Maps import -->
+				<div class="rounded-[20px] ob-card p-4" style="background: white; display: flex; flex-direction: column; gap: 12px;">
+					<label class="text-[11px] font-semibold uppercase tracking-wider" style="color: #aeb4bc;">ІМПОРТ З GOOGLE MAPS</label>
+					{#if !showGmapsInputOnboarding}
+						<button
+							type="button"
+							onclick={() => (showGmapsInputOnboarding = true)}
+							class="flex items-center justify-center gap-2 rounded-[50px] py-2 text-[13px] font-semibold"
+							style="background: rgba(137,132,218,0.12); color: #8984da;"
+						>
+							<i class="fi fi-rr-link" style="font-size: 14px; line-height: 1;"></i>
+							Заповнити з Google Maps
+						</button>
+					{:else}
+						<div style="display: flex; flex-direction: column; gap: 6px;">
+							<input
+								type="url"
+								bind:value={gmapsURLOnboarding}
+								placeholder="Вставте посилання Google Maps…"
+								class="w-full rounded-[12px] border px-3 py-2.5 text-[14px] font-medium outline-none"
+								style="color: #171717; border-color: #e0e0e0;"
+							/>
+							<div class="flex gap-2">
+								<button
+									type="button"
+									onclick={() => { showGmapsInputOnboarding = false; gmapsURLOnboarding = ''; }}
+									class="flex-1 rounded-[50px] py-2 text-[13px] font-semibold"
+									style="background: transparent; color: #696969; border: 1.5px solid #d1d5db;"
+								>Скасувати</button>
+								<button
+									type="button"
+									onclick={importFromGmapsOnboarding}
+									disabled={isImportingGmaps || !gmapsURLOnboarding.trim()}
+									class="flex flex-1 items-center justify-center gap-2 rounded-[50px] py-2 text-[13px] font-semibold text-white transition-opacity disabled:opacity-50"
+									style="background: #8984da;"
+								>
+									{#if isImportingGmaps}
+										<div class="h-4 w-4 animate-spin rounded-full border-2 border-white/30" style="border-top-color: white;"></div>
+									{/if}
+									Імпорт
+								</button>
+							</div>
+						</div>
+					{/if}
+					{#if newClubPhotos.length > 0}
+						<div class="flex gap-2 overflow-x-auto pb-1">
+							{#each newClubPhotos as url}
+								<img src={url} alt="Фото клубу" class="h-[64px] w-[64px] flex-shrink-0 rounded-[10px] object-cover" />
+							{/each}
+						</div>
+					{/if}
+				</div>
+
+				<!-- Club: name -->
+				<div class="rounded-[20px] ob-card p-4" style="background: white; display: flex; flex-direction: column; gap: 12px;">
+					<label class="text-[11px] font-semibold uppercase tracking-wider" style="color: #aeb4bc;">НАЗВА КЛУБУ <span style="color: #e05252;">*</span></label>
+					<input
+						type="text"
+						placeholder="Salsa Studio Kyiv"
+						bind:value={newClubName}
+						class="w-full rounded-[12px] border px-3 py-2.5 text-[14px] font-medium outline-none"
+						style="color: #171717; border-color: #e0e0e0;"
+					/>
+				</div>
+
+				<!-- Club: address + locked city -->
+				<div class="rounded-[20px] ob-card p-4" style="background: white; display: flex; flex-direction: column; gap: 12px;">
+					<label class="text-[11px] font-semibold uppercase tracking-wider" style="color: #aeb4bc;">АДРЕСА</label>
+					<input
+						type="text"
+						placeholder="вул. Хрещатик, 1 (необов'язково)"
+						bind:value={newClubAddress}
+						class="w-full rounded-[12px] border px-3 py-2.5 text-[14px] font-medium outline-none"
+						style="color: #171717; border-color: #e0e0e0;"
+					/>
+					<div
+						class="flex items-center justify-between rounded-[12px] border px-3 py-2.5 text-[14px] font-medium"
+						style="color: #171717; border-color: #e0e0e0; background: #f5f5f5;"
+					>
+						<span>Київ, Україна</span>
+						<i class="fi fi-rr-lock" style="font-size: 12px; color: #aeb4bc;"></i>
+					</div>
+				</div>
+
+				<!-- Club: description -->
+				<div class="rounded-[20px] ob-card p-4" style="background: white; display: flex; flex-direction: column; gap: 12px;">
+					<label class="text-[11px] font-semibold uppercase tracking-wider" style="color: #aeb4bc;">ПРО КЛУБ</label>
+					<textarea
+						placeholder="Короткий опис вашого клубу, спеціалізація, рівні…"
+						bind:value={newClubDescription}
+						rows="3"
+						class="w-full rounded-[12px] border px-3 py-2.5 text-[14px] font-medium outline-none"
+						style="color: #171717; border-color: #e0e0e0; resize: none;"
+					></textarea>
+				</div>
+
+				<!-- Club: website + phone -->
+				<div class="rounded-[20px] ob-card p-4" style="background: white; display: flex; flex-direction: column; gap: 12px;">
+					<label class="text-[11px] font-semibold uppercase tracking-wider" style="color: #aeb4bc;">КОНТАКТИ</label>
+					<input
+						type="url"
+						placeholder="https://example.com"
+						bind:value={newClubWebsite}
+						class="w-full rounded-[12px] border px-3 py-2.5 text-[14px] font-medium outline-none"
+						style="color: #171717; border-color: #e0e0e0;"
+					/>
+					<input
+						type="tel"
+						inputmode="tel"
+						autocomplete="tel"
+						placeholder="+380 50 123 45 67"
+						value={newClubPhone}
+						oninput={handleClubPhoneInput}
+						onpaste={handleClubPhonePaste}
+						class="w-full rounded-[12px] border px-3 py-2.5 text-[14px] font-medium outline-none"
+						style="color: #171717; border-color: #e0e0e0;"
+					/>
+				</div>
+
+				<!-- Club: working hours -->
+				<div class="rounded-[20px] ob-card p-4" style="background: white; display: flex; flex-direction: column; gap: 10px;">
+					<label class="text-[11px] font-semibold uppercase tracking-wider" style="color: #aeb4bc;">ГРАФІК РОБОТИ</label>
+					{#each newClubWorkingHoursDays as day}
+						<div class="flex items-center gap-2">
+							<button
+								type="button"
+								onclick={() => toggleWorkingDay(day.key)}
+								class="flex h-7 w-9 flex-shrink-0 items-center justify-center rounded-[8px] text-[12px] font-semibold transition-all"
+								style="background: {day.enabled ? '#8984da' : 'transparent'}; color: {day.enabled ? 'white' : '#696969'}; border: 1.5px solid {day.enabled ? '#8984da' : '#d1d5db'};"
+							>{day.label}</button>
+							{#if day.enabled}
+								<input
+									type="time"
+									value={day.open}
+									oninput={(e) => setWorkingHour(day.key, 'open', (e.currentTarget as HTMLInputElement).value)}
+									class="flex-1 rounded-[8px] border px-2 py-1.5 text-[13px] font-medium outline-none"
+									style="color: #171717; border-color: #e0e0e0;"
+								/>
+								<span class="text-[12px] font-medium" style="color: #aeb4bc;">—</span>
+								<input
+									type="time"
+									value={day.close}
+									oninput={(e) => setWorkingHour(day.key, 'close', (e.currentTarget as HTMLInputElement).value)}
+									class="flex-1 rounded-[8px] border px-2 py-1.5 text-[13px] font-medium outline-none"
+									style="color: #171717; border-color: #e0e0e0;"
+								/>
+							{:else}
+								<span class="text-[13px] font-medium" style="color: #aeb4bc;">Зачинено</span>
+							{/if}
+						</div>
+					{/each}
+				</div>
+			{/if}
+		</div>
+
+		<!-- Footer -->
+		<div class="flex-shrink-0 pt-3 pb-4">
+			<button
+				onclick={accountType === 'trainer' ? handleFinishTrainer : handleFinishClub}
+				disabled={isSaving || (accountType === 'trainer' ? firstName.trim().length < 2 : newClubName.trim().length < 2)}
+				class="w-full rounded-[50px] py-3 text-[14px] font-semibold text-white transition-opacity disabled:opacity-50"
+				style="background: #8984da;"
+			>
+				{isSaving ? 'Збереження…' : 'Готово'}
+			</button>
+		</div>
+
+		<!-- Avatar crop modal (shared with main flow) -->
+	{#if cropMode}
+		<div class="fixed inset-0 z-50 flex items-center justify-center p-6" style="background: rgba(0,0,0,0.6);">
+			<div class="flex flex-col gap-4 rounded-[20px] bg-white ob-card p-5">
+				<p class="text-[14px] font-semibold" style="color: #171717;">{$t('onboarding.crop_title')}</p>
+				<div
+					class="relative overflow-hidden rounded-full"
+					style="width: {CROP_SIZE}px; height: {CROP_SIZE}px; background: #dae1eb; touch-action: none;"
+					onmousedown={onCropMouseDown}
+					ontouchstart={onCropTouchStart}
+					role="application"
+					tabindex="-1"
+				>
+					<img
+						bind:this={cropImgEl}
+						src={avatarPreview}
+						alt="crop"
+						onload={initCrop}
+						draggable="false"
+						class="absolute select-none"
+						style="left: {cropX}px; top: {cropY}px; width: {cropImgW}px; height: {cropImgH}px; user-select: none; pointer-events: none;"
+					/>
+				</div>
+				<div class="flex gap-2">
+					<button
+						onclick={() => { cropMode = false; avatarPreview = ''; avatarFile = null; }}
+						class="flex-1 rounded-[50px] py-2.5 text-[13px] font-semibold"
+						style="background: rgba(174,180,188,0.15); color: #aeb4bc;"
+					>{$t('onboarding.crop_cancel')}</button>
+					<button
+						onclick={confirmCrop}
+						class="flex-1 rounded-[50px] py-2.5 text-[13px] font-semibold text-white"
+						style="background: #8984da;"
+					>{$t('onboarding.crop_confirm')}</button>
+				</div>
+			</div>
+		</div>
+	{/if}
+	</div>
+{:else}
 <div class="flex h-[100dvh] flex-col px-6 pt-safe pb-safe" style="background: #dae1eb; overflow: hidden;">
 	<!-- Progress bar -->
 	<div class="flex-shrink-0 pb-10 pt-14">
@@ -615,7 +1307,7 @@
 	<div class="h-full overflow-y-auto" style="gap: 16px; display: flex; flex-direction: column; padding-top: 8px; padding-bottom: 24px; -webkit-overflow-scrolling: touch;">
 		{#if step === 1}
 			<!-- Account type -->
-			<div class="rounded-[20px] bg-white p-4" style="display: flex; flex-direction: column; gap: 12px;">
+			<div class="rounded-[20px] bg-white ob-card p-4" style="display: flex; flex-direction: column; gap: 12px;">
 				<label class="text-[11px] font-semibold uppercase tracking-wider" style="color: #aeb4bc;">{$t('onboarding.account_type_label')}</label>
 				<div class="flex gap-2">
 					<button
@@ -632,7 +1324,7 @@
 			</div>
 
 			<!-- Name -->
-			<div class="rounded-[20px] bg-white p-4" style="display: flex; flex-direction: column; gap: 12px;">
+			<div class="rounded-[20px] bg-white ob-card p-4" style="display: flex; flex-direction: column; gap: 12px;">
 				<label class="text-[11px] font-semibold uppercase tracking-wider" style="color: #aeb4bc;">{isParent ? $t('onboarding.name_label_parent') : $t('onboarding.name_label_dancer')}</label>
 				<input
 					type="text"
@@ -652,7 +1344,7 @@
 			</div>
 
 			<!-- Gender -->
-			<div class="rounded-[20px] bg-white p-4" style="display: flex; flex-direction: column; gap: 12px;">
+			<div class="rounded-[20px] bg-white ob-card p-4" style="display: flex; flex-direction: column; gap: 12px;">
 				<label class="text-[11px] font-semibold uppercase tracking-wider" style="color: #aeb4bc;">{isParent ? $t('onboarding.gender_label_parent') : $t('onboarding.gender_label_dancer')}</label>
 				<div class="flex gap-2">
 					{#each GENDER_OPTIONS as g}
@@ -666,7 +1358,7 @@
 			</div>
 
 			<!-- Birth date + Height -->
-			<div class="rounded-[20px] bg-white p-4" style="display: flex; flex-direction: column; gap: 12px;">
+			<div class="rounded-[20px] bg-white ob-card p-4" style="display: flex; flex-direction: column; gap: 12px;">
 				<div class="flex items-center justify-between">
 					<span class="text-[14px] font-semibold" style="color: #171717;">{isParent ? $t('onboarding.birth_date_label_parent') : $t('onboarding.birth_date_label_dancer')}</span>
 					<input
@@ -694,67 +1386,8 @@
 			</div>
 
 		{:else if step === 2}
-			<!-- Program -->
-			<div class="rounded-[20px] bg-white p-4" style="display: flex; flex-direction: column; gap: 12px;">
-				<label class="text-[11px] font-semibold uppercase tracking-wider" style="color: #aeb4bc;">{isParent ? $t('onboarding.program_label_parent') : $t('onboarding.program_label_dancer')}</label>
-				<div class="flex gap-2">
-					{#each PROGRAM_OPTIONS as p}
-						<button
-							onclick={() => (danceProgram = p.value)}
-							class="flex-1 rounded-[50px] py-2.5 text-[14px] font-semibold transition-all"
-							style="background: {danceProgram === p.value ? '#8984da' : 'transparent'}; color: {danceProgram === p.value ? 'white' : '#696969'}; border: 1.5px solid {danceProgram === p.value ? '#8984da' : '#d1d5db'};"
-						>{p.label}</button>
-					{/each}
-				</div>
-			</div>
-
-			<!-- Categories -->
-			<div class="rounded-[20px] bg-white p-4" style="display: flex; flex-direction: column; gap: 12px;">
-				<label class="text-[11px] font-semibold uppercase tracking-wider" style="color: #aeb4bc;">{isParent ? $t('onboarding.category_label_parent') : $t('onboarding.category_label_dancer')}</label>
-				<div class="flex flex-wrap gap-2">
-					{#each CATEGORIES_UA as cat}
-						<button
-							onclick={() => toggleUserCategory(cat.value)}
-							class="rounded-[50px] px-3 py-1.5 text-[13px] font-semibold transition-all"
-							style="background: {userCategories.includes(cat.value) ? '#8984da' : 'transparent'}; color: {userCategories.includes(cat.value) ? 'white' : '#696969'}; border: 1.5px solid {userCategories.includes(cat.value) ? '#8984da' : '#d1d5db'};"
-						>{cat.label}</button>
-					{/each}
-				</div>
-			</div>
-
-			<!-- Ready to relocate -->
-			<div class="rounded-[20px] bg-white p-4" style="display: flex; flex-direction: column; gap: 12px;">
-				<label class="text-[11px] font-semibold uppercase tracking-wider" style="color: #aeb4bc;">{isParent ? $t('onboarding.relocate_label_parent') : $t('onboarding.relocate_label_dancer')}</label>
-				<div class="flex gap-2">
-					<button
-						onclick={() => (readyToRelocate = readyToRelocate === true ? null : true)}
-						class="flex-1 rounded-[50px] py-2.5 text-[13px] font-semibold transition-all"
-						style="background: {readyToRelocate === true ? '#8984da' : 'transparent'}; color: {readyToRelocate === true ? 'white' : '#696969'}; border: 1.5px solid {readyToRelocate === true ? '#8984da' : '#d1d5db'};"
-					>{$t('onboarding.yes')}</button>
-					<button
-						onclick={() => (readyToRelocate = readyToRelocate === false ? null : false)}
-						class="flex-1 rounded-[50px] py-2.5 text-[14px] font-semibold transition-all"
-						style="background: {readyToRelocate === false ? '#8984da' : 'transparent'}; color: {readyToRelocate === false ? 'white' : '#696969'}; border: 1.5px solid {readyToRelocate === false ? '#8984da' : '#d1d5db'};"
-					>{$t('onboarding.no')}</button>
-				</div>
-			</div>
-
-			<!-- Ready to finance -->
-			<div class="rounded-[20px] bg-white p-4" style="display: flex; flex-direction: column; gap: 12px;">
-				<label class="text-[11px] font-semibold uppercase tracking-wider" style="color: #aeb4bc;">{$t('onboarding.finance_label')}</label>
-				<div class="flex gap-2">
-					{#each FINANCE_OPTIONS as opt}
-						<button
-							onclick={() => (readyToFinance = readyToFinance === opt.value ? '' : opt.value)}
-							class="flex-1 rounded-[50px] py-2.5 text-[13px] font-semibold transition-all"
-							style="background: {readyToFinance === opt.value ? '#8984da' : 'transparent'}; color: {readyToFinance === opt.value ? 'white' : '#696969'}; border: 1.5px solid {readyToFinance === opt.value ? '#8984da' : '#d1d5db'};"
-						>{opt.label}</button>
-					{/each}
-				</div>
-			</div>
-
-			<!-- Goal -->
-			<div class="rounded-[20px] bg-white p-4" style="display: flex; flex-direction: column; gap: 12px;">
+			<!-- Goal first: it gates the rest of step 2 (amateurs see a short flow). -->
+			<div class="rounded-[20px] bg-white ob-card p-4" style="display: flex; flex-direction: column; gap: 12px;">
 				<label class="text-[11px] font-semibold uppercase tracking-wider" style="color: #aeb4bc;">{isParent ? $t('onboarding.goal_label_parent') : $t('onboarding.goal_label_dancer')}</label>
 				<div class="grid grid-cols-2 gap-2">
 					{#each GOAL_OPTIONS as g}
@@ -767,8 +1400,69 @@
 				</div>
 			</div>
 
-			<!-- Bio -->
-			<div class="rounded-[20px] bg-white p-4" style="display: flex; flex-direction: column; gap: 8px;">
+			<!-- Program (everyone) -->
+			<div class="rounded-[20px] bg-white ob-card p-4" style="display: flex; flex-direction: column; gap: 12px;">
+				<label class="text-[11px] font-semibold uppercase tracking-wider" style="color: #aeb4bc;">{isParent ? $t('onboarding.program_label_parent') : $t('onboarding.program_label_dancer')}</label>
+				<div class="flex gap-2">
+					{#each PROGRAM_OPTIONS as p}
+						<button
+							onclick={() => (danceProgram = p.value)}
+							class="flex-1 rounded-[50px] py-2.5 text-[14px] font-semibold transition-all"
+							style="background: {danceProgram === p.value ? '#8984da' : 'transparent'}; color: {danceProgram === p.value ? 'white' : '#696969'}; border: 1.5px solid {danceProgram === p.value ? '#8984da' : '#d1d5db'};"
+						>{p.label}</button>
+					{/each}
+				</div>
+			</div>
+
+			{#if !isAmateur}
+				<!-- Categories (pro only — amateurs don't compete) -->
+				<div class="rounded-[20px] bg-white ob-card p-4" style="display: flex; flex-direction: column; gap: 12px;">
+					<label class="text-[11px] font-semibold uppercase tracking-wider" style="color: #aeb4bc;">{isParent ? $t('onboarding.category_label_parent') : $t('onboarding.category_label_dancer')}</label>
+					<div class="flex flex-wrap gap-2">
+						{#each CATEGORIES_UA as cat}
+							<button
+								onclick={() => toggleUserCategory(cat.value)}
+								class="rounded-[50px] px-3 py-1.5 text-[13px] font-semibold transition-all"
+								style="background: {userCategories.includes(cat.value) ? '#8984da' : 'transparent'}; color: {userCategories.includes(cat.value) ? 'white' : '#696969'}; border: 1.5px solid {userCategories.includes(cat.value) ? '#8984da' : '#d1d5db'};"
+							>{cat.label}</button>
+						{/each}
+					</div>
+				</div>
+
+				<!-- Ready to relocate (pro only) -->
+				<div class="rounded-[20px] bg-white ob-card p-4" style="display: flex; flex-direction: column; gap: 12px;">
+					<label class="text-[11px] font-semibold uppercase tracking-wider" style="color: #aeb4bc;">{isParent ? $t('onboarding.relocate_label_parent') : $t('onboarding.relocate_label_dancer')}</label>
+					<div class="flex gap-2">
+						<button
+							onclick={() => (readyToRelocate = readyToRelocate === true ? null : true)}
+							class="flex-1 rounded-[50px] py-2.5 text-[13px] font-semibold transition-all"
+							style="background: {readyToRelocate === true ? '#8984da' : 'transparent'}; color: {readyToRelocate === true ? 'white' : '#696969'}; border: 1.5px solid {readyToRelocate === true ? '#8984da' : '#d1d5db'};"
+						>{$t('onboarding.yes')}</button>
+						<button
+							onclick={() => (readyToRelocate = readyToRelocate === false ? null : false)}
+							class="flex-1 rounded-[50px] py-2.5 text-[14px] font-semibold transition-all"
+							style="background: {readyToRelocate === false ? '#8984da' : 'transparent'}; color: {readyToRelocate === false ? 'white' : '#696969'}; border: 1.5px solid {readyToRelocate === false ? '#8984da' : '#d1d5db'};"
+						>{$t('onboarding.no')}</button>
+					</div>
+				</div>
+
+				<!-- Ready to finance (pro only) -->
+				<div class="rounded-[20px] bg-white ob-card p-4" style="display: flex; flex-direction: column; gap: 12px;">
+					<label class="text-[11px] font-semibold uppercase tracking-wider" style="color: #aeb4bc;">{$t('onboarding.finance_label')}</label>
+					<div class="flex gap-2">
+						{#each FINANCE_OPTIONS as opt}
+							<button
+								onclick={() => (readyToFinance = readyToFinance === opt.value ? '' : opt.value)}
+								class="flex-1 rounded-[50px] py-2.5 text-[13px] font-semibold transition-all"
+								style="background: {readyToFinance === opt.value ? '#8984da' : 'transparent'}; color: {readyToFinance === opt.value ? 'white' : '#696969'}; border: 1.5px solid {readyToFinance === opt.value ? '#8984da' : '#d1d5db'};"
+							>{opt.label}</button>
+						{/each}
+					</div>
+				</div>
+			{/if}
+
+			<!-- Bio (everyone, optional) -->
+			<div class="rounded-[20px] bg-white ob-card p-4" style="display: flex; flex-direction: column; gap: 8px;">
 				<label class="text-[11px] font-semibold uppercase tracking-wider" style="color: #aeb4bc;">{$t('onboarding.bio_label')}</label>
 				<textarea
 					placeholder={$t('onboarding.bio_placeholder')}
@@ -779,48 +1473,44 @@
 				></textarea>
 			</div>
 
-			<!-- User's own location -->
-			<div class="rounded-[20px] bg-white p-4" style="display: flex; flex-direction: column; gap: 12px;">
-				<label class="text-[11px] font-semibold uppercase tracking-wider" style="color: #aeb4bc;">{$t('onboarding.country_label')}</label>
-				<select
-					bind:value={country}
-					onchange={() => { city = ''; }}
-					disabled
-					class="w-full bg-transparent text-[16px] font-semibold outline-none"
-					style="color: #171717; opacity: 1; -webkit-appearance: none; appearance: none;"
-				>
-					{#each COUNTRIES as c}
-						<option value={c}>{c}</option>
-					{/each}
-				</select>
-				<div style="border-top: 1px solid #f0f0f0; padding-top: 12px; display: flex; flex-direction: column; gap: 8px;">
-					<label class="text-[11px] font-semibold uppercase tracking-wider" style="color: #aeb4bc;">{$t('onboarding.city_label')}</label>
-					{#if CITIES_BY_COUNTRY[country]}
-						<select
-							bind:value={city}
-							class="w-full bg-transparent text-[16px] font-semibold outline-none"
-							style="color: {city ? '#171717' : '#aeb4bc'};"
-						>
-							<option value="">Оберіть місто</option>
-							{#each CITIES_BY_COUNTRY[country] as c}
-								<option value={c}>{c}</option>
-							{/each}
-						</select>
-					{:else}
-						<input
-							type="text"
-							placeholder="Місто"
-							bind:value={city}
-							class="w-full bg-transparent text-[16px] font-semibold outline-none"
-							style="color: #171717;"
-						/>
-					{/if}
+		<!-- User's own location — v1 locked to Kyiv/Ukraine -->
+		<div class="rounded-[20px] bg-white ob-card p-4" style="display: flex; flex-direction: column; gap: 12px;">
+			<label class="text-[11px] font-semibold uppercase tracking-wider" style="color: #aeb4bc;">{$t('onboarding.country_label')}</label>
+			<div class="flex items-center justify-between">
+				<span class="text-[16px] font-semibold" style="color: #171717;">{HARDCODED_COUNTRY}</span>
+				<i class="fi fi-rr-lock" style="font-size: 13px; color: #aeb4bc;"></i>
+			</div>
+			<div style="border-top: 1px solid #f0f0f0; padding-top: 12px; display: flex; flex-direction: column; gap: 8px;">
+				<label class="text-[11px] font-semibold uppercase tracking-wider" style="color: #aeb4bc;">{$t('onboarding.city_label')}</label>
+				<div class="flex items-center justify-between">
+					<span class="text-[16px] font-semibold" style="color: #171717;">{HARDCODED_CITY}</span>
+					<i class="fi fi-rr-lock" style="font-size: 13px; color: #aeb4bc;"></i>
 				</div>
 			</div>
+		</div>
+		<!-- FUTURE multi-city: restore this block and remove the locked display above.
+		<div class="rounded-[20px] bg-white ob-card p-4" style="display: flex; flex-direction: column; gap: 12px;">
+			<label>{$t('onboarding.country_label')}</label>
+			<select bind:value={country} onchange={() => { city = ''; }} disabled ...>
+				{#each COUNTRIES as c}<option value={c}>{c}</option>{/each}
+			</select>
+			<div ...>
+				<label>{$t('onboarding.city_label')}</label>
+				{#if CITIES_BY_COUNTRY[country]}
+					<select bind:value={city} ...>
+						<option value="">Оберіть місто</option>
+						{#each CITIES_BY_COUNTRY[country] as c}<option value={c}>{c}</option>{/each}
+					</select>
+				{:else}
+					<input type="text" bind:value={city} placeholder="Місто" ... />
+				{/if}
+			</div>
+		</div>
+		-->
 
 		{:else if step === 3}
 			<!-- Club search / select / create -->
-			<div class="rounded-[20px] bg-white p-4" style="display: flex; flex-direction: column; gap: 12px;">
+			<div class="rounded-[20px] bg-white ob-card p-4" style="display: flex; flex-direction: column; gap: 12px;">
 				<label class="text-[11px] font-semibold uppercase tracking-wider" style="color: #aeb4bc;">ТВІЙ КЛУБ</label>
 				<p class="text-[13px] font-medium" style="color: #696969;">Обери клуб, до якого ходиш — або пропусти цей крок</p>
 
@@ -860,13 +1550,65 @@
 						</div>
 					{/if}
 					<button
-						onclick={() => { showCreateForm = true; newClubCity = city; }}
+						onclick={() => { showCreateForm = true; }}
 						class="text-left text-[13px] font-semibold"
 						style="color: #8984da;"
 					>Не знайшли? Створіть клуб</button>
 				{:else}
 					<!-- Create club inline form -->
 					<div style="display: flex; flex-direction: column; gap: 10px;">
+						<!-- Google Maps import -->
+						{#if !showGmapsInputOnboarding}
+							<button
+								type="button"
+								onclick={() => (showGmapsInputOnboarding = true)}
+								class="flex items-center justify-center gap-2 rounded-[50px] py-2 text-[13px] font-semibold"
+								style="background: rgba(137,132,218,0.12); color: #8984da;"
+							>
+								<i class="fi fi-rr-link" style="font-size: 14px; line-height: 1;"></i>
+								Імпорт з Google Maps
+							</button>
+						{:else}
+							<div style="display: flex; flex-direction: column; gap: 6px;">
+								<input
+									type="url"
+									bind:value={gmapsURLOnboarding}
+									placeholder="Вставте посилання Google Maps…"
+									class="w-full rounded-[12px] border px-3 py-2.5 text-[14px] font-medium outline-none"
+									style="color: #171717; border-color: #e0e0e0;"
+								/>
+								<div class="flex gap-2">
+									<button
+										type="button"
+										onclick={() => { showGmapsInputOnboarding = false; gmapsURLOnboarding = ''; }}
+										class="flex-1 rounded-[50px] py-2 text-[13px] font-semibold"
+										style="background: transparent; color: #696969; border: 1.5px solid #d1d5db;"
+									>Скасувати</button>
+									<button
+										type="button"
+										onclick={importFromGmapsOnboarding}
+										disabled={isImportingGmaps || !gmapsURLOnboarding.trim()}
+										class="flex flex-1 items-center justify-center gap-2 rounded-[50px] py-2 text-[13px] font-semibold text-white transition-opacity disabled:opacity-50"
+										style="background: #8984da;"
+									>
+										{#if isImportingGmaps}
+											<div class="h-4 w-4 animate-spin rounded-full border-2 border-white/30" style="border-top-color: white;"></div>
+										{/if}
+										Імпорт
+									</button>
+								</div>
+							</div>
+						{/if}
+
+						<!-- Imported photos preview -->
+						{#if newClubPhotos.length > 0}
+							<div class="flex gap-2 overflow-x-auto pb-1">
+								{#each newClubPhotos as url}
+									<img src={url} alt="Фото клубу" class="h-[64px] w-[64px] flex-shrink-0 rounded-[10px] object-cover" />
+								{/each}
+							</div>
+						{/if}
+
 						<input
 							type="text"
 							placeholder="Назва клубу"
@@ -881,16 +1623,24 @@
 							class="w-full rounded-[12px] border px-3 py-2.5 text-[14px] font-medium outline-none"
 							style="color: #171717; border-color: #e0e0e0;"
 						/>
-						<input
-							type="text"
-							placeholder="Місто"
-							bind:value={newClubCity}
-							class="w-full rounded-[12px] border px-3 py-2.5 text-[14px] font-medium outline-none"
-							style="color: #171717; border-color: #e0e0e0;"
-						/>
+						<!-- City locked to Київ for v1 -->
+						<div
+							class="flex items-center justify-between rounded-[12px] border px-3 py-2.5 text-[14px] font-medium"
+							style="color: #171717; border-color: #e0e0e0; background: #f5f5f5;"
+						>
+							<span>Київ, Україна</span>
+							<i class="fi fi-rr-lock" style="font-size: 12px; color: #aeb4bc;"></i>
+						</div>
 						<div class="flex gap-2">
 							<button
-								onclick={() => (showCreateForm = false)}
+								onclick={() => {
+									showCreateForm = false;
+									showGmapsInputOnboarding = false;
+									gmapsURLOnboarding = '';
+									newClubPhotos = [];
+									newClubLat = null;
+									newClubLng = null;
+								}}
 								class="flex-1 rounded-[50px] py-2.5 text-[13px] font-semibold"
 								style="background: transparent; color: #696969; border: 1.5px solid #d1d5db;"
 							>{$t('onboarding.step_club_form_cancel')}</button>
@@ -911,7 +1661,7 @@
 
 		{:else if step === 4}
 			<!-- Preferred gender -->
-			<div class="rounded-[20px] bg-white p-4" style="display: flex; flex-direction: column; gap: 12px;">
+			<div class="rounded-[20px] bg-white ob-card p-4" style="display: flex; flex-direction: column; gap: 12px;">
 				<label class="text-[11px] font-semibold uppercase tracking-wider" style="color: #aeb4bc;">{$t('onboarding.pref_gender_label')}</label>
 				<div class="flex gap-2">
 					{#each [{ value: 'male', label: $t('onboarding.gender_male') }, { value: 'female', label: $t('onboarding.gender_female') }] as g}
@@ -925,7 +1675,7 @@
 			</div>
 
 			<!-- Age range -->
-			<div class="rounded-[20px] bg-white p-4" style="display: flex; flex-direction: column; gap: 12px;">
+			<div class="rounded-[20px] bg-white ob-card p-4" style="display: flex; flex-direction: column; gap: 12px;">
 				<label class="text-[11px] font-semibold uppercase tracking-wider" style="color: #aeb4bc;">{$t('onboarding.pref_age_label')}</label>
 				<div class="flex items-center gap-3">
 					<input
@@ -951,7 +1701,7 @@
 			</div>
 
 			<!-- Height range -->
-			<div class="rounded-[20px] bg-white p-4" style="display: flex; flex-direction: column; gap: 12px;">
+			<div class="rounded-[20px] bg-white ob-card p-4" style="display: flex; flex-direction: column; gap: 12px;">
 				<label class="text-[11px] font-semibold uppercase tracking-wider" style="color: #aeb4bc;">{isParent ? 'ЗРІСТ ПАРТНЕРА ДИТИНИ (СМ)' : 'ЗРІСТ ПАРТНЕРА (СМ)'}</label>
 				<div class="flex items-center gap-3">
 					<input
@@ -976,22 +1726,8 @@
 				</div>
 			</div>
 
-			<!-- Preferred goal -->
-			<div class="rounded-[20px] bg-white p-4" style="display: flex; flex-direction: column; gap: 12px;">
-				<label class="text-[11px] font-semibold uppercase tracking-wider" style="color: #aeb4bc;">БАЖАНА ЦІЛЬ</label>
-				<div class="flex gap-2">
-					{#each [{ value: 'hobby', label: 'Хобі' }, { value: 'professional', label: 'Профі' }] as g}
-						<button
-							onclick={() => (prefGoal = prefGoal === g.value ? '' : g.value)}
-							class="flex-1 rounded-[50px] py-2.5 text-[14px] font-semibold transition-all"
-							style="background: {prefGoal === g.value ? '#8984da' : 'transparent'}; color: {prefGoal === g.value ? 'white' : '#696969'}; border: 1.5px solid {prefGoal === g.value ? '#8984da' : '#d1d5db'};"
-						>{g.label}</button>
-					{/each}
-				</div>
-			</div>
-
-			<!-- Program -->
-			<div class="rounded-[20px] bg-white p-4" style="display: flex; flex-direction: column; gap: 12px;">
+			<!-- Program (everyone) -->
+			<div class="rounded-[20px] bg-white ob-card p-4" style="display: flex; flex-direction: column; gap: 12px;">
 				<label class="text-[11px] font-semibold uppercase tracking-wider" style="color: #aeb4bc;">ПРОГРАМА</label>
 				<div class="flex gap-2">
 					{#each [{ value: 'standard', label: 'Стандарт' }, { value: 'latina', label: 'Латина' }, { value: 'both', label: 'Обидві' }] as p}
@@ -1004,33 +1740,54 @@
 				</div>
 			</div>
 
-			<!-- Categories -->
-			<div class="rounded-[20px] bg-white p-4" style="display: flex; flex-direction: column; gap: 12px;">
-				<label class="text-[11px] font-semibold uppercase tracking-wider" style="color: #aeb4bc;">КАТЕГОРІЯ</label>
-				<div class="flex flex-wrap gap-2">
-					{#each CATEGORIES_UA as cat}
-						<button
-							onclick={() => togglePrefCategory(cat.value)}
-							class="rounded-[50px] px-3 py-1.5 text-[13px] font-semibold transition-all"
-							style="background: {prefCategories.includes(cat.value) ? '#8984da' : 'transparent'}; color: {prefCategories.includes(cat.value) ? 'white' : '#696969'}; border: 1.5px solid {prefCategories.includes(cat.value) ? '#8984da' : '#d1d5db'};"
-						>{cat.label}</button>
-					{/each}
+			{#if !isAmateur}
+				<!-- Preferred goal (pro only) -->
+				<div class="rounded-[20px] bg-white ob-card p-4" style="display: flex; flex-direction: column; gap: 12px;">
+					<label class="text-[11px] font-semibold uppercase tracking-wider" style="color: #aeb4bc;">БАЖАНА ЦІЛЬ</label>
+					<div class="flex gap-2">
+						{#each [{ value: 'hobby', label: 'Хобі' }, { value: 'professional', label: 'Профі' }] as g}
+							<button
+								onclick={() => {
+									prefGoal = prefGoal === g.value ? '' : g.value;
+									if (prefGoal === 'hobby') prefCategories = [];
+								}}
+								class="flex-1 rounded-[50px] py-2.5 text-[14px] font-semibold transition-all"
+								style="background: {prefGoal === g.value ? '#8984da' : 'transparent'}; color: {prefGoal === g.value ? 'white' : '#696969'}; border: 1.5px solid {prefGoal === g.value ? '#8984da' : '#d1d5db'};"
+							>{g.label}</button>
+						{/each}
+					</div>
 				</div>
-			</div>
 
-			<!-- Wants partner to finance -->
-			<div class="rounded-[20px] bg-white p-4" style="display: flex; flex-direction: column; gap: 12px;">
-				<label class="text-[11px] font-semibold uppercase tracking-wider" style="color: #aeb4bc;">ФІНАНСУВАННЯ ПАРТНЕРА</label>
-				<div class="flex gap-2">
-					{#each [{ value: 'no', label: 'Ні' }, { value: 'yes', label: 'Так' }, { value: 'partial', label: 'Частково' }] as f}
-						<button
-							onclick={() => (wantsFinance = wantsFinance === f.value ? '' : f.value)}
-							class="flex-1 rounded-[50px] py-2.5 text-[13px] font-semibold transition-all"
-							style="background: {wantsFinance === f.value ? '#8984da' : 'transparent'}; color: {wantsFinance === f.value ? 'white' : '#696969'}; border: 1.5px solid {wantsFinance === f.value ? '#8984da' : '#d1d5db'};"
-						>{f.label}</button>
-					{/each}
+				{#if prefGoal !== 'hobby'}
+					<!-- Categories: hidden when partner goal is hobby (either own or partner) -->
+					<div class="rounded-[20px] bg-white ob-card p-4" style="display: flex; flex-direction: column; gap: 12px;">
+						<label class="text-[11px] font-semibold uppercase tracking-wider" style="color: #aeb4bc;">КАТЕГОРІЯ</label>
+						<div class="flex flex-wrap gap-2">
+							{#each CATEGORIES_UA as cat}
+								<button
+									onclick={() => togglePrefCategory(cat.value)}
+									class="rounded-[50px] px-3 py-1.5 text-[13px] font-semibold transition-all"
+									style="background: {prefCategories.includes(cat.value) ? '#8984da' : 'transparent'}; color: {prefCategories.includes(cat.value) ? 'white' : '#696969'}; border: 1.5px solid {prefCategories.includes(cat.value) ? '#8984da' : '#d1d5db'};"
+								>{cat.label}</button>
+							{/each}
+						</div>
+					</div>
+				{/if}
+
+				<!-- Wants partner to finance (pro only) -->
+				<div class="rounded-[20px] bg-white ob-card p-4" style="display: flex; flex-direction: column; gap: 12px;">
+					<label class="text-[11px] font-semibold uppercase tracking-wider" style="color: #aeb4bc;">ФІНАНСУВАННЯ ПАРТНЕРА</label>
+					<div class="flex gap-2">
+						{#each [{ value: 'no', label: 'Ні' }, { value: 'yes', label: 'Так' }, { value: 'partial', label: 'Частково' }] as f}
+							<button
+								onclick={() => (wantsFinance = wantsFinance === f.value ? '' : f.value)}
+								class="flex-1 rounded-[50px] py-2.5 text-[13px] font-semibold transition-all"
+								style="background: {wantsFinance === f.value ? '#8984da' : 'transparent'}; color: {wantsFinance === f.value ? 'white' : '#696969'}; border: 1.5px solid {wantsFinance === f.value ? '#8984da' : '#d1d5db'};"
+							>{f.label}</button>
+						{/each}
+					</div>
 				</div>
-			</div>
+			{/if}
 
 		{:else}
 			<!-- Photo -->
@@ -1063,7 +1820,7 @@
 			</div>
 
 			<!-- Extra photos -->
-			<div class="rounded-[20px] bg-white p-4" style="display: flex; flex-direction: column; gap: 12px;">
+			<div class="rounded-[20px] bg-white ob-card p-4" style="display: flex; flex-direction: column; gap: 12px;">
 				<div class="flex items-center justify-between">
 					<label class="text-[11px] font-semibold uppercase tracking-wider" style="color: #aeb4bc;">ДОДАТКОВІ ФОТО</label>
 					<span class="text-[11px] font-medium" style="color: #aeb4bc;">{extraPhotoPreviews.length}/5</span>
@@ -1190,8 +1947,8 @@
 			<button
 				onclick={() => (step += 1)}
 				disabled={!canAdvance()}
-				class="flex h-[50px] flex-1 items-center justify-center rounded-[50px] text-[14px] font-semibold text-white transition-opacity disabled:opacity-50"
-				style="background: #171717;"
+				class="flex h-[50px] flex-1 items-center justify-center rounded-[50px] text-[14px] font-semibold text-white transition-colors"
+				style="background: {canAdvance() ? '#000000' : '#aeb4bc'};"
 			>
 				{$t('onboarding.btn_next')}
 			</button>
@@ -1207,3 +1964,11 @@
 		{/if}
 	</div>
 </div>
+{/if}
+
+<style>
+	/* Onboarding is a light-only design. Prevent dark mode from inverting cards. */
+	:global(html.dark) .ob-card {
+		background: white !important;
+	}
+</style>

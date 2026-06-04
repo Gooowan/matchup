@@ -1,6 +1,6 @@
-// Package tier3 implements collaborative filtering by finding users with similar
-// like patterns and recommending profiles that similar users liked but the current
-// user has not yet seen.
+// Package tier3 implements mutual-match recommendation: candidates who pass MY
+// filter preferences AND whose own preferences also accept MY profile.
+// Results are ordered by club-to-club distance (closest first).
 package tier3
 
 import (
@@ -21,54 +21,45 @@ func NewProvider(queries *gen.Queries) *Provider {
 }
 
 func (p *Provider) GetCandidates(ctx context.Context, params rec.FeedParams) ([]rec.Candidate, error) {
-	// Find users who liked at least 2 of the same profiles as the current user.
-	similarRows, err := p.queries.GetSimilarUsers(ctx, params.UserID)
-	if err != nil || len(similarRows) == 0 {
+	// Need the current user's profile data to perform the reverse check.
+	if params.MyProfile == nil {
 		return nil, nil
 	}
+	my := params.MyProfile
 
-	similarIDs := make([]pgtype.UUID, 0, len(similarRows))
-	for _, row := range similarRows {
-		similarIDs = append(similarIDs, row.UserID)
-	}
+	fp := toSQLCFilters(params.Filters)
 
-	// Get profiles liked by similar users that current user hasn't liked yet.
-	likedIDs, err := p.queries.GetProfilesLikedBySimilarUsers(ctx, gen.GetProfilesLikedBySimilarUsersParams{
-		SimilarUserIds: similarIDs,
-		UserID:          params.UserID,
+	rows, err := p.queries.GetMutualMatchProfiles(ctx, gen.GetMutualMatchProfilesParams{
+		Latitude:            params.Latitude,
+		Longitude:           params.Longitude,
+		UserID:              params.UserID,
+		ExcludeIds:          params.ExcludeIDs,
+		PreferredGender:     fp.preferredGender,
+		AgeMin:              fp.ageMin,
+		AgeMax:              fp.ageMax,
+		HeightMin:           fp.heightMin,
+		HeightMax:           fp.heightMax,
+		PreferredGoal:       fp.preferredGoal,
+		PreferredProgram:    fp.preferredProgram,
+		PreferredCategories: fp.preferredCategories,
+		PreferredCity:       fp.preferredCity,
+		PreferredCountry:    fp.preferredCountry,
+		MyGender:            my.Gender,
+		MyBirthDate:         my.BirthDate,
+		MyHeightCm:          my.HeightCm.Int16,
+		MyGoal:              my.Goal,
+		MyProgram:           my.Program,
+		MyCategories:        my.Categories,
+		MyCity:              my.City,
+		MyCountry:           my.Country,
+		LimitVal:            params.Limit,
 	})
-	if err != nil || len(likedIDs) == 0 {
+	if err != nil || len(rows) == 0 {
 		return nil, nil
 	}
 
-	// Filter out already-excluded IDs.
-	excludeSet := make(map[[16]byte]bool, len(params.ExcludeIDs)+1)
-	excludeSet[params.UserID.Bytes] = true
-	for _, id := range params.ExcludeIDs {
-		excludeSet[id.Bytes] = true
-	}
-
-	candidateIDs := make([]pgtype.UUID, 0, len(likedIDs))
-	for _, id := range likedIDs {
-		if !excludeSet[id.Bytes] {
-			candidateIDs = append(candidateIDs, id)
-			excludeSet[id.Bytes] = true
-		}
-	}
-	if len(candidateIDs) == 0 {
-		return nil, nil
-	}
-
-	profiles, err := p.queries.GetProfilesByUserIDs(ctx, candidateIDs)
-	if err != nil {
-		return nil, nil
-	}
-
-	results := make([]rec.Candidate, 0, params.Limit)
-	for _, row := range profiles {
-		if int32(len(results)) >= params.Limit {
-			break
-		}
+	results := make([]rec.Candidate, 0, len(rows))
+	for _, row := range rows {
 		lat, lng := 0.0, 0.0
 		if row.Latitude.Valid {
 			lat = row.Latitude.Float64
@@ -80,8 +71,58 @@ func (p *Provider) GetCandidates(ctx context.Context, params rec.FeedParams) ([]
 			UserID:    row.UserID,
 			Latitude:  lat,
 			Longitude: lng,
-			Source:    "collaborative",
+			DistKm:    row.DistanceKm,
+			Source:    "mutual_match",
 		})
 	}
 	return results, nil
+}
+
+// sqlcFilters holds pgtype-wrapped filter values for sqlc queries.
+type sqlcFilters struct {
+	preferredGender     pgtype.Text
+	ageMin              pgtype.Int2
+	ageMax              pgtype.Int2
+	heightMin           pgtype.Int2
+	heightMax           pgtype.Int2
+	preferredGoal       pgtype.Text
+	preferredProgram    pgtype.Text
+	preferredCategories []string
+	preferredCountry    pgtype.Text
+	preferredCity       pgtype.Text
+}
+
+func toSQLCFilters(f rec.FilterParams) sqlcFilters {
+	p := sqlcFilters{}
+	if f.PreferredGender != nil {
+		p.preferredGender = pgtype.Text{String: *f.PreferredGender, Valid: true}
+	}
+	if f.AgeMin != nil {
+		p.ageMin = pgtype.Int2{Int16: *f.AgeMin, Valid: true}
+	}
+	if f.AgeMax != nil {
+		p.ageMax = pgtype.Int2{Int16: *f.AgeMax, Valid: true}
+	}
+	if f.HeightMin != nil {
+		p.heightMin = pgtype.Int2{Int16: *f.HeightMin, Valid: true}
+	}
+	if f.HeightMax != nil {
+		p.heightMax = pgtype.Int2{Int16: *f.HeightMax, Valid: true}
+	}
+	if f.PreferredGoal != nil {
+		p.preferredGoal = pgtype.Text{String: *f.PreferredGoal, Valid: true}
+	}
+	if f.PreferredProgram != nil {
+		p.preferredProgram = pgtype.Text{String: *f.PreferredProgram, Valid: true}
+	}
+	if len(f.PreferredCategories) > 0 {
+		p.preferredCategories = f.PreferredCategories
+	}
+	if f.PreferredCountry != nil {
+		p.preferredCountry = pgtype.Text{String: *f.PreferredCountry, Valid: true}
+	}
+	if f.PreferredCity != nil {
+		p.preferredCity = pgtype.Text{String: *f.PreferredCity, Valid: true}
+	}
+	return p
 }

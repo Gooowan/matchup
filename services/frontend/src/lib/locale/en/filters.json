@@ -30,5 +30,10 @@
   "category_junior1": "Junior 1",
   "category_junior2": "Junior 2",
   "category_youth": "Youth",
-  "category_adult": "Adult"
+  "category_adult": "Adult",
+  "show_advanced": "Advanced filters",
+  "hide_advanced": "Hide advanced",
+  "section_relocate": "PARTNER WILLING TO RELOCATE",
+  "relocate_yes": "Yes",
+  "relocate_no": "No"
 }

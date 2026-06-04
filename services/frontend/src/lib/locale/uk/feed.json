@@ -2,6 +2,9 @@
   "empty_title": "Поки що немає метчів",
   "empty_subtitle": "Спробуй змінити фільтри",
   "filter": "Фільтр",
+  "tab_partners": "Партнери",
+  "tab_trainers": "Тренера",
+  "trainers_coming_soon": "З'явиться скоро",
   "match_title": "Ви сподобалися!",
   "match_you_and": "Ти і {name} сподобалися одне одному.",
   "match_first_move": "Може, зробиш перший крок?",
@@ -16,5 +19,9 @@
   "no_profiles_subtitle": "Повертайся пізніше — нові профілі додаються регулярно.",
   "toast_report_sent": "Скаргу надіслано",
   "toast_error": "Помилка. Спробуй ще раз.",
-  "action_more_options": "Більше дій"
+  "toast_rate_limit": "Забагато свайпів. Зроби паузу.",
+  "action_more_options": "Більше дій",
+  "error_title": "Не вдалося завантажити стрічку",
+  "error_subtitle": "Перевір з'єднання та спробуй знову",
+  "retry": "Спробувати знову"
 }

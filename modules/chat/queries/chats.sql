@@ -1,7 +1,14 @@
 -- name: CreateChat :one
 INSERT INTO chats(user1_id, user2_id)
     VALUES (@user1_id, @user2_id)
-ON CONFLICT (user1_id, user2_id) DO UPDATE
+ON CONFLICT (user1_id, user2_id) WHERE club_id IS NULL DO UPDATE
+    SET user1_id = EXCLUDED.user1_id
+RETURNING *;
+
+-- name: CreateClubChat :one
+INSERT INTO chats(user1_id, club_id)
+    VALUES (@user1_id, @club_id)
+ON CONFLICT (user1_id, club_id) WHERE club_id IS NOT NULL DO UPDATE
     SET user1_id = EXCLUDED.user1_id
 RETURNING *;
 

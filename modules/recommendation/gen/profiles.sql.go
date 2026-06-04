@@ -14,22 +14,23 @@ import (
 
 const createProfile = `-- name: CreateProfile :one
 INSERT INTO profiles(
-    user_id, dance_styles, latitude, longitude, visible,
+    user_id, account_type, dance_styles, latitude, longitude, visible,
     gender, birth_date, height_cm, goal, program, categories,
     country, city, ready_to_relocate, ready_to_finance,
     primary_club_id, metadata, data
 )
 VALUES (
-    $1, $2, $3, $4, $5,
-    $6, $7, $8, $9, $10, $11,
-    $12, $13, $14, $15,
-    $16, $17, $18
+    $1, $2, $3, $4, $5, $6,
+    $7, $8, $9, $10, $11, $12,
+    $13, $14, $15, $16,
+    $17, $18, $19
 )
-RETURNING id, user_id, latitude, longitude, visible, dance_styles, gender, birth_date, height_cm, goal, program, categories, country, city, ready_to_relocate, ready_to_finance, primary_club_id, metadata, data, created_at, updated_at
+RETURNING id, user_id, account_type, latitude, longitude, visible, dance_styles, gender, birth_date, height_cm, goal, program, categories, country, city, ready_to_relocate, ready_to_finance, primary_club_id, metadata, data, created_at, updated_at
 `
 
 type CreateProfileParams struct {
 	UserID          pgtype.UUID   `db:"user_id" json:"user_id"`
+	AccountType     string        `db:"account_type" json:"account_type"`
 	DanceStyles     []string      `db:"dance_styles" json:"dance_styles"`
 	Latitude        pgtype.Float8 `db:"latitude" json:"latitude"`
 	Longitude       pgtype.Float8 `db:"longitude" json:"longitude"`
@@ -52,6 +53,7 @@ type CreateProfileParams struct {
 func (q *Queries) CreateProfile(ctx context.Context, arg CreateProfileParams) (Profile, error) {
 	row := q.db.QueryRow(ctx, createProfile,
 		arg.UserID,
+		arg.AccountType,
 		arg.DanceStyles,
 		arg.Latitude,
 		arg.Longitude,
@@ -74,6 +76,7 @@ func (q *Queries) CreateProfile(ctx context.Context, arg CreateProfileParams) (P
 	err := row.Scan(
 		&i.ID,
 		&i.UserID,
+		&i.AccountType,
 		&i.Latitude,
 		&i.Longitude,
 		&i.Visible,
@@ -123,6 +126,7 @@ SELECT
 FROM profiles p
 JOIN users u ON u.id = p.user_id
 WHERE p.visible = true
+  AND p.account_type IN ('dancer', 'parent')
   AND p.user_id != $3
   AND p.latitude IS NOT NULL
   AND p.longitude IS NOT NULL
@@ -250,6 +254,7 @@ SELECT
 FROM profiles p
 WHERE p.country = $1
   AND p.visible = true
+  AND p.account_type IN ('dancer', 'parent')
   AND p.user_id != $2
   AND NOT (p.user_id = ANY($3::uuid[]))
   AND ($4::varchar IS NULL OR p.gender = $4)
@@ -358,6 +363,174 @@ func (q *Queries) GetCountryWideProfiles(ctx context.Context, arg GetCountryWide
 	return items, nil
 }
 
+const getMutualMatchProfiles = `-- name: GetMutualMatchProfiles :many
+SELECT
+    p.id, p.user_id, p.dance_styles, p.metadata, p.data,
+    p.latitude, p.longitude,
+    p.gender, p.birth_date, p.height_cm, p.goal, p.program,
+    p.categories, p.country, p.city, p.ready_to_relocate, p.ready_to_finance,
+    u.profile_data,
+    (6371 * acos(
+        cos(radians($1::double precision)) *
+        cos(radians(p.latitude)) *
+        cos(radians(p.longitude) - radians($2::double precision)) +
+        sin(radians($1::double precision)) *
+        sin(radians(p.latitude))
+    ))::double precision AS distance_km
+FROM profiles p
+JOIN users u ON u.id = p.user_id
+JOIN user_preferences up ON up.user_id = p.user_id
+WHERE p.visible = true
+  AND p.account_type IN ('dancer', 'parent')
+  AND p.user_id != $3
+  AND p.latitude IS NOT NULL
+  AND p.longitude IS NOT NULL
+  AND NOT (p.user_id = ANY($4::uuid[]))
+  -- ── Candidate passes MY filters (same predicates as FindNearbyVisibleProfiles) ──
+  AND ($5::varchar IS NULL OR p.gender = $5)
+  AND ($6::smallint IS NULL OR EXTRACT(YEAR FROM AGE(p.birth_date))::smallint >= $6)
+  AND ($7::smallint IS NULL OR EXTRACT(YEAR FROM AGE(p.birth_date))::smallint <= $7)
+  AND ($8::smallint IS NULL OR p.height_cm >= $8)
+  AND ($9::smallint IS NULL OR p.height_cm <= $9)
+  AND ($10::varchar IS NULL OR p.goal = $10)
+  AND ($11::varchar IS NULL OR p.program = $11)
+  AND ($12::text[] IS NULL OR p.categories && $12)
+  AND (
+      $13::varchar IS NULL
+      OR p.city = $13
+      OR p.ready_to_relocate = true
+  )
+  AND ($14::varchar IS NULL OR p.country = $14)
+  -- ── MY profile passes CANDIDATE's preferences (mutual check) ──
+  AND (up.preferred_gender IS NULL OR $15::varchar = up.preferred_gender)
+  AND (up.age_min IS NULL OR EXTRACT(YEAR FROM AGE($16::date))::smallint >= up.age_min)
+  AND (up.age_max IS NULL OR EXTRACT(YEAR FROM AGE($16::date))::smallint <= up.age_max)
+  AND (up.height_min IS NULL OR $17::smallint >= up.height_min)
+  AND (up.height_max IS NULL OR $17::smallint <= up.height_max)
+  AND (up.preferred_goal IS NULL OR $18::varchar = up.preferred_goal)
+  AND (up.preferred_program IS NULL OR $19::varchar = up.preferred_program)
+  AND (up.preferred_categories IS NULL OR up.preferred_categories && $20::text[])
+  AND (up.preferred_city IS NULL OR $21::varchar = up.preferred_city)
+  AND (up.preferred_country IS NULL OR $22::varchar = up.preferred_country)
+ORDER BY distance_km ASC
+LIMIT $23
+`
+
+type GetMutualMatchProfilesParams struct {
+	Latitude            float64       `db:"latitude" json:"latitude"`
+	Longitude           float64       `db:"longitude" json:"longitude"`
+	UserID              pgtype.UUID   `db:"user_id" json:"user_id"`
+	ExcludeIds          []pgtype.UUID `db:"exclude_ids" json:"exclude_ids"`
+	PreferredGender     pgtype.Text   `db:"preferred_gender" json:"preferred_gender"`
+	AgeMin              pgtype.Int2   `db:"age_min" json:"age_min"`
+	AgeMax              pgtype.Int2   `db:"age_max" json:"age_max"`
+	HeightMin           pgtype.Int2   `db:"height_min" json:"height_min"`
+	HeightMax           pgtype.Int2   `db:"height_max" json:"height_max"`
+	PreferredGoal       pgtype.Text   `db:"preferred_goal" json:"preferred_goal"`
+	PreferredProgram    pgtype.Text   `db:"preferred_program" json:"preferred_program"`
+	PreferredCategories []string      `db:"preferred_categories" json:"preferred_categories"`
+	PreferredCity       pgtype.Text   `db:"preferred_city" json:"preferred_city"`
+	PreferredCountry    pgtype.Text   `db:"preferred_country" json:"preferred_country"`
+	MyGender            string        `db:"my_gender" json:"my_gender"`
+	MyBirthDate         pgtype.Date   `db:"my_birth_date" json:"my_birth_date"`
+	MyHeightCm          int16         `db:"my_height_cm" json:"my_height_cm"`
+	MyGoal              string        `db:"my_goal" json:"my_goal"`
+	MyProgram           string        `db:"my_program" json:"my_program"`
+	MyCategories        []string      `db:"my_categories" json:"my_categories"`
+	MyCity              string        `db:"my_city" json:"my_city"`
+	MyCountry           string        `db:"my_country" json:"my_country"`
+	LimitVal            int32         `db:"limit_val" json:"limit_val"`
+}
+
+type GetMutualMatchProfilesRow struct {
+	ID              pgtype.UUID   `db:"id" json:"id"`
+	UserID          pgtype.UUID   `db:"user_id" json:"user_id"`
+	DanceStyles     []string      `db:"dance_styles" json:"dance_styles"`
+	Metadata        types.JSONB   `db:"metadata" json:"metadata"`
+	Data            types.JSONB   `db:"data" json:"data"`
+	Latitude        pgtype.Float8 `db:"latitude" json:"latitude"`
+	Longitude       pgtype.Float8 `db:"longitude" json:"longitude"`
+	Gender          string        `db:"gender" json:"gender"`
+	BirthDate       pgtype.Date   `db:"birth_date" json:"birth_date"`
+	HeightCm        pgtype.Int2   `db:"height_cm" json:"height_cm"`
+	Goal            string        `db:"goal" json:"goal"`
+	Program         string        `db:"program" json:"program"`
+	Categories      []string      `db:"categories" json:"categories"`
+	Country         pgtype.Text   `db:"country" json:"country"`
+	City            pgtype.Text   `db:"city" json:"city"`
+	ReadyToRelocate pgtype.Bool   `db:"ready_to_relocate" json:"ready_to_relocate"`
+	ReadyToFinance  pgtype.Text   `db:"ready_to_finance" json:"ready_to_finance"`
+	ProfileData     types.JSONB   `db:"profile_data" json:"profile_data"`
+	DistanceKm      float64       `db:"distance_km" json:"distance_km"`
+}
+
+// Returns dancer candidates that pass MY filter preferences AND whose preferences
+// also accept MY profile — club-to-club distance ordered (mutual match).
+// Candidate must have preferences recorded so we can check them
+func (q *Queries) GetMutualMatchProfiles(ctx context.Context, arg GetMutualMatchProfilesParams) ([]GetMutualMatchProfilesRow, error) {
+	rows, err := q.db.Query(ctx, getMutualMatchProfiles,
+		arg.Latitude,
+		arg.Longitude,
+		arg.UserID,
+		arg.ExcludeIds,
+		arg.PreferredGender,
+		arg.AgeMin,
+		arg.AgeMax,
+		arg.HeightMin,
+		arg.HeightMax,
+		arg.PreferredGoal,
+		arg.PreferredProgram,
+		arg.PreferredCategories,
+		arg.PreferredCity,
+		arg.PreferredCountry,
+		arg.MyGender,
+		arg.MyBirthDate,
+		arg.MyHeightCm,
+		arg.MyGoal,
+		arg.MyProgram,
+		arg.MyCategories,
+		arg.MyCity,
+		arg.MyCountry,
+		arg.LimitVal,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetMutualMatchProfilesRow
+	for rows.Next() {
+		var i GetMutualMatchProfilesRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.DanceStyles,
+			&i.Metadata,
+			&i.Data,
+			&i.Latitude,
+			&i.Longitude,
+			&i.Gender,
+			&i.BirthDate,
+			&i.HeightCm,
+			&i.Goal,
+			&i.Program,
+			&i.Categories,
+			&i.Country,
+			&i.City,
+			&i.ReadyToRelocate,
+			&i.ReadyToFinance,
+			&i.ProfileData,
+			&i.DistanceKm,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getNearbyClubProfiles = `-- name: GetNearbyClubProfiles :many
 SELECT
     p.id, p.user_id, p.dance_styles, p.metadata,
@@ -377,6 +550,7 @@ JOIN club_members cm ON cm.user_id = p.user_id
 JOIN clubs c ON c.id = cm.club_id
 WHERE c.id != ALL($3::uuid[])
   AND p.visible = true
+  AND p.account_type IN ('dancer', 'parent')
   AND p.user_id != $4
   AND NOT (p.user_id = ANY($5::uuid[]))
   AND ($6::varchar IS NULL OR p.gender = $6)
@@ -496,8 +670,19 @@ func (q *Queries) GetNearbyClubProfiles(ctx context.Context, arg GetNearbyClubPr
 	return items, nil
 }
 
+const getProfileAccountType = `-- name: GetProfileAccountType :one
+SELECT account_type FROM profiles WHERE user_id = $1
+`
+
+func (q *Queries) GetProfileAccountType(ctx context.Context, userID pgtype.UUID) (string, error) {
+	row := q.db.QueryRow(ctx, getProfileAccountType, userID)
+	var account_type string
+	err := row.Scan(&account_type)
+	return account_type, err
+}
+
 const getProfileByUserID = `-- name: GetProfileByUserID :one
-SELECT id, user_id, latitude, longitude, visible, dance_styles, gender, birth_date, height_cm, goal, program, categories, country, city, ready_to_relocate, ready_to_finance, primary_club_id, metadata, data, created_at, updated_at FROM profiles WHERE user_id = $1
+SELECT id, user_id, account_type, latitude, longitude, visible, dance_styles, gender, birth_date, height_cm, goal, program, categories, country, city, ready_to_relocate, ready_to_finance, primary_club_id, metadata, data, created_at, updated_at FROM profiles WHERE user_id = $1
 `
 
 func (q *Queries) GetProfileByUserID(ctx context.Context, userID pgtype.UUID) (Profile, error) {
@@ -506,6 +691,7 @@ func (q *Queries) GetProfileByUserID(ctx context.Context, userID pgtype.UUID) (P
 	err := row.Scan(
 		&i.ID,
 		&i.UserID,
+		&i.AccountType,
 		&i.Latitude,
 		&i.Longitude,
 		&i.Visible,
@@ -595,6 +781,7 @@ FROM profiles p
 JOIN club_members cm ON cm.user_id = p.user_id
 WHERE cm.club_id = ANY($1::uuid[])
   AND p.visible = true
+  AND p.account_type IN ('dancer', 'parent')
   AND p.user_id != $2
   AND NOT (p.user_id = ANY($3::uuid[]))
   AND ($4::varchar IS NULL OR p.gender = $4)
@@ -708,6 +895,64 @@ func (q *Queries) GetSameClubProfiles(ctx context.Context, arg GetSameClubProfil
 	return items, nil
 }
 
+const listTrainers = `-- name: ListTrainers :many
+SELECT
+    p.id, p.user_id, p.account_type, p.categories, p.gender, p.metadata, p.visible,
+    u.profile_data
+FROM profiles p
+JOIN users u ON u.id = p.user_id
+WHERE p.account_type = 'trainer'
+  AND p.visible = true
+ORDER BY p.created_at DESC
+LIMIT $2 OFFSET $1
+`
+
+type ListTrainersParams struct {
+	OffsetVal int32 `db:"offset_val" json:"offset_val"`
+	LimitVal  int32 `db:"limit_val" json:"limit_val"`
+}
+
+type ListTrainersRow struct {
+	ID          pgtype.UUID `db:"id" json:"id"`
+	UserID      pgtype.UUID `db:"user_id" json:"user_id"`
+	AccountType string      `db:"account_type" json:"account_type"`
+	Categories  []string    `db:"categories" json:"categories"`
+	Gender      string      `db:"gender" json:"gender"`
+	Metadata    types.JSONB `db:"metadata" json:"metadata"`
+	Visible     bool        `db:"visible" json:"visible"`
+	ProfileData types.JSONB `db:"profile_data" json:"profile_data"`
+}
+
+// Returns all visible trainer profiles for the trainers feed tab.
+func (q *Queries) ListTrainers(ctx context.Context, arg ListTrainersParams) ([]ListTrainersRow, error) {
+	rows, err := q.db.Query(ctx, listTrainers, arg.OffsetVal, arg.LimitVal)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListTrainersRow
+	for rows.Next() {
+		var i ListTrainersRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.AccountType,
+			&i.Categories,
+			&i.Gender,
+			&i.Metadata,
+			&i.Visible,
+			&i.ProfileData,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const setProfilePrimaryClub = `-- name: SetProfilePrimaryClub :exec
 UPDATE profiles SET primary_club_id = $1, updated_at = now() WHERE user_id = $2
 `
@@ -724,28 +969,30 @@ func (q *Queries) SetProfilePrimaryClub(ctx context.Context, arg SetProfilePrima
 
 const updateProfile = `-- name: UpdateProfile :exec
 UPDATE profiles SET
-    dance_styles      = $1,
-    latitude          = $2,
-    longitude         = $3,
-    visible           = $4,
-    gender            = $5,
-    birth_date        = $6,
-    height_cm         = $7,
-    goal              = $8,
-    program           = $9,
-    categories        = $10,
-    country           = $11,
-    city              = $12,
-    ready_to_relocate = $13,
-    ready_to_finance  = $14,
-    primary_club_id   = $15,
-    metadata          = $16,
-    data              = $17,
+    account_type      = $1,
+    dance_styles      = $2,
+    latitude          = $3,
+    longitude         = $4,
+    visible           = $5,
+    gender            = $6,
+    birth_date        = $7,
+    height_cm         = $8,
+    goal              = $9,
+    program           = $10,
+    categories        = $11,
+    country           = $12,
+    city              = $13,
+    ready_to_relocate = $14,
+    ready_to_finance  = $15,
+    primary_club_id   = $16,
+    metadata          = $17,
+    data              = $18,
     updated_at        = CURRENT_TIMESTAMP
-WHERE user_id = $18
+WHERE user_id = $19
 `
 
 type UpdateProfileParams struct {
+	AccountType     string        `db:"account_type" json:"account_type"`
 	DanceStyles     []string      `db:"dance_styles" json:"dance_styles"`
 	Latitude        pgtype.Float8 `db:"latitude" json:"latitude"`
 	Longitude       pgtype.Float8 `db:"longitude" json:"longitude"`
@@ -768,6 +1015,7 @@ type UpdateProfileParams struct {
 
 func (q *Queries) UpdateProfile(ctx context.Context, arg UpdateProfileParams) error {
 	_, err := q.db.Exec(ctx, updateProfile,
+		arg.AccountType,
 		arg.DanceStyles,
 		arg.Latitude,
 		arg.Longitude,

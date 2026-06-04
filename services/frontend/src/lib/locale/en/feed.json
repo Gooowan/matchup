@@ -2,6 +2,9 @@
   "empty_title": "No matches yet",
   "empty_subtitle": "Try adjusting your filters",
   "filter": "Filter",
+  "tab_partners": "Partners",
+  "tab_trainers": "Trainers",
+  "trainers_coming_soon": "Appears soon",
   "match_title": "You matched!",
   "match_you_and": "You and {name} like each other.",
   "match_first_move": "Why not make the first move?",
@@ -16,5 +19,9 @@
   "no_profiles_subtitle": "Come back later — new profiles are added regularly.",
   "toast_report_sent": "Report sent",
   "toast_error": "Error. Please try again.",
-  "action_more_options": "More options"
+  "toast_rate_limit": "Too many swipes. Please slow down.",
+  "action_more_options": "More options",
+  "error_title": "Could not load feed",
+  "error_subtitle": "Check your connection and try again",
+  "retry": "Try again"
 }

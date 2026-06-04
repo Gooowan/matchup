@@ -3,6 +3,7 @@
 	import { authStore } from '$stores/auth.svelte';
 	import { onMount } from 'svelte';
 	import { page } from '$app/state';
+	import { parseApiError } from '$lib/utils/parseApiError';
 
 	let password = $state('');
 	let confirmPassword = $state('');
@@ -43,7 +44,7 @@
 			if (resp.ok) {
 				resetSuccess = true;
 			} else {
-				errorMsg = response.error || 'Не вдалося скинути пароль. Спробуй ще раз.';
+				errorMsg = parseApiError(response, resp.status);
 			}
 		} catch {
 			errorMsg = 'Помилка мережі. Спробуй ще раз.';

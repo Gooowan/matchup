@@ -24,5 +24,21 @@
   "address": "Адреса",
   "city": "Місто",
   "website": "Сайт",
-  "phone": "Телефон"
+  "phone": "Телефон",
+  "import_from_gmaps": "Імпорт з Google Maps",
+  "import_gmaps_placeholder": "Вставте посилання Google Maps…",
+  "import_gmaps_importing": "Завантаження…",
+  "import_gmaps_success": "Поля заповнено з Google Maps",
+  "import_gmaps_error": "Не вдалося отримати дані з цього посилання",
+  "chat_error": "Не вдалося відкрити чат",
+  "trainers": "Тренери",
+  "hours": "Години роботи",
+  "closed": "Зачинено",
+  "day_mon": "Пн",
+  "day_tue": "Вт",
+  "day_wed": "Ср",
+  "day_thu": "Чт",
+  "day_fri": "Пт",
+  "day_sat": "Сб",
+  "day_sun": "Нд"
 }

@@ -51,3 +51,16 @@ func cityCentroid(country, city string) ([2]float64, bool) {
 	}
 	return [2]float64{}, false
 }
+
+// KyivCentroid is the fallback coordinate used when no city can be resolved.
+const KyivLat, KyivLng = 50.4501, 30.5234
+
+// CityLatLng returns the WGS-84 centroid for the given country and city.
+// Accepts both English ("Kyiv") and Ukrainian ("Київ") city names.
+// Falls back to Kyiv centroid when the city is unknown.
+func CityLatLng(country, city string) (lat, lng float64) {
+	if c, ok := cityCentroid(country, city); ok {
+		return c[0], c[1]
+	}
+	return KyivLat, KyivLng
+}

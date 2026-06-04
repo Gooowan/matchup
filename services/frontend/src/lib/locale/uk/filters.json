@@ -30,5 +30,10 @@
   "category_junior1": "Юніори 1",
   "category_junior2": "Юніори 2",
   "category_youth": "Молодь",
-  "category_adult": "Дорослі"
+  "category_adult": "Дорослі",
+  "show_advanced": "Додаткові фільтри",
+  "hide_advanced": "Приховати додаткові",
+  "section_relocate": "ГОТОВИЙ ДО ПЕРЕЇЗДУ",
+  "relocate_yes": "Так",
+  "relocate_no": "Ні"
 }

@@ -1,9 +1,11 @@
 -- Recommendation module schema
 
--- Dancer profiles (1:1 with users)
+-- Dancer/trainer/parent profiles (1:1 with users; account_type discriminates entity kind)
 CREATE TABLE profiles(
     id                 uuid          PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id            uuid          NOT NULL REFERENCES users(id) UNIQUE,
+    -- Entity type: dancer | parent | trainer | club
+    account_type       varchar(20)   NOT NULL DEFAULT 'dancer',
     -- Geo location
     latitude           double precision,
     longitude          double precision,
@@ -30,6 +32,9 @@ CREATE TABLE profiles(
 );
 
 CREATE INDEX idx_profiles_user_id      ON profiles(user_id);
+CREATE INDEX idx_profiles_account_type ON profiles(account_type);
+CREATE INDEX idx_profiles_dancers      ON profiles(account_type) WHERE account_type IN ('dancer', 'parent');
+CREATE INDEX idx_profiles_trainers     ON profiles(account_type) WHERE account_type = 'trainer';
 CREATE INDEX idx_profiles_dance_styles ON profiles USING GIN(dance_styles);
 CREATE INDEX idx_profiles_coords       ON profiles(latitude, longitude);
 CREATE INDEX idx_profiles_visible      ON profiles(visible) WHERE visible = true;

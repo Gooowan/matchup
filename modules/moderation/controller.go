@@ -7,6 +7,7 @@ import (
 
 	"github.com/Gooowan/matchup/modules/core/logging"
 	"github.com/Gooowan/matchup/modules/core/types"
+	corehttp "github.com/Gooowan/matchup/modules/core/http"
 	"github.com/Gooowan/matchup/modules/core/utils"
 	gen "github.com/Gooowan/matchup/modules/moderation/gen"
 	core "github.com/Gooowan/matchup/modules/users"
@@ -90,8 +91,7 @@ func (c *ModerationController) ReportUser(ctx *gin.Context) {
 		Category string `json:"category" binding:"required"`
 		Comment  string `json:"comment"`
 	}
-	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, types.Resp{Error: err.Error()})
+	if !corehttp.BindJSON(ctx, &req) {
 		return
 	}
 
@@ -118,6 +118,12 @@ func (c *ModerationController) AdminListReports(ctx *gin.Context) {
 }
 
 func (c *ModerationController) AdminBanUser(ctx *gin.Context) {
+	admin, ok := auth.GetUserFromContext(ctx)
+	if !ok {
+		ctx.JSON(http.StatusUnauthorized, types.Resp{Error: "Unauthorized"})
+		return
+	}
+
 	targetID, err := utils.StringToUUID(ctx.Param("userId"))
 	if err != nil {
 		ctx.JSON(http.StatusBadRequest, types.Resp{Error: "invalid user ID"})
@@ -132,6 +138,8 @@ func (c *ModerationController) AdminBanUser(ctx *gin.Context) {
 		ctx.JSON(http.StatusInternalServerError, types.Resp{Error: "failed to ban user"})
 		return
 	}
+
+	c.svc.AdminAuditLog(ctx.Request.Context(), admin.ID, "ban_user", "user", ctx.Param("userId"), nil)
 
 	ctx.JSON(http.StatusOK, types.Resp{Data: "ok"})
 }

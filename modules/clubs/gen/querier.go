@@ -11,10 +11,14 @@ import (
 )
 
 type Querier interface {
+	AddClubTrainer(ctx context.Context, arg AddClubTrainerParams) error
 	AdminListClubs(ctx context.Context, arg AdminListClubsParams) ([]Club, error)
 	ClaimClub(ctx context.Context, arg ClaimClubParams) (Club, error)
+	CountTrainerClubs(ctx context.Context, trainerUserID pgtype.UUID) (int32, error)
+	CountUserClubMemberships(ctx context.Context, userID pgtype.UUID) (int32, error)
 	CreateClub(ctx context.Context, arg CreateClubParams) (Club, error)
 	DeactivateClub(ctx context.Context, id pgtype.UUID) error
+	EnrollTrainerStudent(ctx context.Context, arg EnrollTrainerStudentParams) error
 	GetClubByID(ctx context.Context, id pgtype.UUID) (Club, error)
 	GetClubBySlug(ctx context.Context, slug string) (Club, error)
 	GetClubMemberCount(ctx context.Context, clubID pgtype.UUID) (int32, error)
@@ -23,11 +27,19 @@ type Querier interface {
 	IsClubMember(ctx context.Context, arg IsClubMemberParams) (bool, error)
 	JoinClub(ctx context.Context, arg JoinClubParams) error
 	LeaveClub(ctx context.Context, arg LeaveClubParams) error
+	// Dancers (account_type dancer/parent) who are members of the club.
+	ListClubDancers(ctx context.Context, arg ListClubDancersParams) ([]ListClubDancersRow, error)
 	ListClubMembers(ctx context.Context, arg ListClubMembersParams) ([]ListClubMembersRow, error)
+	ListClubTrainers(ctx context.Context, arg ListClubTrainersParams) ([]ListClubTrainersRow, error)
 	ListClubs(ctx context.Context, arg ListClubsParams) ([]Club, error)
 	ListClubsNearby(ctx context.Context, arg ListClubsNearbyParams) ([]ListClubsNearbyRow, error)
+	ListDancerTrainers(ctx context.Context, dancerUserID pgtype.UUID) ([]ListDancerTrainersRow, error)
 	ListOwnedClubs(ctx context.Context, ownerUserID pgtype.UUID) ([]Club, error)
+	ListTrainerClubs(ctx context.Context, trainerUserID pgtype.UUID) ([]Club, error)
+	ListTrainerStudents(ctx context.Context, trainerUserID pgtype.UUID) ([]ListTrainerStudentsRow, error)
 	ManageClub(ctx context.Context, arg ManageClubParams) error
+	RemoveClubTrainer(ctx context.Context, arg RemoveClubTrainerParams) error
+	UnenrollTrainerStudent(ctx context.Context, arg UnenrollTrainerStudentParams) error
 	UpdateClub(ctx context.Context, arg UpdateClubParams) error
 	VerifyClub(ctx context.Context, id pgtype.UUID) error
 }

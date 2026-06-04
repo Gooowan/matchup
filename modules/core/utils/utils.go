@@ -3,11 +3,21 @@ package utils
 import (
 	"encoding/hex"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/jackc/pgx/v5/pgtype"
 )
+
+// ParseInt32 parses a decimal string into int32.
+func ParseInt32(s string) (int32, error) {
+	v, err := strconv.ParseInt(s, 10, 32)
+	if err != nil {
+		return 0, err
+	}
+	return int32(v), nil
+}
 
 func DebugPrint(format string, values ...any) {
 	if gin.IsDebugging() {

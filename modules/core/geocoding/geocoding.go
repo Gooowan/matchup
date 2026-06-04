@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -19,6 +20,15 @@ import (
 // ErrUnresolvable is returned when neither Nominatim nor the centroid table
 // can produce coordinates for the given address.
 var ErrUnresolvable = errors.New("geocoding: address could not be resolved")
+
+// GeocodeResult carries coordinates and a flag indicating whether the result
+// is only an approximate city-centroid fallback (i.e. the specific address
+// was not found by Nominatim).
+type GeocodeResult struct {
+	Lat              float64
+	Lng              float64
+	IsCentroidFallback bool
+}
 
 // Geocoder resolves a human-readable address to WGS-84 coordinates.
 type Geocoder interface {
@@ -66,17 +76,32 @@ func (g *NominatimGeocoder) Close() {
 
 // Geocode resolves the address. When lat/lng are both 0 it falls back to the
 // city centroid table. Returns ErrUnresolvable if nothing can be resolved.
+// Implements the Geocoder interface; callers needing the centroid-fallback flag
+// should call GeocodeWithResult directly.
 func (g *NominatimGeocoder) Geocode(ctx context.Context, country, city, address string) (float64, float64, error) {
+	r, err := g.GeocodeWithResult(ctx, country, city, address)
+	if err != nil {
+		return 0, 0, err
+	}
+	return r.Lat, r.Lng, nil
+}
+
+// GeocodeWithResult resolves an address and indicates whether the result is
+// only a city-centroid approximation (IsCentroidFallback == true).
+func (g *NominatimGeocoder) GeocodeWithResult(ctx context.Context, country, city, address string) (GeocodeResult, error) {
 	normCountry := normalizeCountry(country)
 	normCity := normalizeCity(city)
-	query := buildQuery(address, normCity, normCountry)
+	// Sanitize the address before geocoding: strip bare postal codes and
+	// lone house numbers which pollute the Nominatim query without helping.
+	cleanAddress := sanitizeAddress(address)
+	query := buildQuery(cleanAddress, normCity, normCountry)
 	key := strings.ToLower(query)
 
 	// Cache hit
 	g.mu.Lock()
 	if coords, ok := g.cache[key]; ok {
 		g.mu.Unlock()
-		return coords[0], coords[1], nil
+		return GeocodeResult{Lat: coords[0], Lng: coords[1]}, nil
 	}
 	g.mu.Unlock()
 
@@ -84,22 +109,22 @@ func (g *NominatimGeocoder) Geocode(ctx context.Context, country, city, address 
 	select {
 	case <-g.ticker.C:
 	case <-ctx.Done():
-		return 0, 0, ctx.Err()
+		return GeocodeResult{}, ctx.Err()
 	}
 
 	lat, lng, err := g.queryNominatim(ctx, query)
 	if err == nil && (lat != 0 || lng != 0) {
 		g.store(key, lat, lng)
-		return lat, lng, nil
+		return GeocodeResult{Lat: lat, Lng: lng}, nil
 	}
 
 	// Fallback: city centroid
 	if c, ok := cityCentroid(normCountry, normCity); ok {
 		g.store(key, c[0], c[1])
-		return c[0], c[1], nil
+		return GeocodeResult{Lat: c[0], Lng: c[1], IsCentroidFallback: true}, nil
 	}
 
-	return 0, 0, ErrUnresolvable
+	return GeocodeResult{}, ErrUnresolvable
 }
 
 func (g *NominatimGeocoder) queryNominatim(ctx context.Context, query string) (float64, float64, error) {
@@ -155,6 +180,30 @@ func (g *NominatimGeocoder) store(key string, lat, lng float64) {
 		g.cacheOrd = append(g.cacheOrd, key)
 	}
 	g.cache[key] = [2]float64{lat, lng}
+}
+
+// postalCodeOnly matches strings that are purely a postal/zip code with no street info.
+// Matches: "01234", "01234-5678", "K1A 0B1", "12345 67890".
+var postalCodeOnly = regexp.MustCompile(`^[\d]{4,6}([-\s][\d]{3,4})?$`)
+
+// bareHouseNumber matches a string that contains only digits (a house number with no street name).
+var bareHouseNumber = regexp.MustCompile(`^\d{1,5}[a-zA-Z]?$`)
+
+// sanitizeAddress strips address components that would confuse Nominatim:
+//   - Standalone postal codes
+//   - Lone house numbers without a street name
+//
+// This prevents corner cases like "12345" (postal code) or "42" (house number)
+// from being geocoded to random places instead of falling back gracefully.
+func sanitizeAddress(address string) string {
+	address = strings.TrimSpace(address)
+	if postalCodeOnly.MatchString(address) {
+		return ""
+	}
+	if bareHouseNumber.MatchString(address) {
+		return ""
+	}
+	return address
 }
 
 // buildQuery composes the Nominatim search string.

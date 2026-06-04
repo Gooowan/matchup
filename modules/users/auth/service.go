@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"strconv"
 	"strings"
@@ -50,8 +51,8 @@ type JWTClaims struct {
 }
 
 type RegistrationRequest struct {
-	Email    string `json:"email"`
-	Password string `json:"password"`
+	Email    string `json:"email"    binding:"required,email"`
+	Password string `json:"password" binding:"required,min=8,max=128"`
 
 	InviterID string `json:"inviter_id"`
 
@@ -173,7 +174,7 @@ func (s *AuthService) Register(ctx context.Context, req *RegistrationRequest) (*
 		Metadata:               req.Metadata,
 	}
 
-	user, err := s.core.Queries.CreateUser(ctx, params)
+	user, err := qtx.CreateUser(ctx, params)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create core user: %w", err)
 	}
@@ -184,14 +185,17 @@ func (s *AuthService) Register(ctx context.Context, req *RegistrationRequest) (*
 		}
 	}
 
-	if s.emailService != nil && s.otpService != nil && !s.emailService.IsMockProvider() {
-		if err := s.otpService.CreateAndSendEmailVerifyOTP(ctx, user.ID.String(), req.Email); err != nil {
-			return nil, fmt.Errorf("failed to send verification code: %w", err)
-		}
-	}
-
 	if err := tx.Commit(ctx); err != nil {
 		return nil, fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	// Send OTP after commit so a transient email failure never orphans the user row.
+	// The verify-email page has a "resend" button that covers this case.
+	if s.emailService != nil && s.otpService != nil && !s.emailService.IsMockProvider() {
+		if err := s.otpService.CreateAndSendEmailVerifyOTP(ctx, user.ID.String(), req.Email); err != nil {
+			// Non-fatal: user is persisted; they can request a new code on the verify page.
+			_ = err
+		}
 	}
 
 	return &user, nil
@@ -201,10 +205,20 @@ func (s *AuthService) Login(ctx context.Context, email, password string) (string
 
 	user, err := s.core.Queries.GetUserByEmail(ctx, pgtype.Text{String: strings.ToLower(email), Valid: true})
 	if err != nil {
+		slog.WarnContext(ctx, "security: auth_failure — unknown email",
+			"event", "auth_failure",
+			"reason", "unknown_email",
+			"email", strings.ToLower(email),
+		)
 		return "", time.Time{}, nil, ErrInvalidUser
 	}
 
 	if err := bcrypt.CompareHashAndPassword([]byte(user.Password.String), []byte(password)); err != nil {
+		slog.WarnContext(ctx, "security: auth_failure — wrong password",
+			"event", "auth_failure",
+			"reason", "wrong_password",
+			"user_id", user.ID.String(),
+		)
 		return "", time.Time{}, nil, ErrInvalidPassword
 	}
 
@@ -242,9 +256,11 @@ func (s *AuthService) RequestPasswordReset(ctx context.Context, address string) 
 		return fmt.Errorf("failed to generate reset token: %w", err)
 	}
 
+	expiresAt := time.Now().Add(1 * time.Hour)
 	err = s.core.Queries.UpdateUserForgotPasswordToken(ctx, coregen.UpdateUserForgotPasswordTokenParams{
-		ForgotPasswordToken: pgtype.Text{String: token, Valid: true},
-		UserID:              user.ID,
+		ForgotPasswordToken:          pgtype.Text{String: token, Valid: true},
+		ForgotPasswordTokenExpiresAt: pgtype.Timestamp{Time: expiresAt, Valid: true},
+		UserID:                       user.ID,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to save reset token: %w", err)
@@ -294,8 +310,9 @@ func (s *AuthService) PasswordReset(ctx context.Context, token, newPassword stri
 	}
 
 	err = qtx.UpdateUserForgotPasswordToken(ctx, coregen.UpdateUserForgotPasswordTokenParams{
-		ForgotPasswordToken: pgtype.Text{},
-		UserID:              user.ID,
+		ForgotPasswordToken:          pgtype.Text{},
+		ForgotPasswordTokenExpiresAt: pgtype.Timestamp{},
+		UserID:                       user.ID,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to clear reset token: %w", err)

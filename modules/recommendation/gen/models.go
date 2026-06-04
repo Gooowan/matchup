@@ -9,6 +9,16 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type AdminAuditLog struct {
+	ID         pgtype.UUID      `db:"id" json:"id"`
+	AdminID    pgtype.UUID      `db:"admin_id" json:"admin_id"`
+	Action     string           `db:"action" json:"action"`
+	TargetType string           `db:"target_type" json:"target_type"`
+	TargetID   string           `db:"target_id" json:"target_id"`
+	Metadata   types.JSONB      `db:"metadata" json:"metadata"`
+	CreatedAt  pgtype.Timestamp `db:"created_at" json:"created_at"`
+}
+
 type Block struct {
 	ID        pgtype.UUID      `db:"id" json:"id"`
 	BlockerID pgtype.UUID      `db:"blocker_id" json:"blocker_id"`
@@ -20,7 +30,14 @@ type Chat struct {
 	ID        pgtype.UUID      `db:"id" json:"id"`
 	User1ID   pgtype.UUID      `db:"user1_id" json:"user1_id"`
 	User2ID   pgtype.UUID      `db:"user2_id" json:"user2_id"`
+	ClubID    pgtype.UUID      `db:"club_id" json:"club_id"`
 	CreatedAt pgtype.Timestamp `db:"created_at" json:"created_at"`
+}
+
+type ChatRead struct {
+	ChatID     pgtype.UUID      `db:"chat_id" json:"chat_id"`
+	UserID     pgtype.UUID      `db:"user_id" json:"user_id"`
+	LastReadAt pgtype.Timestamp `db:"last_read_at" json:"last_read_at"`
 }
 
 type Club struct {
@@ -51,6 +68,12 @@ type ClubMember struct {
 	JoinedAt pgtype.Timestamp `db:"joined_at" json:"joined_at"`
 }
 
+type ClubTrainer struct {
+	ClubID        pgtype.UUID      `db:"club_id" json:"club_id"`
+	TrainerUserID pgtype.UUID      `db:"trainer_user_id" json:"trainer_user_id"`
+	JoinedAt      pgtype.Timestamp `db:"joined_at" json:"joined_at"`
+}
+
 type Match struct {
 	ID         pgtype.UUID      `db:"id" json:"id"`
 	FromUserID pgtype.UUID      `db:"from_user_id" json:"from_user_id"`
@@ -73,17 +96,35 @@ type Medium struct {
 }
 
 type Message struct {
-	ID        pgtype.UUID      `db:"id" json:"id"`
-	ChatID    pgtype.UUID      `db:"chat_id" json:"chat_id"`
-	SenderID  pgtype.UUID      `db:"sender_id" json:"sender_id"`
-	Type      string           `db:"type" json:"type"`
-	Content   string           `db:"content" json:"content"`
-	CreatedAt pgtype.Timestamp `db:"created_at" json:"created_at"`
+	ID               pgtype.UUID      `db:"id" json:"id"`
+	ChatID           pgtype.UUID      `db:"chat_id" json:"chat_id"`
+	SenderID         pgtype.UUID      `db:"sender_id" json:"sender_id"`
+	Type             string           `db:"type" json:"type"`
+	Content          string           `db:"content" json:"content"`
+	ModerationStatus pgtype.Text      `db:"moderation_status" json:"moderation_status"`
+	DeletedAt        pgtype.Timestamp `db:"deleted_at" json:"deleted_at"`
+	CreatedAt        pgtype.Timestamp `db:"created_at" json:"created_at"`
+}
+
+type MessageReport struct {
+	ID              pgtype.UUID      `db:"id" json:"id"`
+	MessageID       pgtype.UUID      `db:"message_id" json:"message_id"`
+	ChatID          pgtype.UUID      `db:"chat_id" json:"chat_id"`
+	ReporterID      pgtype.UUID      `db:"reporter_id" json:"reporter_id"`
+	ReportedUserID  pgtype.UUID      `db:"reported_user_id" json:"reported_user_id"`
+	Category        string           `db:"category" json:"category"`
+	Comment         pgtype.Text      `db:"comment" json:"comment"`
+	ContentSnapshot string           `db:"content_snapshot" json:"content_snapshot"`
+	Status          string           `db:"status" json:"status"`
+	ResolvedBy      pgtype.UUID      `db:"resolved_by" json:"resolved_by"`
+	ResolvedAt      pgtype.Timestamp `db:"resolved_at" json:"resolved_at"`
+	CreatedAt       pgtype.Timestamp `db:"created_at" json:"created_at"`
 }
 
 type Profile struct {
 	ID              pgtype.UUID      `db:"id" json:"id"`
 	UserID          pgtype.UUID      `db:"user_id" json:"user_id"`
+	AccountType     string           `db:"account_type" json:"account_type"`
 	Latitude        pgtype.Float8    `db:"latitude" json:"latitude"`
 	Longitude       pgtype.Float8    `db:"longitude" json:"longitude"`
 	Visible         bool             `db:"visible" json:"visible"`
@@ -133,18 +174,34 @@ type Subscription struct {
 	UpdatedAt    pgtype.Timestamp `db:"updated_at" json:"updated_at"`
 }
 
+type TrainerStudent struct {
+	TrainerUserID pgtype.UUID      `db:"trainer_user_id" json:"trainer_user_id"`
+	DancerUserID  pgtype.UUID      `db:"dancer_user_id" json:"dancer_user_id"`
+	EnrolledAt    pgtype.Timestamp `db:"enrolled_at" json:"enrolled_at"`
+}
+
 type User struct {
-	ID                     pgtype.UUID      `db:"id" json:"id"`
-	Email                  pgtype.Text      `db:"email" json:"email"`
-	InviterID              pgtype.UUID      `db:"inviter_id" json:"inviter_id"`
-	Metadata               types.JSONB      `db:"metadata" json:"metadata"`
-	ProfileData            types.JSONB      `db:"profile_data" json:"profile_data"`
-	CreatedAt              pgtype.Timestamp `db:"created_at" json:"created_at"`
-	Role                   string           `db:"role" json:"role"`
-	Password               pgtype.Text      `db:"password" json:"password"`
-	AuthNonce              int32            `db:"auth_nonce" json:"auth_nonce"`
-	ForgotPasswordToken    pgtype.Text      `db:"forgot_password_token" json:"forgot_password_token"`
-	EmailVerificationToken pgtype.Text      `db:"email_verification_token" json:"email_verification_token"`
+	ID                           pgtype.UUID      `db:"id" json:"id"`
+	Email                        pgtype.Text      `db:"email" json:"email"`
+	InviterID                    pgtype.UUID      `db:"inviter_id" json:"inviter_id"`
+	Metadata                     types.JSONB      `db:"metadata" json:"metadata"`
+	ProfileData                  types.JSONB      `db:"profile_data" json:"profile_data"`
+	CreatedAt                    pgtype.Timestamp `db:"created_at" json:"created_at"`
+	Role                         string           `db:"role" json:"role"`
+	Password                     pgtype.Text      `db:"password" json:"password"`
+	AuthNonce                    int32            `db:"auth_nonce" json:"auth_nonce"`
+	ForgotPasswordToken          pgtype.Text      `db:"forgot_password_token" json:"forgot_password_token"`
+	ForgotPasswordTokenExpiresAt pgtype.Timestamp `db:"forgot_password_token_expires_at" json:"forgot_password_token_expires_at"`
+	EmailVerificationToken       pgtype.Text      `db:"email_verification_token" json:"email_verification_token"`
+}
+
+type UserIdentity struct {
+	ID              pgtype.UUID      `db:"id" json:"id"`
+	UserID          pgtype.UUID      `db:"user_id" json:"user_id"`
+	Provider        string           `db:"provider" json:"provider"`
+	ProviderSubject string           `db:"provider_subject" json:"provider_subject"`
+	Email           pgtype.Text      `db:"email" json:"email"`
+	CreatedAt       pgtype.Timestamp `db:"created_at" json:"created_at"`
 }
 
 type UserLocation struct {

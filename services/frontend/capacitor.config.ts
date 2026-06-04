@@ -23,7 +23,10 @@ const config: CapacitorConfig = {
 		Keyboard: {
 			resize: 'body',
 			resizeOnFullScreen: true
-		}
+		},
+		// Google Sign-In is now handled via @capgo/capacitor-social-login.
+		// webClientId is passed at runtime from VITE_GOOGLE_CLIENT_ID; no static
+		// config key is required by the new plugin.
 	}
 };
 

@@ -33,6 +33,7 @@ func ProfileToFeatures(p Profile) types.JSONB {
 type ProfileDTO struct {
 	ID              string      `json:"id"`
 	UserID          string      `json:"user_id"`
+	AccountType     string      `json:"account_type"`
 	DanceStyles     []string    `json:"dance_styles"`
 	Latitude        float64     `json:"latitude"`
 	Longitude       float64     `json:"longitude"`
@@ -57,6 +58,7 @@ func (p Profile) ToDTO() ProfileDTO {
 	dto := ProfileDTO{
 		ID:          utils.UUIDToString(p.ID),
 		UserID:      utils.UUIDToString(p.UserID),
+		AccountType: p.AccountType,
 		DanceStyles: p.DanceStyles,
 		Latitude:    p.Latitude.Float64,
 		Longitude:   p.Longitude.Float64,
@@ -215,6 +217,49 @@ func (p GetProfilePreviewRow) ToDTO() ProfilePreviewDTO {
 		dto.ClubName = &p.ClubName.String
 	}
 	return dto
+}
+
+// TrainerCardDTO is the public representation of a trainer profile for the trainers feed tab.
+// Only ships what cards render — no full JSONB blobs.
+type TrainerCardDTO struct {
+	UserID     string   `json:"user_id"`
+	FirstName  string   `json:"first_name"`
+	LastName   string   `json:"last_name,omitempty"`
+	Avatar     string   `json:"avatar,omitempty"`
+	Gender     string   `json:"gender"`
+	City       string   `json:"city,omitempty"`
+	Bio        string   `json:"bio,omitempty"`
+	Categories []string `json:"categories"`
+}
+
+func (r ListTrainersRow) ToTrainerCardDTO() TrainerCardDTO {
+	pd := r.ProfileData
+	if pd == nil {
+		pd = types.JSONB{}
+	}
+	meta := r.Metadata
+	if meta == nil {
+		meta = types.JSONB{}
+	}
+	firstName, _ := pd["first_name"].(string)
+	lastName, _ := pd["last_name"].(string)
+	avatar, _ := meta["avatar"].(string)
+	// avatar may also be stored in profile_data on some accounts
+	if avatar == "" {
+		avatar, _ = pd["avatar"].(string)
+	}
+	city, _ := meta["city"].(string)
+	bio, _ := meta["bio"].(string)
+	return TrainerCardDTO{
+		UserID:     utils.UUIDToString(r.UserID),
+		FirstName:  firstName,
+		LastName:   lastName,
+		Avatar:     avatar,
+		Gender:     r.Gender,
+		City:       city,
+		Bio:        bio,
+		Categories: r.Categories,
+	}
 }
 
 // FeedCandidateDTO for feed results from FindNearbyVisibleProfiles.

@@ -3,6 +3,7 @@
 	import { goto } from '$app/navigation';
 	import { authFetch } from '$lib/utils/authFetch';
 	import AsyncState from '$lib/components/matchup/AsyncState.svelte';
+	import { t } from '$lib/locale';
 
 	interface Plan {
 		id: string;
@@ -41,7 +42,7 @@
 				activeSub = body.data ?? null;
 			}
 		} catch {
-			error = 'Failed to load subscription info';
+			error = $t('settings.subscription_load_error');
 		} finally {
 			isLoading = false;
 		}
@@ -53,14 +54,14 @@
 	}
 
 	function formatPrice(cents: number): string {
-		if (cents === 0) return 'Free';
+		if (cents === 0) return $t('settings.subscription_free');
 		return `$${(cents / 100).toFixed(2)}`;
 	}
 
 	function formatDate(isoish: string | undefined): string {
 		if (!isoish) return '';
 		const d = new Date(isoish);
-		return d.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+		return d.toLocaleDateString('uk', { year: 'numeric', month: 'short', day: 'numeric' });
 	}
 
 	let expiryStr = $derived(activeSub ? formatDate(activeSub.expired_at?.Time) : '');
@@ -74,7 +75,7 @@
 		<button onclick={() => goto('/settings')} aria-label="Back">
 			<i class="fi fi-rr-angle-left mu-text-primary" style="font-size: 20px; line-height: 1;"></i>
 		</button>
-		<h1 class="mu-text-primary flex-1 text-[20px] font-black">Subscription</h1>
+		<h1 class="mu-text-primary flex-1 text-[20px] font-black">{$t('settings.subscription_title')}</h1>
 	</div>
 
 	<AsyncState loading={isLoading} {error}>
@@ -87,14 +88,14 @@
 			>
 				<div class="flex items-center justify-between">
 					<div>
-						<p class="text-[12px] font-semibold uppercase tracking-wider text-white/70">Current plan</p>
+						<p class="text-[12px] font-semibold uppercase tracking-wider text-white/70">{$t('settings.subscription_current_plan')}</p>
 						<p class="mt-1 text-[22px] font-black text-white">
-							{activeSub ? activeSub.subscription_name : 'Free'}
+							{activeSub ? activeSub.subscription_name : $t('settings.subscription_free')}
 						</p>
 						{#if activeSub}
-							<p class="mt-0.5 text-[13px] font-medium text-white/80">Renews {expiryStr}</p>
+							<p class="mt-0.5 text-[13px] font-medium text-white/80">{$t('settings.subscription_renews').replace('{date}', expiryStr)}</p>
 						{:else}
-							<p class="mt-0.5 text-[13px] font-medium text-white/80">Upgrade to unlock all features</p>
+							<p class="mt-0.5 text-[13px] font-medium text-white/80">{$t('settings.subscription_upgrade_hint')}</p>
 						{/if}
 					</div>
 					<i class="fi fi-rr-diamond text-white" style="font-size: 36px; line-height: 1; opacity: 0.9;"></i>
@@ -103,7 +104,7 @@
 
 			<!-- Available plans -->
 			{#if plans.length > 0}
-				<p class="text-[11px] font-semibold uppercase tracking-wider px-1" style="color: #aeb4bc;">Available plans</p>
+				<p class="text-[11px] font-semibold uppercase tracking-wider px-1" style="color: #aeb4bc;">{$t('settings.subscription_available_plans')}</p>
 				{#each plans as plan}
 					<div
 						class="mu-card rounded-[20px] p-4"
@@ -116,13 +117,13 @@
 									<p class="mt-0.5 text-[13px] font-medium" style="color: #696969;">{planDescription(plan)}</p>
 								{/if}
 								<p class="mt-1 text-[12px] font-medium" style="color: #aeb4bc;">
-									{plan.duration_days} days
+									{$t('settings.subscription_days').replace('{days}', String(plan.duration_days))}
 								</p>
 							</div>
 							<div class="flex-shrink-0 text-right">
 								<p class="text-[20px] font-black" style="color: #8984da;">{formatPrice(plan.price_cents)}</p>
 								{#if plan.price_cents > 0}
-									<p class="text-[11px] font-medium" style="color: #aeb4bc;">/ period</p>
+									<p class="text-[11px] font-medium" style="color: #aeb4bc;">{$t('settings.subscription_per_period')}</p>
 								{/if}
 							</div>
 						</div>
@@ -130,7 +131,7 @@
 						{#if activeSub?.subscription_name === plan.name}
 							<div class="mt-3 flex items-center gap-1.5">
 								<div class="h-[8px] w-[8px] rounded-full" style="background: #22c55e;"></div>
-								<span class="text-[12px] font-semibold" style="color: #22c55e;">Active</span>
+								<span class="text-[12px] font-semibold" style="color: #22c55e;">{$t('settings.subscription_active')}</span>
 							</div>
 						{/if}
 					</div>
@@ -142,9 +143,9 @@
 				<div class="flex items-start gap-3">
 					<i class="fi fi-brands-apple" style="font-size: 22px; color: #171717; flex-shrink: 0; line-height: 1; margin-top: 2px;"></i>
 					<div>
-						<p class="text-[14px] font-bold mu-text-primary">Purchase on the App</p>
+						<p class="text-[14px] font-bold mu-text-primary">{$t('settings.subscription_purchase_title')}</p>
 						<p class="mt-1 text-[13px] font-medium leading-relaxed" style="color: #696969;">
-							Subscriptions are purchased through the iOS app via Apple In-App Purchases. Open MatchUp on your iPhone to upgrade.
+							{$t('settings.subscription_purchase_body')}
 						</p>
 					</div>
 				</div>
@@ -152,12 +153,12 @@
 
 			<!-- What's included in Premium -->
 			<div class="mu-card rounded-[20px] p-4" style="display: flex; flex-direction: column; gap: 10px;">
-				<p class="text-[11px] font-semibold uppercase tracking-wider" style="color: #aeb4bc;">Premium features</p>
+				<p class="text-[11px] font-semibold uppercase tracking-wider" style="color: #aeb4bc;">{$t('settings.subscription_premium_features')}</p>
 				{#each [
-					{ icon: 'fi-rr-heart', text: 'Unlimited swipes per day' },
-					{ icon: 'fi-rr-eye', text: 'See who liked you' },
-					{ icon: 'fi-rr-settings-sliders', text: 'Advanced filters' },
-					{ icon: 'fi-rr-badge', text: 'Premium badge on profile' }
+					{ icon: 'fi-rr-heart', text: $t('settings.subscription_feat_swipes') },
+					{ icon: 'fi-rr-eye', text: $t('settings.subscription_feat_likes') },
+					{ icon: 'fi-rr-settings-sliders', text: $t('settings.subscription_feat_filters') },
+					{ icon: 'fi-rr-badge', text: $t('settings.subscription_feat_badge') }
 				] as feature}
 					<div class="flex items-center gap-3">
 						<i class="fi {feature.icon}" style="font-size: 16px; color: #8984da; flex-shrink: 0;"></i>

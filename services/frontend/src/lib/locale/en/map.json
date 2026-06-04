@@ -24,5 +24,21 @@
   "address": "Address",
   "city": "City",
   "website": "Website",
-  "phone": "Phone"
+  "phone": "Phone",
+  "import_from_gmaps": "Import from Google Maps",
+  "import_gmaps_placeholder": "Paste Google Maps link…",
+  "import_gmaps_importing": "Importing…",
+  "import_gmaps_success": "Fields filled from Google Maps",
+  "import_gmaps_error": "Could not extract data from that link",
+  "chat_error": "Could not open chat",
+  "trainers": "Trainers",
+  "hours": "Opening hours",
+  "closed": "Closed",
+  "day_mon": "Mon",
+  "day_tue": "Tue",
+  "day_wed": "Wed",
+  "day_thu": "Thu",
+  "day_fri": "Fri",
+  "day_sat": "Sat",
+  "day_sun": "Sun"
 }

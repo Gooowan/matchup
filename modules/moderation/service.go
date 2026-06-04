@@ -2,6 +2,7 @@ package moderation
 
 import (
 	"context"
+	"encoding/json"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
@@ -64,6 +65,17 @@ func (s *ModerationService) ListAllReports(ctx context.Context, limit int) ([]Re
 		result = append(result, row)
 	}
 	return result, rows.Err()
+}
+
+// AdminAuditLog writes an immutable record of an admin action to admin_audit_log.
+// targetType is a short label like "user", "message", "report".
+// metadata is an optional map of additional context (target IDs, old values, etc.).
+func (s *ModerationService) AdminAuditLog(ctx context.Context, adminID pgtype.UUID, action, targetType, targetID string, metadata map[string]any) {
+	metaJSON, _ := json.Marshal(metadata)
+	_, _ = s.DB.Exec(ctx, `
+		INSERT INTO admin_audit_log(admin_id, action, target_type, target_id, metadata)
+		VALUES ($1, $2, $3, $4, $5::jsonb)`,
+		adminID, action, targetType, targetID, string(metaJSON))
 }
 
 // ReportUser constructs the optional comment field and creates the report.

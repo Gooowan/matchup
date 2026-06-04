@@ -12,12 +12,18 @@ import (
 
 type Querier interface {
 	CreateChat(ctx context.Context, arg CreateChatParams) (Chat, error)
+	CreateClubChat(ctx context.Context, arg CreateClubChatParams) (Chat, error)
 	CreateMessage(ctx context.Context, arg CreateMessageParams) (Message, error)
+	CreateMessageReport(ctx context.Context, arg CreateMessageReportParams) (MessageReport, error)
 	GetChat(ctx context.Context, chatID pgtype.UUID) (Chat, error)
 	GetChatByUsers(ctx context.Context, arg GetChatByUsersParams) (Chat, error)
 	GetLatestMessage(ctx context.Context, chatID pgtype.UUID) (Message, error)
+	GetMessageByID(ctx context.Context, id pgtype.UUID) (Message, error)
+	HideMessage(ctx context.Context, id pgtype.UUID) error
+	ListMessageReports(ctx context.Context, arg ListMessageReportsParams) ([]ListMessageReportsRow, error)
 	ListMessages(ctx context.Context, arg ListMessagesParams) ([]Message, error)
 	ListUserChats(ctx context.Context, userID pgtype.UUID) ([]ListUserChatsRow, error)
+	ResolveMessageReport(ctx context.Context, arg ResolveMessageReportParams) error
 }
 
 var _ Querier = (*Queries)(nil)

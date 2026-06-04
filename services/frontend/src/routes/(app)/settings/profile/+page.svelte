@@ -4,8 +4,12 @@
 	import { authFetch } from '$lib/utils/authFetch';
 	import { authStore } from '$stores/auth.svelte';
 	import toast from 'svelte-french-toast';
+	import { parseApiError } from '$lib/utils/parseApiError';
 
-	const UKRAINE_CITIES = ['Київ', 'Харків', 'Одеса', 'Дніпро', 'Запоріжжя', 'Львів', 'Кривий Ріг', 'Миколаїв', 'Вінниця', 'Херсон', 'Полтава', 'Чернігів', 'Черкаси', 'Суми', 'Житомир', 'Хмельницький', 'Рівне', 'Тернопіль', 'Луцьк', 'Ужгород'];
+	// v1: locked to Kyiv. To open multi-city: restore UKRAINE_CITIES dropdown below.
+	const HARDCODED_CITY_PROFILE = 'Київ';
+	const HARDCODED_COUNTRY_PROFILE = 'Україна';
+	// const UKRAINE_CITIES = ['Київ', 'Харків', 'Одеса', 'Дніпро', 'Запоріжжя', 'Львів', 'Кривий Ріг', 'Миколаїв', 'Вінниця', 'Херсон', 'Полтава', 'Чернігів', 'Черкаси', 'Суми', 'Житомир', 'Хмельницький', 'Рівне', 'Тернопіль', 'Луцьк', 'Ужгород'];
 	const CATEGORIES_UA = [
 		{ value: 'kids', label: 'Діти' },
 		{ value: 'juvenile1', label: 'Ювенали 1' },
@@ -35,6 +39,9 @@
 		{ value: 'other', label: 'Інше' }
 	];
 
+	let accountType = $derived(authStore.user?.profile_data?.account_type as string | undefined);
+	let isDancerLike = $derived(accountType !== 'trainer' && accountType !== 'club');
+
 	let isSaving = $state(false);
 	let isLoading = $state(true);
 	let avatarFile = $state<File | null>(null);
@@ -57,8 +64,14 @@
 	let readyToRelocate = $state(false);
 	let readyToFinance = $state('');
 	let categories = $state<string[]>([]);
+	let profileVisible = $state(true);
 
 	onMount(async () => {
+		// Club accounts have no dancer-style profile; redirect to Business panel.
+		if (authStore.user?.profile_data?.account_type === 'club') {
+			goto('/business');
+			return;
+		}
 		const user = authStore.user;
 		if (user?.profile_data) {
 			const pd = user.profile_data as Record<string, unknown>;
@@ -82,6 +95,7 @@
 				readyToRelocate = p.ready_to_relocate ?? false;
 				readyToFinance = p.ready_to_finance ?? '';
 				categories = p.categories ?? [];
+				profileVisible = p.visible ?? true;
 				if (Array.isArray(p.metadata?.media_urls)) {
 					mediaUrls = p.metadata.media_urls as string[];
 				}
@@ -292,12 +306,26 @@
 		const r = await authFetch(path, init);
 		if (!r.ok) {
 			const b = await r.json().catch(() => ({}));
-			throw new Error((b as { error?: string }).error ?? `Request to ${path} failed (${r.status})`);
+			throw new Error(parseApiError(b, r.status));
 		}
 		return r;
 	}
 
 	async function handleSave() {
+		// Client-side validation — instant feedback before hitting the server.
+		if (firstName.trim().length < 2) {
+			toast.error('Введіть імʼя (мінімум 2 символи)');
+			return;
+		}
+		// City is required only for dancer/parent; trainers use the hardcoded value anyway.
+		if (isDancerLike && !city) {
+			toast.error('Оберіть місто');
+			return;
+		}
+		if (isDancerLike && heightCm && (heightCm < 100 || heightCm > 250)) {
+			toast.error('Зріст має бути від 100 до 250 см');
+			return;
+		}
 		isSaving = true;
 		try {
 			await postOrThrow('/user/profile/update', {
@@ -310,19 +338,23 @@
 				await authStore.uploadAvatar(avatarFile);
 			}
 
+			// Build the profile body per account type: trainers skip partner-matching fields.
 			const body: Record<string, unknown> = {
 				gender,
-				country: 'Україна',
-				city,
-				goal: goal || 'hobby',
+				country: HARDCODED_COUNTRY_PROFILE,
+				city: HARDCODED_CITY_PROFILE,
 				program: program || 'standard',
-				ready_to_relocate: readyToRelocate,
 				bio,
 				categories,
-				...(readyToFinance ? { ready_to_finance: readyToFinance } : {})
+				visible: profileVisible,
 			};
-			if (birthDate) body.birth_date = birthDate;
-			if (heightCm) body.height_cm = heightCm;
+			if (isDancerLike) {
+				body.goal = goal || 'hobby';
+				body.ready_to_relocate = readyToRelocate;
+				if (readyToFinance) body.ready_to_finance = readyToFinance;
+				if (birthDate) body.birth_date = birthDate;
+				if (heightCm) body.height_cm = heightCm;
+			}
 
 			await postOrThrow('/me/profile', {
 				method: 'PUT',
@@ -341,7 +373,7 @@
 	}
 </script>
 
-<div class="mu-screen flex h-[100dvh] flex-col overflow-hidden">
+<div class="mu-screen" style="height: 100dvh; overflow-y: auto; -webkit-overflow-scrolling: touch;">
 	<div class="pt-safe"></div>
 
 	<!-- Header -->
@@ -361,11 +393,11 @@
 	</div>
 
 	{#if isLoading}
-		<div class="flex flex-1 items-center justify-center">
+		<div class="flex min-h-[60vh] items-center justify-center">
 			<div class="h-8 w-8 animate-spin rounded-full border-4" style="border-color: rgba(174,180,188,0.3); border-top-color: #8984da;"></div>
 		</div>
 	{:else}
-		<div class="flex flex-1 flex-col overflow-y-auto px-4 pb-[100px]" style="gap: 16px; padding-top: 8px; -webkit-overflow-scrolling: touch;">
+		<div class="flex flex-col px-4 pb-[100px]" style="gap: 16px; padding-top: 8px;">
 
 			<!-- Avatar -->
 			<div class="mu-card flex flex-col items-center gap-3 rounded-[20px] p-6">
@@ -400,7 +432,7 @@
 				<div class="flex gap-3 overflow-x-auto pb-1" style="-webkit-overflow-scrolling: touch;">
 					{#each mediaUrls as url}
 						<div class="relative flex-shrink-0" style="width: 80px; height: 80px;">
-							<img src={url} alt="Фото" class="h-full w-full rounded-[12px] object-cover" />
+							<img src={url} alt="Фото" loading="lazy" decoding="async" class="h-full w-full rounded-[12px] object-cover" />
 							<button
 								onclick={() => deletePhoto(url)}
 								class="absolute -top-1.5 -right-1.5 flex h-5 w-5 items-center justify-center rounded-full"
@@ -426,6 +458,30 @@
 					{/if}
 				</div>
 				<input bind:this={photoFileInput} type="file" accept="image/*" class="hidden" onchange={handlePhotoChange} />
+			</div>
+
+			<!-- Visibility toggle -->
+			<div class="mu-card rounded-[20px] p-4">
+				<div class="flex items-center justify-between gap-3">
+					<div class="flex flex-col gap-0.5">
+						<span class="mu-text-primary text-[14px] font-semibold">Видимість профілю</span>
+						<span class="text-[12px] font-medium" style="color: #aeb4bc;">
+							{profileVisible ? 'Профіль видно у стрічці та на карті' : 'Профіль прихований від нових знайомств'}
+						</span>
+					</div>
+					<button
+						role="switch"
+						aria-checked={profileVisible}
+						onclick={() => (profileVisible = !profileVisible)}
+						class="relative flex-shrink-0 rounded-full transition-colors"
+						style="width: 44px; height: 26px; background: {profileVisible ? '#8984da' : '#d1d5db'};"
+					>
+						<span
+							class="absolute rounded-full bg-white shadow transition-transform"
+							style="width: 20px; height: 20px; top: 3px; left: 3px; transform: translateX({profileVisible ? '18px' : '0'});"
+						></span>
+					</button>
+				</div>
 			</div>
 
 			<!-- Name -->
@@ -458,6 +514,7 @@
 						>{g.label}</button>
 					{/each}
 				</div>
+			{#if isDancerLike}
 				<div class="mu-divider flex items-center justify-between" style="border-top-width: 1px; border-top-style: solid; padding-top: 12px;">
 					<span class="mu-text-primary shrink-0 text-[14px] font-semibold">Дата народження</span>
 					<input
@@ -479,31 +536,32 @@
 						style="color: #8984da;"
 					/>
 				</div>
+			{/if}
 			</div>
 
-			<!-- Location -->
+		<!-- v1: locked to Kyiv / Ukraine.
+		     FUTURE multi-city: restore the UKRAINE_CITIES city <select> and country
+		     <select>/<input> below; also uncomment UKRAINE_CITIES in the script. -->
 			<div class="mu-card rounded-[20px] p-4" style="display: flex; flex-direction: column; gap: 12px;">
 				<label class="text-[11px] font-semibold uppercase tracking-wider" style="color: #aeb4bc;">МІСЦЕЗНАХОДЖЕННЯ</label>
-				<select
-					bind:value={city}
-					class="mu-text-primary w-full bg-transparent text-[16px] font-semibold outline-none"
-					style="-webkit-appearance: none; appearance: none; opacity: {city ? '1' : '0.5'};"
-				>
-					<option value="">Оберіть місто</option>
-					{#each UKRAINE_CITIES as c}
-						<option value={c}>{c}</option>
-					{/each}
-				</select>
+				<div class="flex items-center justify-between">
+					<span class="mu-text-primary text-[16px] font-semibold">{HARDCODED_CITY_PROFILE}</span>
+					<i class="fi fi-rr-lock" style="font-size: 13px; color: #aeb4bc;"></i>
+				</div>
 				<div class="mu-divider" style="border-top-width: 1px; border-top-style: solid; padding-top: 12px;">
-					<input
-						type="text"
-						value="Україна"
-						readonly
-						class="w-full bg-transparent text-[16px] font-semibold outline-none"
-						style="color: #aeb4bc;"
-					/>
+					<span class="text-[16px] font-semibold" style="color: #aeb4bc;">{HARDCODED_COUNTRY_PROFILE}</span>
 				</div>
 			</div>
+			<!-- FUTURE multi-city:
+			<div class="mu-card rounded-[20px] p-4" ...>
+				<label>МІСЦЕЗНАХОДЖЕННЯ</label>
+				<select bind:value={city} ...>
+					<option value="">Оберіть місто</option>
+					{#each UKRAINE_CITIES as c}<option value={c}>{c}</option>{/each}
+				</select>
+				<div ...><input type="text" value="Україна" readonly ... /></div>
+			</div>
+			-->
 
 			<!-- Program -->
 			<div class="mu-card rounded-[20px] p-4" style="display: flex; flex-direction: column; gap: 12px;">
@@ -519,19 +577,21 @@
 				</div>
 			</div>
 
-			<!-- Goal -->
-			<div class="mu-card rounded-[20px] p-4" style="display: flex; flex-direction: column; gap: 12px;">
-				<label class="text-[11px] font-semibold uppercase tracking-wider" style="color: #aeb4bc;">ЦІЛЬ</label>
-				<div class="grid grid-cols-2 gap-2">
-					{#each GOAL_OPTIONS as g}
-						<button
-							onclick={() => (goal = g.value)}
-							class="rounded-[50px] py-2.5 text-[13px] font-semibold transition-all"
-							style="background: {goal === g.value ? '#8984da' : 'transparent'}; color: {goal === g.value ? 'white' : '#696969'}; border: 1.5px solid {goal === g.value ? '#8984da' : 'rgba(174,180,188,0.4)'};"
-						>{g.label}</button>
-					{/each}
-				</div>
+		<!-- Goal (dancer/parent only) -->
+		{#if isDancerLike}
+		<div class="mu-card rounded-[20px] p-4" style="display: flex; flex-direction: column; gap: 12px;">
+			<label class="text-[11px] font-semibold uppercase tracking-wider" style="color: #aeb4bc;">ЦІЛЬ</label>
+			<div class="grid grid-cols-2 gap-2">
+				{#each GOAL_OPTIONS as g}
+					<button
+						onclick={() => (goal = g.value)}
+						class="rounded-[50px] py-2.5 text-[13px] font-semibold transition-all"
+						style="background: {goal === g.value ? '#8984da' : 'transparent'}; color: {goal === g.value ? 'white' : '#696969'}; border: 1.5px solid {goal === g.value ? '#8984da' : 'rgba(174,180,188,0.4)'};"
+					>{g.label}</button>
+				{/each}
 			</div>
+		</div>
+		{/if}
 
 			<!-- Categories -->
 			<div class="mu-card rounded-[20px] p-4" style="display: flex; flex-direction: column; gap: 12px;">
@@ -558,37 +618,39 @@
 				></textarea>
 			</div>
 
-			<!-- Preferences -->
-			<div class="mu-card rounded-[20px] p-4" style="display: flex; flex-direction: column; gap: 12px;">
-				<label class="text-[11px] font-semibold uppercase tracking-wider" style="color: #aeb4bc;">УПОДОБАННЯ</label>
-				<div class="flex items-center justify-between">
-					<span class="mu-text-primary text-[14px] font-semibold">Готовий/а до переїзду</span>
-					<button
-						onclick={() => (readyToRelocate = !readyToRelocate)}
-						class="relative flex items-center transition-colors"
-						style="width: 50px; height: 28px; border-radius: 50px; background: {readyToRelocate ? '#8984da' : 'rgba(174,180,188,0.4)'};"
-						role="switch"
-						aria-checked={readyToRelocate}
-					>
-						<div
-							class="absolute h-[22px] w-[22px] rounded-full bg-white shadow-sm transition-transform"
-							style="transform: translateX({readyToRelocate ? '25px' : '3px'});"
-						></div>
-					</button>
-				</div>
-				<div style="display: flex; flex-direction: column; gap: 8px;">
-					<span class="text-[11px] font-semibold uppercase tracking-wider" style="color: #aeb4bc;">МОЖЛИВІСТЬ ФІНАНСУВАТИ ПАРТНЕРА</span>
-					<div class="flex gap-2">
-						{#each FINANCE_OPTIONS as opt}
-							<button
-								onclick={() => (readyToFinance = readyToFinance === opt.value ? '' : opt.value)}
-								class="flex-1 rounded-[50px] py-2 text-[13px] font-semibold transition-all"
-								style="background: {readyToFinance === opt.value ? '#8984da' : 'transparent'}; color: {readyToFinance === opt.value ? 'white' : '#696969'}; border: 1.5px solid {readyToFinance === opt.value ? '#8984da' : 'rgba(174,180,188,0.4)'};"
-							>{opt.label}</button>
-						{/each}
-					</div>
+		<!-- Preferences (dancer/parent only: relocate + finance) -->
+		{#if isDancerLike}
+		<div class="mu-card rounded-[20px] p-4" style="display: flex; flex-direction: column; gap: 12px;">
+			<label class="text-[11px] font-semibold uppercase tracking-wider" style="color: #aeb4bc;">УПОДОБАННЯ</label>
+			<div class="flex items-center justify-between">
+				<span class="mu-text-primary text-[14px] font-semibold">Готовий/а до переїзду</span>
+				<button
+					onclick={() => (readyToRelocate = !readyToRelocate)}
+					class="relative flex items-center transition-colors"
+					style="width: 50px; height: 28px; border-radius: 50px; background: {readyToRelocate ? '#8984da' : 'rgba(174,180,188,0.4)'};"
+					role="switch"
+					aria-checked={readyToRelocate}
+				>
+					<div
+						class="absolute h-[22px] w-[22px] rounded-full bg-white shadow-sm transition-transform"
+						style="transform: translateX({readyToRelocate ? '25px' : '3px'});"
+					></div>
+				</button>
+			</div>
+			<div style="display: flex; flex-direction: column; gap: 8px;">
+				<span class="text-[11px] font-semibold uppercase tracking-wider" style="color: #aeb4bc;">МОЖЛИВІСТЬ ФІНАНСУВАТИ ПАРТНЕРА</span>
+				<div class="flex gap-2">
+					{#each FINANCE_OPTIONS as opt}
+						<button
+							onclick={() => (readyToFinance = readyToFinance === opt.value ? '' : opt.value)}
+							class="flex-1 rounded-[50px] py-2 text-[13px] font-semibold transition-all"
+							style="background: {readyToFinance === opt.value ? '#8984da' : 'transparent'}; color: {readyToFinance === opt.value ? 'white' : '#696969'}; border: 1.5px solid {readyToFinance === opt.value ? '#8984da' : 'rgba(174,180,188,0.4)'};"
+						>{opt.label}</button>
+					{/each}
 				</div>
 			</div>
+		</div>
+		{/if}
 		</div>
 	{/if}
 </div>

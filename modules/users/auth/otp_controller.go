@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/Gooowan/matchup/modules/core/types"
+	corehttp "github.com/Gooowan/matchup/modules/core/http"
 	"github.com/Gooowan/matchup/modules/otp"
 )
 
@@ -38,8 +39,7 @@ func (c *OTPAuthController) SendEmailOTP(ctx *gin.Context) {
 	var req struct {
 		Email string `json:"email" binding:"required,email"`
 	}
-	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, types.Resp{Error: err.Error()})
+	if !corehttp.BindJSON(ctx, &req) {
 		return
 	}
 
@@ -69,8 +69,7 @@ func (c *OTPAuthController) VerifyEmailOTP(ctx *gin.Context) {
 		Email string `json:"email" binding:"required,email"`
 		Code  string `json:"code" binding:"required"`
 	}
-	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, types.Resp{Error: err.Error()})
+	if !corehttp.BindJSON(ctx, &req) {
 		return
 	}
 
@@ -108,6 +107,7 @@ func (c *OTPAuthController) VerifyEmailOTP(ctx *gin.Context) {
 	}
 
 	domain := os.Getenv("COOKIE_DOMAIN")
+	ctx.SetSameSite(http.SameSiteLaxMode)
 	ctx.SetCookie("auth_token", token, int(time.Until(expiresAt).Seconds()), "/", domain, true, true)
 
 	if verifiedUser.ProfileData != nil {

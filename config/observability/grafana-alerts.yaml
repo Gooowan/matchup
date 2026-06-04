@@ -1,0 +1,108 @@
+apiVersion: 1
+
+# Grafana alert rules for MatchUp security monitoring.
+# Import via Grafana UI → Alerting → Alert rules → Import.
+# These assume a Loki data source named "Loki" and a Prometheus data source named "Prometheus".
+
+groups:
+  - name: security
+    folder: Security
+    interval: 1m
+    rules:
+      - uid: auth-failure-spike
+        title: "Auth failure spike (>20 in 5 min)"
+        condition: C
+        data:
+          - refId: A
+            datasourceUid: loki
+            model:
+              expr: |
+                sum(count_over_time({job="matchup-api"} |= "auth_failure" [5m]))
+              intervalMs: 60000
+              maxDataPoints: 43200
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              conditions:
+                - evaluator:
+                    params: [20]
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params: [A]
+        noDataState: NoData
+        execErrState: Error
+        for: 0s
+        annotations:
+          summary: "High auth failure rate — possible credential stuffing or brute force"
+          description: "More than 20 auth_failure events in the last 5 minutes."
+        labels:
+          severity: warning
+          team: security
+
+      - uid: http-4xx-spike
+        title: "HTTP 4xx spike (>200 req/min)"
+        condition: C
+        data:
+          - refId: A
+            datasourceUid: prometheus
+            model:
+              expr: |
+                sum(rate(http_requests_total{status=~"4.."}[1m])) * 60
+              intervalMs: 60000
+              maxDataPoints: 43200
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              conditions:
+                - evaluator:
+                    params: [200]
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params: [A]
+        noDataState: NoData
+        execErrState: Error
+        for: 2m
+        annotations:
+          summary: "Elevated HTTP 4xx rate"
+          description: "More than 200 4xx responses per minute for the last 2 minutes."
+        labels:
+          severity: warning
+          team: platform
+
+      - uid: admin-audit-gap
+        title: "Admin audit log — no activity for 24 h (canary)"
+        condition: C
+        data:
+          - refId: A
+            datasourceUid: loki
+            model:
+              expr: |
+                sum(count_over_time({job="matchup-api"} |= "admin_audit" [24h]))
+              intervalMs: 60000
+              maxDataPoints: 43200
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              conditions:
+                - evaluator:
+                    params: [0]
+                    type: lt
+                  operator:
+                    type: and
+                  query:
+                    params: [A]
+        noDataState: Alerting
+        execErrState: Error
+        for: 0s
+        annotations:
+          summary: "No admin audit events in 24 hours — logging pipeline may be broken"
+        labels:
+          severity: info
+          team: platform

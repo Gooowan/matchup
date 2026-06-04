@@ -7,6 +7,7 @@ import (
 
 	"github.com/Gooowan/matchup/modules/core/logging"
 	"github.com/Gooowan/matchup/modules/core/types"
+	corehttp "github.com/Gooowan/matchup/modules/core/http"
 	"github.com/Gooowan/matchup/modules/core/utils"
 	gen "github.com/Gooowan/matchup/modules/map/gen"
 	"github.com/Gooowan/matchup/modules/users/auth"
@@ -31,8 +32,7 @@ func (c *MapController) UpdateLocation(ctx *gin.Context) {
 		Latitude  float64 `json:"latitude" binding:"required,min=-90,max=90"`
 		Longitude float64 `json:"longitude" binding:"required,min=-180,max=180"`
 	}
-	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, types.Resp{Error: err.Error()})
+	if !corehttp.BindJSON(ctx, &req) {
 		return
 	}
 
@@ -94,8 +94,7 @@ func (c *MapController) FindNearbyByCount(ctx *gin.Context) {
 		Longitude  float64 `json:"longitude" binding:"required,min=-180,max=180"`
 		MaxResults int32   `json:"max_results" binding:"required,min=1,max=100"`
 	}
-	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, types.Resp{Error: err.Error()})
+	if !corehttp.BindJSON(ctx, &req) {
 		return
 	}
 
@@ -146,8 +145,7 @@ func (c *MapController) FindNearbyByRadius(ctx *gin.Context) {
 		Longitude float64 `json:"longitude" binding:"required,min=-180,max=180"`
 		RadiusKm  float64 `json:"radius_km" binding:"required,min=0.1,max=500"`
 	}
-	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, types.Resp{Error: err.Error()})
+	if !corehttp.BindJSON(ctx, &req) {
 		return
 	}
 

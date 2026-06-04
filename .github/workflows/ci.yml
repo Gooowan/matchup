@@ -24,6 +24,11 @@ jobs:
       - name: go build
         run: go build ./...
 
+      - name: govulncheck
+        run: |
+          go install golang.org/x/vuln/cmd/govulncheck@latest
+          govulncheck ./...
+
   frontend:
     name: Frontend build & check
     runs-on: ubuntu-latest
@@ -45,6 +50,9 @@ jobs:
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
+
+      - name: Audit dependencies
+        run: pnpm audit --audit-level=high
 
       - name: Type check
         run: pnpm check

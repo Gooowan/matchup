@@ -15,7 +15,9 @@ type Querier interface {
 	AdminGetUser(ctx context.Context, userID pgtype.UUID) (AdminGetUserRow, error)
 	AdminSearchUsers(ctx context.Context, arg AdminSearchUsersParams) ([]AdminSearchUsersRow, error)
 	AdminUpdateUser(ctx context.Context, arg AdminUpdateUserParams) error
+	CreateIdentity(ctx context.Context, arg CreateIdentityParams) error
 	CreateUser(ctx context.Context, arg CreateUserParams) (User, error)
+	FindIdentity(ctx context.Context, arg FindIdentityParams) (pgtype.UUID, error)
 	GetUser(ctx context.Context, userID pgtype.UUID) (User, error)
 	GetUserByEmail(ctx context.Context, email pgtype.Text) (User, error)
 	GetUserByEmailVerificationToken(ctx context.Context, emailVerificationToken pgtype.Text) (User, error)

@@ -2,51 +2,29 @@
 	import BottomSheet from './BottomSheet.svelte';
 	import { authFetch } from '$lib/utils/authFetch';
 	import { t } from '$lib/locale';
+	import { formatUkrainianPhone } from '$lib/utils/phone';
 	import toast from 'svelte-french-toast';
 
-	const COUNTRIES = [
-		'Україна', 'Польща', 'Германія', 'Чехія', 'Австрія', 'Угорщина', 'Румунія',
-		'Словаччина', 'Болгарія', 'Хорватія', 'Франція', 'Іспанія', 'Португалія',
-		'Нідерланди', 'Бельгія', 'Швейцарія', 'Велика Британія', 'Ірландія',
-		'Швеція', 'Норвегія', 'Данія', 'Фінляндія', 'Естонія', 'Латвія', 'Литва',
-		'США', 'Канада', 'Австралія'
-	];
-	const CITIES_BY_COUNTRY: Record<string, string[]> = {
-		'Україна': ['Київ', 'Харків', 'Одеса', 'Дніпро', 'Запоріжжя', 'Львів', 'Кривий Ріг', 'Миколаїв', 'Вінниця', 'Херсон', 'Полтава', 'Чернігів', 'Черкаси', 'Суми', 'Житомир', 'Хмельницький', 'Рівне', 'Тернопіль', 'Луцьк', 'Ужгород'],
-		'Польща': ['Варшава', 'Краків', 'Вроцлав', 'Познань', 'Гданськ', 'Лодзь', 'Катовіце', 'Люблін'],
-		'Германія': ['Берлін', 'Гамбург', 'Мюнхен', 'Кельн', 'Франкфурт', 'Штутгарт', 'Дюссельдорф', 'Лейпциг'],
-		'Чехія': ['Прага', 'Брно', 'Острава', 'Пльзень'],
-		'Австрія': ['Відень', 'Грац', 'Лінц', 'Зальцбург'],
-		'Угорщина': ['Будапешт', 'Дебрецен', 'Мішкольц', 'Печ'],
-		'Румунія': ['Бухарест', 'Клуж-Напока', 'Тімішоара', 'Яси'],
-		'Словаччина': ['Братислава', 'Кошіце', 'Прешов', 'Жіліна'],
-		'Болгарія': ['Софія', 'Пловдив', 'Варна', 'Бургас'],
-		'Хорватія': ['Загреб', 'Спліт', 'Рієка', 'Осієк'],
-		'Франція': ['Париж', 'Марсель', 'Ліон', 'Тулуза', 'Ніцца', 'Нант'],
-		'Іспанія': ['Мадрид', 'Барселона', 'Валенсія', 'Севілья', 'Більбао'],
-		'Португалія': ['Лісабон', 'Порту', 'Брага', 'Коїмбра'],
-		'Нідерланди': ['Амстердам', 'Роттердам', 'Гаага', 'Утрехт'],
-		'Бельгія': ['Брюссель', 'Антверпен', 'Гент', 'Брюгге'],
-		'Швейцарія': ['Цюріх', 'Женева', 'Базель', 'Берн'],
-		'Велика Британія': ['Лондон', 'Манчестер', 'Бірмінгем', 'Глазго', 'Лідс'],
-		'Ірландія': ['Дублін', 'Корк', 'Голуей', 'Лімерік'],
-		'Швеція': ['Стокгольм', 'Гетеборг', 'Мальме', 'Упсала'],
-		'Норвегія': ['Осло', 'Берген', 'Трондгейм', 'Ставангер'],
-		'Данія': ['Копенгаген', 'Орхус', 'Оденсе', 'Ольборг'],
-		'Фінляндія': ['Гельсінкі', 'Тампере', 'Турку', 'Оулу'],
-		'Естонія': ['Таллінн', 'Тарту', 'Нарва', 'Пярну'],
-		'Латвія': ['Рига', 'Даугавпілс', 'Лієпая', 'Єлгава'],
-		'Литва': ['Вільнюс', 'Каунас', 'Клайпеда', 'Шяуляй'],
-		'США': ['Нью-Йорк', 'Лос-Анджелес', 'Чикаго', 'Маямі', 'Лас-Вегас', "Х'юстон", 'Даллас', 'Сан-Франциско'],
-		'Канада': ['Торонто', 'Ванкувер', 'Монреаль', 'Калгарі', 'Оттава'],
-		'Австралія': ['Сідней', 'Мельбурн', 'Брісбен', 'Перт', 'Аделаїда']
-	};
+	// v1: locked to Ukraine / Kyiv. Coords default to Kyiv city centroid so the
+	// club always lands on the map even when server-side geocoding is offline.
+	const HARDCODED_COUNTRY = 'Ukraine';
+	const HARDCODED_COUNTRY_LABEL = 'Україна';
+	const HARDCODED_CITY = 'Kyiv';
+	const HARDCODED_CITY_LABEL = 'Київ';
+	const KYIV_CENTROID = { lat: 50.4501, lng: 30.5234 } as const;
+
+	// FUTURE (multi-country): when expanding beyond Ukraine, swap the locked
+	// country/city displays below for the commented-out <select> dropdowns and
+	// bind `selectedCountry` / `selectedCity` into the submit body instead of the
+	// HARDCODED_* constants.
+	// const COUNTRIES = ['Україна', 'Польща', ...];
+	// const CITIES_BY_COUNTRY: Record<string, string[]> = { 'Україна': ['Київ', ...], ... };
+	// let selectedCountry = $state('Україна');
+	// let selectedCity = $state('Київ');
 
 	interface Props {
 		open?: boolean;
 		coords?: { lat: number; lng: number } | null;
-		defaultCity?: string;
-		defaultCountry?: string;
 		onclose?: () => void;
 		oncreated?: (slug: string) => void;
 	}
@@ -54,29 +32,65 @@
 	let {
 		open = false,
 		coords = null,
-		defaultCity = '',
-		defaultCountry = 'Україна',
 		onclose,
 		oncreated
 	}: Props = $props();
 
 	let name = $state('');
 	let address = $state('');
-	let city = $state('');
-	let country = $state('Україна');
 	let website = $state('');
 	let phone = $state('');
 	let isSubmitting = $state(false);
 
-	$effect(() => {
-		if (open) {
-			city = defaultCity || '';
-			country = defaultCountry || 'Україна';
-		}
-	});
+	// Google Maps import state
+	let showGmapsInput = $state(false);
+	let gmapsURL = $state('');
+	let isImporting = $state(false);
+	let importedPhotos = $state<string[]>([]);
+	let importedLat = $state<number | null>(null);
+	let importedLng = $state<number | null>(null);
+	// City/country resolved from GMaps import; overrides hardcoded constants.
+	let importedCity = $state<string | null>(null);
+	let importedCountry = $state<string | null>(null);
+	// Working hours from GMaps import ({"Monday":"9:00 AM – 9:00 PM",...}).
+	let importedWorkingHours = $state<Record<string, string> | null>(null);
 
-	function handleCountryChange() {
-		city = '';
+	async function importFromGmaps() {
+		if (!gmapsURL.trim()) return;
+		isImporting = true;
+		try {
+			const resp = await authFetch('/me/clubs/parse-gmaps', {
+				method: 'POST',
+				headers: { 'Content-Type': 'application/json' },
+				body: JSON.stringify({ url: gmapsURL.trim() })
+			});
+			if (resp.ok) {
+				const { data } = await resp.json();
+				if (data.name)    name    = data.name;
+				if (data.address) address = data.address;
+				if (data.website) website = data.website;
+				if (data.phone)   phone   = formatUkrainianPhone(data.phone);
+				if (data.latitude)  importedLat = data.latitude;
+				if (data.longitude) importedLng = data.longitude;
+				// Use city/country from Google if the venue is outside Kyiv.
+			if (data.city)         importedCity         = data.city;
+			if (data.country)      importedCountry      = data.country;
+			if (data.working_hours && Object.keys(data.working_hours).length > 0) {
+				importedWorkingHours = data.working_hours;
+			}
+			importedPhotos = data.photos ?? [];
+				showGmapsInput = false;
+				gmapsURL = '';
+				toast.success($t('map.import_gmaps_success'));
+			} else {
+				const err = await resp.json().catch(() => ({}));
+				toast.error((err as { error?: string }).error || $t('map.import_gmaps_error'));
+			}
+		} catch {
+			toast.error($t('map.import_gmaps_error'));
+		} finally {
+			isImporting = false;
+		}
 	}
 
 	function handleClose() {
@@ -88,30 +102,69 @@
 	function resetForm() {
 		name = '';
 		address = '';
-		city = defaultCity || '';
-		country = defaultCountry || 'Україна';
 		website = '';
 		phone = '';
 		isSubmitting = false;
+		showGmapsInput = false;
+		gmapsURL = '';
+		importedPhotos = [];
+		importedLat = null;
+		importedLng = null;
+		importedCity = null;
+		importedCountry = null;
+		importedWorkingHours = null;
+	}
+
+	function handlePhoneInput(e: Event) {
+		const target = e.currentTarget as HTMLInputElement;
+		phone = formatUkrainianPhone(target.value);
+	}
+
+	function handlePhonePaste(e: ClipboardEvent) {
+		const text = e.clipboardData?.getData('text') ?? '';
+		if (!text) return;
+		e.preventDefault();
+		phone = formatUkrainianPhone(text);
 	}
 
 	async function handleSubmit(e: Event) {
 		e.preventDefault();
-		if (!name.trim() || !city.trim()) return;
+		if (!name.trim()) return;
 
 		isSubmitting = true;
 		try {
+			// Use Google-imported city/country if available, otherwise fall back to
+			// the locked Kyiv/Ukraine defaults.
+			const effectiveCountry = importedCountry ?? HARDCODED_COUNTRY;
+			const effectiveCity    = importedCity    ?? HARDCODED_CITY;
+
 			const body: Record<string, any> = {
 				name: name.trim(),
-				country: country.trim() || 'Ukraine',
-				city: city.trim(),
+				country: effectiveCountry,
+				city: effectiveCity,
 				address: address.trim(),
-				website: website.trim(),
-				phone: phone.trim()
+				website: website.trim() || undefined,
+				phone: phone.trim() || undefined,
+				working_hours: importedWorkingHours ?? undefined
 			};
+
+			// Coord priority: manual map pin > Google Maps import > server Nominatim geocoding.
+			// Do NOT pre-fill city centroid — the server will handle fallback and inform
+			// the user when only an approximate location was resolved.
 			if (coords) {
 				body.latitude = coords.lat;
 				body.longitude = coords.lng;
+			} else if (importedLat !== null && importedLng !== null) {
+				body.latitude = importedLat;
+				body.longitude = importedLng;
+			} else {
+				// Let the server geocode (or reject if address is absent/invalid).
+				body.latitude = 0;
+				body.longitude = 0;
+			}
+
+			if (importedPhotos.length > 0) {
+				body.photos = importedPhotos;
 			}
 
 			const resp = await authFetch('/clubs/register', {
@@ -122,14 +175,20 @@
 
 			if (resp.ok) {
 				const data = await resp.json();
-				const slug = data.data?.slug ?? data.slug ?? '';
-				// Auto-join so the creator appears as a member immediately
+				const club = data.data?.club ?? data.data ?? {};
+				const slug = club.slug ?? '';
+				// Warn the user if the server fell back to a city-centroid approximation.
+				if (data.data?.geocode_warning) {
+					toast(data.data.geocode_warning, { icon: '📍', duration: 6000 });
+				}
+				// Join as member + claim ownership so the creator can edit the club later.
 				if (slug) {
 					try {
 						await authFetch(`/clubs/${slug}/join`, { method: 'POST' });
-					} catch {
-						// non-fatal — page will still reload the clubs list
-					}
+					} catch { /* non-fatal */ }
+					try {
+						await authFetch(`/clubs/${slug}/claim`, { method: 'POST' });
+					} catch { /* non-fatal */ }
 				}
 				toast.success($t('map.create_club_success'));
 				resetForm();
@@ -159,7 +218,61 @@
 			</div>
 		{/if}
 
-		<form onsubmit={handleSubmit} class="flex flex-col gap-4">
+		<form id="create-club-form" onsubmit={handleSubmit} class="flex flex-col gap-4">
+			<!-- Google Maps import -->
+			{#if !showGmapsInput}
+				<button
+					type="button"
+					onclick={() => (showGmapsInput = true)}
+					class="flex items-center justify-center gap-2 rounded-[50px] py-2.5 text-[13px] font-semibold transition-opacity"
+					style="background: rgba(137,132,218,0.12); color: #8984da;"
+				>
+					<i class="fi fi-rr-link" style="font-size: 15px; line-height: 1;"></i>
+					{$t('map.import_from_gmaps')}
+				</button>
+			{:else}
+				<div class="flex flex-col gap-2">
+					<input
+						type="url"
+						bind:value={gmapsURL}
+						placeholder={$t('map.import_gmaps_placeholder')}
+						class="mu-text-primary mu-card mu-border w-full rounded-[12px] px-4 py-3 text-[14px] font-medium outline-none"
+						style="border-width: 1px; border-style: solid;"
+					/>
+					<div class="flex gap-2">
+						<button
+							type="button"
+							onclick={() => { showGmapsInput = false; gmapsURL = ''; }}
+							class="flex-1 rounded-[50px] py-2.5 text-[13px] font-semibold"
+							style="background: rgba(174,180,188,0.15); color: #aeb4bc;"
+						>Скасувати</button>
+						<button
+							type="button"
+							onclick={importFromGmaps}
+							disabled={isImporting || !gmapsURL.trim()}
+							class="flex flex-1 items-center justify-center gap-2 rounded-[50px] py-2.5 text-[13px] font-semibold text-white transition-opacity disabled:opacity-50"
+							style="background: #8984da;"
+						>
+							{#if isImporting}
+								<div class="h-4 w-4 animate-spin rounded-full border-2 border-white/30" style="border-top-color: white;"></div>
+								{$t('map.import_gmaps_importing')}
+							{:else}
+								{$t('map.import_from_gmaps')}
+							{/if}
+						</button>
+					</div>
+				</div>
+			{/if}
+
+			<!-- Imported photos preview -->
+			{#if importedPhotos.length > 0}
+				<div class="flex gap-2 overflow-x-auto pb-1" style="-webkit-overflow-scrolling: touch;">
+					{#each importedPhotos as url}
+						<img src={url} alt="Фото клубу" loading="lazy" decoding="async" class="h-[72px] w-[72px] flex-shrink-0 rounded-[10px] object-cover" />
+					{/each}
+				</div>
+			{/if}
+
 			<!-- Name -->
 			<div class="flex flex-col gap-1.5">
 				<label class="mu-text-primary text-[13px] font-semibold" for="club-name">
@@ -170,63 +283,58 @@
 					bind:value={name}
 					type="text"
 					required
+					minlength="2"
+					maxlength="255"
 					placeholder="Salsa Studio Kyiv"
 					class="mu-text-primary mu-card mu-border w-full rounded-[12px] px-4 py-3 text-[14px] font-medium outline-none"
 					style="border-width: 1px; border-style: solid;"
 				/>
 			</div>
 
-		<!-- Country -->
+		<!-- Country (locked to Ukraine for v1) -->
 		<div class="flex flex-col gap-1.5">
 			<label class="mu-text-primary text-[13px] font-semibold" for="club-country">
 				Країна <span style="color: #e05252;">*</span>
 			</label>
-			<div class="select-wrapper mu-card mu-border rounded-[12px]" style="border-width: 1px; border-style: solid;">
-				<select
-					id="club-country"
-					bind:value={country}
-					onchange={handleCountryChange}
-					class="mu-text-primary w-full bg-transparent px-4 py-3 text-[14px] font-medium outline-none"
-				>
-					{#each COUNTRIES as c}
-						<option value={c}>{c}</option>
-					{/each}
-				</select>
-				<i class="fi fi-rr-angle-down select-arrow" style="color: #aeb4bc;"></i>
+			<div
+				id="club-country"
+				class="mu-card mu-border flex items-center justify-between rounded-[12px] px-4 py-3"
+				style="border-width: 1px; border-style: solid; opacity: 0.85;"
+			>
+				<span class="mu-text-primary text-[14px] font-medium">{HARDCODED_COUNTRY_LABEL}</span>
+				<i class="fi fi-rr-lock" style="font-size: 13px; color: #aeb4bc;"></i>
 			</div>
+			<!-- FUTURE (multi-country): restore the country dropdown when expanding beyond UA.
+			<div class="select-wrapper mu-card mu-border rounded-[12px] px-4 py-3" style="border-width:1px;border-style:solid;">
+				<select bind:value={selectedCountry} onchange={() => (selectedCity = '')}>
+					{#each COUNTRIES as c}<option value={c}>{c}</option>{/each}
+				</select>
+				<i class="fi fi-rr-angle-small-down select-arrow"></i>
+			</div>
+			-->
 		</div>
 
-		<!-- City -->
+		<!-- City (locked to Kyiv for v1) -->
 		<div class="flex flex-col gap-1.5">
 			<label class="mu-text-primary text-[13px] font-semibold" for="club-city">
 				{$t('map.city')} <span style="color: #e05252;">*</span>
 			</label>
-			{#if CITIES_BY_COUNTRY[country]}
-				<div class="select-wrapper mu-card mu-border rounded-[12px]" style="border-width: 1px; border-style: solid;">
-					<select
-						id="club-city"
-						bind:value={city}
-						required
-						class="mu-text-primary w-full bg-transparent px-4 py-3 text-[14px] font-medium outline-none"
-					>
-						<option value="">Оберіть місто</option>
-						{#each CITIES_BY_COUNTRY[country] as c}
-							<option value={c}>{c}</option>
-						{/each}
-					</select>
-					<i class="fi fi-rr-angle-down select-arrow" style="color: #aeb4bc;"></i>
-				</div>
-			{:else}
-				<input
-					id="club-city"
-					bind:value={city}
-					type="text"
-					required
-					placeholder="Місто"
-					class="mu-text-primary mu-card mu-border w-full rounded-[12px] px-4 py-3 text-[14px] font-medium outline-none"
-					style="border-width: 1px; border-style: solid;"
-				/>
-			{/if}
+			<div
+				id="club-city"
+				class="mu-card mu-border flex items-center justify-between rounded-[12px] px-4 py-3"
+				style="border-width: 1px; border-style: solid; opacity: 0.85;"
+			>
+				<span class="mu-text-primary text-[14px] font-medium">{HARDCODED_CITY_LABEL}</span>
+				<i class="fi fi-rr-lock" style="font-size: 13px; color: #aeb4bc;"></i>
+			</div>
+			<!-- FUTURE (multi-country): restore the city dropdown when expanding beyond UA.
+			<div class="select-wrapper mu-card mu-border rounded-[12px] px-4 py-3" style="border-width:1px;border-style:solid;">
+				<select bind:value={selectedCity}>
+					{#each (CITIES_BY_COUNTRY[selectedCountry] ?? []) as c}<option value={c}>{c}</option>{/each}
+				</select>
+				<i class="fi fi-rr-angle-small-down select-arrow"></i>
+			</div>
+			-->
 		</div>
 
 		<!-- Address -->
@@ -238,6 +346,7 @@
 					id="club-address"
 					bind:value={address}
 					type="text"
+					maxlength="500"
 					placeholder="вул. Хрещатик, 1"
 					class="mu-text-primary mu-card mu-border w-full rounded-[12px] px-4 py-3 text-[14px] font-medium outline-none"
 					style="border-width: 1px; border-style: solid;"
@@ -253,6 +362,7 @@
 					id="club-website"
 					bind:value={website}
 					type="url"
+					maxlength="500"
 					placeholder="https://example.com"
 					class="mu-text-primary mu-card mu-border w-full rounded-[12px] px-4 py-3 text-[14px] font-medium outline-none"
 					style="border-width: 1px; border-style: solid;"
@@ -266,30 +376,38 @@
 				</label>
 				<input
 					id="club-phone"
-					bind:value={phone}
+					value={phone}
+					oninput={handlePhoneInput}
+					onpaste={handlePhonePaste}
 					type="tel"
-					placeholder="+380 50 123 4567"
+					inputmode="tel"
+					autocomplete="tel"
+					placeholder="+380 50 123 45 67"
 					class="mu-text-primary mu-card mu-border w-full rounded-[12px] px-4 py-3 text-[14px] font-medium outline-none"
 					style="border-width: 1px; border-style: solid;"
 				/>
 			</div>
 
-			<button
-				type="submit"
-				disabled={isSubmitting || !name.trim() || !city.trim()}
-				class="mt-2 flex h-[46px] w-full items-center justify-center gap-2 rounded-[65px] text-[15px] font-bold text-white transition-opacity disabled:opacity-50"
-				style="background: #8984da;"
-			>
-				{#if isSubmitting}
-					<div class="h-[18px] w-[18px] animate-spin rounded-full border-2 border-white/30" style="border-top-color: white;"></div>
-					{$t('map.create_club_creating')}
-				{:else}
-					<i class="fi fi-rr-add" style="font-size: 18px; line-height: 1;"></i>
-					{$t('map.create_club_submit')}
-				{/if}
-			</button>
-		</form>
+			</form>
 	</div>
+
+	{#snippet footer()}
+		<button
+			type="submit"
+			form="create-club-form"
+			disabled={isSubmitting || !name.trim()}
+			class="flex h-[46px] w-full items-center justify-center gap-2 rounded-[65px] text-[15px] font-bold text-white transition-opacity disabled:opacity-50"
+			style="background: #8984da;"
+		>
+			{#if isSubmitting}
+				<div class="h-[18px] w-[18px] animate-spin rounded-full border-2 border-white/30" style="border-top-color: white;"></div>
+				{$t('map.create_club_creating')}
+			{:else}
+				<i class="fi fi-rr-add" style="font-size: 18px; line-height: 1;"></i>
+				{$t('map.create_club_submit')}
+			{/if}
+		</button>
+	{/snippet}
 </BottomSheet>
 
 <style>

@@ -19,10 +19,12 @@ const config = {
 		{ locale: 'en', key: 'swipe', loader: async () => (await import('./en/swipe.json')).default },
 		{ locale: 'en', key: 'chats', routes: ['/chats', '/chats/[id]'], loader: async () => (await import('./en/chats.json')).default },
 		{ locale: 'en', key: 'marketplace', routes: ['/marketplace'], loader: async () => (await import('./en/marketplace.json')).default },
-		{ locale: 'en', key: 'settings', routes: ['/settings', '/settings/profile', '/settings/subscription', '/settings/clubs'], loader: async () => (await import('./en/settings.json')).default },
+		{ locale: 'en', key: 'settings', loader: async () => (await import('./en/settings.json')).default },
 		{ locale: 'en', key: 'profile', routes: ['/profiles/[userId]'], loader: async () => (await import('./en/profile.json')).default },
 		{ locale: 'en', key: 'filters', loader: async () => (await import('./en/filters.json')).default },
 		{ locale: 'en', key: 'onboarding', routes: ['/onboarding'], loader: async () => (await import('./en/onboarding.json')).default },
+		{ locale: 'en', key: 'business', routes: ['/business'], loader: async () => (await import('./en/business.json')).default },
+		{ locale: 'en', key: 'trainers', loader: async () => (await import('./en/trainers.json')).default },
 
 		// --- Ukrainian ---
 		{ locale: 'uk', key: 'common', loader: async () => (await import('./uk/common.json')).default },
@@ -34,10 +36,12 @@ const config = {
 		{ locale: 'uk', key: 'swipe', loader: async () => (await import('./uk/swipe.json')).default },
 		{ locale: 'uk', key: 'chats', routes: ['/chats', '/chats/[id]'], loader: async () => (await import('./uk/chats.json')).default },
 		{ locale: 'uk', key: 'marketplace', routes: ['/marketplace'], loader: async () => (await import('./uk/marketplace.json')).default },
-		{ locale: 'uk', key: 'settings', routes: ['/settings', '/settings/profile', '/settings/subscription', '/settings/clubs'], loader: async () => (await import('./uk/settings.json')).default },
+		{ locale: 'uk', key: 'settings', loader: async () => (await import('./uk/settings.json')).default },
 		{ locale: 'uk', key: 'profile', routes: ['/profiles/[userId]'], loader: async () => (await import('./uk/profile.json')).default },
 		{ locale: 'uk', key: 'filters', loader: async () => (await import('./uk/filters.json')).default },
 		{ locale: 'uk', key: 'onboarding', routes: ['/onboarding'], loader: async () => (await import('./uk/onboarding.json')).default },
+		{ locale: 'uk', key: 'business', routes: ['/business'], loader: async () => (await import('./uk/business.json')).default },
+		{ locale: 'uk', key: 'trainers', loader: async () => (await import('./uk/trainers.json')).default },
 	],
 };
 

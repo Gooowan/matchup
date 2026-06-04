@@ -9,10 +9,15 @@ import (
 	recgen "github.com/Gooowan/matchup/modules/recommendation/gen"
 )
 
+// RankedRow pairs a profile row with the tier that produced it.
+type RankedRow struct {
+	Row    recgen.FindNearbyVisibleProfilesRow
+	Source string
+}
+
 // RecommendationProvider is the interface FeedService uses to get feed candidates.
-// It returns rows from FindNearbyVisibleProfiles for backward compat with the controller.
 type RecommendationProvider interface {
-	GetFeed(ctx context.Context, params FeedParams) ([]recgen.FindNearbyVisibleProfilesRow, error)
+	GetFeed(ctx context.Context, params FeedParams) ([]RankedRow, error)
 }
 
 // FeedParams carries everything needed to produce a feed for one user.
@@ -25,6 +30,8 @@ type FeedParams struct {
 	Prefs      *recgen.UserPreference
 	ExcludeIDs []pgtype.UUID
 	Limit      int32
+	// MyProfile holds the current user's own profile data for Tier3 mutual-match.
+	MyProfile  *recommendation.MyProfileData
 }
 
 // TierRecommendationProvider delegates to the 3-tier recommendation engine
@@ -38,7 +45,7 @@ func NewTierRecommendationProvider(r *recommendation.Recommender, svc *recommend
 	return &TierRecommendationProvider{Recommender: r, RecommendationSvc: svc}
 }
 
-func (p *TierRecommendationProvider) GetFeed(ctx context.Context, params FeedParams) ([]recgen.FindNearbyVisibleProfilesRow, error) {
+func (p *TierRecommendationProvider) GetFeed(ctx context.Context, params FeedParams) ([]RankedRow, error) {
 	recParams := recommendation.FeedParams{
 		UserID:     params.UserID,
 		Country:    params.Country,
@@ -47,6 +54,7 @@ func (p *TierRecommendationProvider) GetFeed(ctx context.Context, params FeedPar
 		UserClubs:  params.UserClubs,
 		ExcludeIDs: params.ExcludeIDs,
 		Limit:      params.Limit,
+		MyProfile:  params.MyProfile,
 	}
 
 	// Map preference columns to FilterParams
@@ -107,7 +115,7 @@ func (p *TierRecommendationProvider) GetFeed(ctx context.Context, params FeedPar
 	}
 
 	// Fetch full profile rows for each candidate to return enriched data
-	rows := make([]recgen.FindNearbyVisibleProfilesRow, 0, len(candidates))
+	rows := make([]RankedRow, 0, len(candidates))
 	for _, c := range candidates {
 		profile, err := p.RecommendationSvc.Queries.GetProfileByUserID(ctx, c.UserID)
 		if err != nil {
@@ -115,26 +123,29 @@ func (p *TierRecommendationProvider) GetFeed(ctx context.Context, params FeedPar
 		}
 		// GetProfileByUserID queries profiles table only; fetch profile_data from users via GetProfilePreview
 		preview, _ := p.RecommendationSvc.Queries.GetProfilePreview(ctx, c.UserID)
-		rows = append(rows, recgen.FindNearbyVisibleProfilesRow{
-			ID:              profile.ID,
-			UserID:          profile.UserID,
-			DanceStyles:     profile.DanceStyles,
-			Metadata:        profile.Metadata,
-			Data:            profile.Data,
-			Latitude:        profile.Latitude,
-			Longitude:       profile.Longitude,
-			Gender:          profile.Gender,
-			BirthDate:       profile.BirthDate,
-			HeightCm:        profile.HeightCm,
-			Goal:            profile.Goal,
-			Program:         profile.Program,
-			Categories:      profile.Categories,
-			Country:         profile.Country,
-			City:            profile.City,
-			ReadyToRelocate: profile.ReadyToRelocate,
-			ReadyToFinance:  profile.ReadyToFinance,
-			DistanceKm:      c.DistKm,
-			ProfileData:     preview.ProfileData,
+		rows = append(rows, RankedRow{
+			Source: c.Source,
+			Row: recgen.FindNearbyVisibleProfilesRow{
+				ID:              profile.ID,
+				UserID:          profile.UserID,
+				DanceStyles:     profile.DanceStyles,
+				Metadata:        profile.Metadata,
+				Data:            profile.Data,
+				Latitude:        profile.Latitude,
+				Longitude:       profile.Longitude,
+				Gender:          profile.Gender,
+				BirthDate:       profile.BirthDate,
+				HeightCm:        profile.HeightCm,
+				Goal:            profile.Goal,
+				Program:         profile.Program,
+				Categories:      profile.Categories,
+				Country:         profile.Country,
+				City:            profile.City,
+				ReadyToRelocate: profile.ReadyToRelocate,
+				ReadyToFinance:  profile.ReadyToFinance,
+				DistanceKm:      c.DistKm,
+				ProfileData:     preview.ProfileData,
+			},
 		})
 	}
 	return rows, nil

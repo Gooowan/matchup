@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/Gooowan/matchup/modules/core/types"
+	corehttp "github.com/Gooowan/matchup/modules/core/http"
 	"github.com/Gooowan/matchup/modules/core/utils"
 	filesgen "github.com/Gooowan/matchup/modules/files/gen"
 )
@@ -164,8 +165,7 @@ func (c *FileAdminController) UpdateMaterialName(ctx *gin.Context) {
 		Name string `json:"name" binding:"required,min=1,max=255"`
 	}
 
-	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, types.Resp{Error: err.Error()})
+	if !corehttp.BindJSON(ctx, &req) {
 		return
 	}
 
@@ -193,8 +193,7 @@ func (c *FileAdminController) UpdateMaterialVisibility(ctx *gin.Context) {
 		Visible bool `json:"visible"`
 	}
 
-	if err := ctx.ShouldBindJSON(&req); err != nil {
-		ctx.JSON(http.StatusBadRequest, types.Resp{Error: err.Error()})
+	if !corehttp.BindJSON(ctx, &req) {
 		return
 	}
 

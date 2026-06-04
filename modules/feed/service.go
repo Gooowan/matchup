@@ -3,6 +3,7 @@ package feed
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -11,6 +12,7 @@ import (
 
 	"github.com/Gooowan/matchup/modules/chat"
 	"github.com/Gooowan/matchup/modules/clubs"
+	"github.com/Gooowan/matchup/modules/core/geocoding"
 	"github.com/Gooowan/matchup/modules/core/logging"
 	"github.com/Gooowan/matchup/modules/core/metrics"
 	"github.com/Gooowan/matchup/modules/core/tracing"
@@ -46,6 +48,8 @@ func NewFeedService(
 	recommendationSvc *recommendation.RecommendationService,
 	clubSvc *clubs.ClubService,
 ) *FeedService {
+	// Tiers map: Tier3 = mutual-match, Tier2 = one-way filter, Tier1 = pure distance.
+	// The Recommender runs them in order: Tier3 → Tier2 → Tier1.
 	tier1 := recTier1.NewProvider(recommendationSvc.Queries)
 	tier2 := recTier2.NewProvider(recommendationSvc.Queries)
 	tier3 := recTier3.NewProvider(recommendationSvc.Queries)
@@ -62,17 +66,47 @@ func NewFeedService(
 	}
 }
 
-func (s *FeedService) GetFeed(ctx context.Context, userID pgtype.UUID, limit int32) ([]recgen.FindNearbyVisibleProfilesRow, error) {
+// ErrNoProfile is returned by GetFeed when the requesting user has no
+// recommendation profile, so callers can surface a "complete your profile"
+// prompt instead of a silent empty deck.
+var ErrNoProfile = errors.New("user has no profile")
+
+func (s *FeedService) GetFeed(ctx context.Context, userID pgtype.UUID, limit int32) ([]RankedRow, error) {
 	ctx, span := tracing.StartDBSpan(ctx, "GetFeed", "profiles")
 	defer span.End()
 
 	profile, err := s.RecommendationSvc.Queries.GetProfileByUserID(ctx, userID)
 	if err != nil {
-		return []recgen.FindNearbyVisibleProfilesRow{}, nil
+		logging.FromContext(ctx).Warn("feed: viewer has no profile, returning empty feed", "user_id", userID.String())
+		return nil, ErrNoProfile
 	}
 
-	if !profile.Latitude.Valid || !profile.Longitude.Valid {
-		return []recgen.FindNearbyVisibleProfilesRow{}, nil
+	// Reference coordinates are club-based: use the user's primary club coords,
+	// then their other clubs' centroid, then city centroid — so distance is club-to-club.
+	var lat, lng float64
+	var refSet bool
+	if profile.PrimaryClubID.Valid {
+		if rawClubs, err2 := s.ClubSvc.GetUserClubs(ctx, userID); err2 == nil {
+			for _, c := range rawClubs {
+				if c.ID == profile.PrimaryClubID {
+					lat, lng = c.Latitude, c.Longitude
+					refSet = (lat != 0 || lng != 0)
+					break
+				}
+			}
+		}
+	}
+	if !refSet {
+		// Fall back to city centroid so the feed always runs.
+		country := ""
+		city := ""
+		if profile.Country.Valid {
+			country = profile.Country.String
+		}
+		if profile.City.Valid {
+			city = profile.City.String
+		}
+		lat, lng = geocoding.CityLatLng(country, city)
 	}
 
 	// build exclude list: swiped + blocked
@@ -101,10 +135,10 @@ func (s *FeedService) GetFeed(ctx context.Context, userID pgtype.UUID, limit int
 		country = profile.Country.String
 	}
 
-	// Fetch clubs the user belongs to so tier-1 circles 1 and 2 can run.
+	// Collect all clubs the user belongs to (for any future near-club logic).
 	var userClubs []recommendation.UserClub
 	if s.ClubSvc != nil {
-		if rawClubs, err := s.ClubSvc.GetUserClubs(ctx, userID); err == nil {
+		if rawClubs, err2 := s.ClubSvc.GetUserClubs(ctx, userID); err2 == nil {
 			for _, c := range rawClubs {
 				userClubs = append(userClubs, recommendation.UserClub{
 					ID:        c.ID,
@@ -115,15 +149,31 @@ func (s *FeedService) GetFeed(ctx context.Context, userID pgtype.UUID, limit int
 		}
 	}
 
+	myProfile := &recommendation.MyProfileData{
+		Gender:     profile.Gender,
+		BirthDate:  profile.BirthDate,
+		HeightCm:   profile.HeightCm,
+		Goal:       profile.Goal,
+		Program:    profile.Program,
+		Categories: profile.Categories,
+	}
+	if profile.City.Valid {
+		myProfile.City = profile.City.String
+	}
+	if profile.Country.Valid {
+		myProfile.Country = profile.Country.String
+	}
+
 	return s.Recommender.GetFeed(ctx, FeedParams{
 		UserID:     userID,
-		Latitude:   profile.Latitude.Float64,
-		Longitude:  profile.Longitude.Float64,
+		Latitude:   lat,
+		Longitude:  lng,
 		Country:    country,
 		UserClubs:  userClubs,
 		Prefs:      &prefs,
 		ExcludeIDs: excludeIDs,
 		Limit:      limit,
+		MyProfile:  myProfile,
 	})
 }
 
@@ -172,14 +222,23 @@ func (s *FeedService) Swipe(ctx context.Context, fromUserID, toUserID pgtype.UUI
 		return nil, fmt.Errorf("failed to commit: %w", err)
 	}
 
-	// Create chat on mutual match (separate from match transaction)
+	// Create chat on mutual match (best-effort; match rows are already committed).
+	// A chat creation failure must not prevent the match from being surfaced to the
+	// user — they can still navigate to the chat later via the inbox.
 	if result.IsMutualMatch {
 		u1, u2 := orderUUIDs(fromUserID, toUserID)
-		chatID, err := s.ChatSvc.CreateChat(ctx, u1, u2)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create chat: %w", err)
+		chatID, chatErr := s.ChatSvc.CreateChat(ctx, u1, u2)
+		if chatErr != nil {
+			logging.FromContext(ctx).Error("mutual match: failed to create chat (match rows committed)",
+				"error", chatErr,
+				"user1", u1.String(),
+				"user2", u2.String(),
+			)
+			// Continue without chat_id — frontend will show the match popup
+			// and the user can open the chat from the inbox.
+		} else {
+			result.ChatID = &chatID
 		}
-		result.ChatID = &chatID
 
 		// Notify the other user who liked first.
 		if s.PushSvc != nil {

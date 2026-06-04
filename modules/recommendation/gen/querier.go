@@ -17,8 +17,13 @@ type Querier interface {
 	FindNearbyVisibleProfiles(ctx context.Context, arg FindNearbyVisibleProfilesParams) ([]FindNearbyVisibleProfilesRow, error)
 	GetCountryWideProfiles(ctx context.Context, arg GetCountryWideProfilesParams) ([]GetCountryWideProfilesRow, error)
 	GetLikeHistory(ctx context.Context, userID pgtype.UUID) ([]types.JSONB, error)
+	// Returns dancer candidates that pass MY filter preferences AND whose preferences
+	// also accept MY profile — club-to-club distance ordered (mutual match).
+	// Candidate must have preferences recorded so we can check them
+	GetMutualMatchProfiles(ctx context.Context, arg GetMutualMatchProfilesParams) ([]GetMutualMatchProfilesRow, error)
 	GetNearbyClubProfiles(ctx context.Context, arg GetNearbyClubProfilesParams) ([]GetNearbyClubProfilesRow, error)
 	GetPreferences(ctx context.Context, userID pgtype.UUID) (UserPreference, error)
+	GetProfileAccountType(ctx context.Context, userID pgtype.UUID) (string, error)
 	GetProfileByUserID(ctx context.Context, userID pgtype.UUID) (Profile, error)
 	GetProfilePreview(ctx context.Context, userID pgtype.UUID) (GetProfilePreviewRow, error)
 	GetProfilesByUserIDs(ctx context.Context, userIds []pgtype.UUID) ([]GetProfilesByUserIDsRow, error)
@@ -26,6 +31,8 @@ type Querier interface {
 	GetSameClubProfiles(ctx context.Context, arg GetSameClubProfilesParams) ([]GetSameClubProfilesRow, error)
 	GetSimilarUsers(ctx context.Context, userID pgtype.UUID) ([]GetSimilarUsersRow, error)
 	InsertLikeLog(ctx context.Context, arg InsertLikeLogParams) error
+	// Returns all visible trainer profiles for the trainers feed tab.
+	ListTrainers(ctx context.Context, arg ListTrainersParams) ([]ListTrainersRow, error)
 	SetProfilePrimaryClub(ctx context.Context, arg SetProfilePrimaryClubParams) error
 	UpdateProfile(ctx context.Context, arg UpdateProfileParams) error
 	UpdateProfileMetadata(ctx context.Context, arg UpdateProfileMetadataParams) error

@@ -14,9 +14,9 @@ import (
 const createChat = `-- name: CreateChat :one
 INSERT INTO chats(user1_id, user2_id)
     VALUES ($1, $2)
-ON CONFLICT (user1_id, user2_id) DO UPDATE
+ON CONFLICT (user1_id, user2_id) WHERE club_id IS NULL DO UPDATE
     SET user1_id = EXCLUDED.user1_id
-RETURNING id, user1_id, user2_id, created_at
+RETURNING id, user1_id, user2_id, club_id, created_at
 `
 
 type CreateChatParams struct {
@@ -31,13 +31,40 @@ func (q *Queries) CreateChat(ctx context.Context, arg CreateChatParams) (Chat, e
 		&i.ID,
 		&i.User1ID,
 		&i.User2ID,
+		&i.ClubID,
+		&i.CreatedAt,
+	)
+	return i, err
+}
+
+const createClubChat = `-- name: CreateClubChat :one
+INSERT INTO chats(user1_id, club_id)
+    VALUES ($1, $2)
+ON CONFLICT (user1_id, club_id) WHERE club_id IS NOT NULL DO UPDATE
+    SET user1_id = EXCLUDED.user1_id
+RETURNING id, user1_id, user2_id, club_id, created_at
+`
+
+type CreateClubChatParams struct {
+	User1ID pgtype.UUID `db:"user1_id" json:"user1_id"`
+	ClubID  pgtype.UUID `db:"club_id" json:"club_id"`
+}
+
+func (q *Queries) CreateClubChat(ctx context.Context, arg CreateClubChatParams) (Chat, error) {
+	row := q.db.QueryRow(ctx, createClubChat, arg.User1ID, arg.ClubID)
+	var i Chat
+	err := row.Scan(
+		&i.ID,
+		&i.User1ID,
+		&i.User2ID,
+		&i.ClubID,
 		&i.CreatedAt,
 	)
 	return i, err
 }
 
 const getChat = `-- name: GetChat :one
-SELECT id, user1_id, user2_id, created_at FROM chats WHERE id = $1
+SELECT id, user1_id, user2_id, club_id, created_at FROM chats WHERE id = $1
 `
 
 func (q *Queries) GetChat(ctx context.Context, chatID pgtype.UUID) (Chat, error) {
@@ -47,13 +74,14 @@ func (q *Queries) GetChat(ctx context.Context, chatID pgtype.UUID) (Chat, error)
 		&i.ID,
 		&i.User1ID,
 		&i.User2ID,
+		&i.ClubID,
 		&i.CreatedAt,
 	)
 	return i, err
 }
 
 const getChatByUsers = `-- name: GetChatByUsers :one
-SELECT id, user1_id, user2_id, created_at FROM chats
+SELECT id, user1_id, user2_id, club_id, created_at FROM chats
 WHERE (user1_id = $1 AND user2_id = $2)
    OR (user1_id = $2 AND user2_id = $1)
 `
@@ -70,6 +98,7 @@ func (q *Queries) GetChatByUsers(ctx context.Context, arg GetChatByUsersParams) 
 		&i.ID,
 		&i.User1ID,
 		&i.User2ID,
+		&i.ClubID,
 		&i.CreatedAt,
 	)
 	return i, err
@@ -77,7 +106,7 @@ func (q *Queries) GetChatByUsers(ctx context.Context, arg GetChatByUsersParams) 
 
 const listUserChats = `-- name: ListUserChats :many
 SELECT
-    c.id, c.user1_id, c.user2_id, c.created_at,
+    c.id, c.user1_id, c.user2_id, c.club_id, c.created_at,
     CASE WHEN c.user1_id = $1 THEN c.user2_id ELSE c.user1_id END AS other_user_id
 FROM chats c
 WHERE c.user1_id = $1 OR c.user2_id = $1
@@ -88,6 +117,7 @@ type ListUserChatsRow struct {
 	ID          pgtype.UUID      `db:"id" json:"id"`
 	User1ID     pgtype.UUID      `db:"user1_id" json:"user1_id"`
 	User2ID     pgtype.UUID      `db:"user2_id" json:"user2_id"`
+	ClubID      pgtype.UUID      `db:"club_id" json:"club_id"`
 	CreatedAt   pgtype.Timestamp `db:"created_at" json:"created_at"`
 	OtherUserID interface{}      `db:"other_user_id" json:"other_user_id"`
 }
@@ -105,6 +135,7 @@ func (q *Queries) ListUserChats(ctx context.Context, userID pgtype.UUID) ([]List
 			&i.ID,
 			&i.User1ID,
 			&i.User2ID,
+			&i.ClubID,
 			&i.CreatedAt,
 			&i.OtherUserID,
 		); err != nil {

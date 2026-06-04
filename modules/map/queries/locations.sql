@@ -28,6 +28,7 @@ SELECT
         sin(radians(ul.latitude))
     ))::double precision AS distance_km
 FROM user_locations ul
+JOIN profiles p ON p.user_id = ul.user_id AND p.visible = true
 WHERE ul.user_id != @user_id
 ORDER BY distance_km ASC
 LIMIT @max_results;
@@ -47,6 +48,7 @@ SELECT user_id, latitude, longitude, updated_at, distance_km FROM (
             sin(radians(ul.latitude))
         ))::double precision AS distance_km
     FROM user_locations ul
+    JOIN profiles p ON p.user_id = ul.user_id AND p.visible = true
     WHERE ul.user_id != @user_id
 ) sub
 WHERE sub.distance_km <= @radius_km::double precision
