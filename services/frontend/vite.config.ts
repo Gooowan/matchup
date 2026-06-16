@@ -3,7 +3,35 @@ import { sveltekit } from '@sveltejs/kit/vite';
 import svg from '@poppanator/sveltekit-svg';
 import { sentryVitePlugin } from '@sentry/vite-plugin';
 
-import { defineConfig } from 'vite';
+import { defineConfig, type PluginOption } from 'vite';
+
+const plugins: PluginOption[] = [
+	tailwindcss(),
+	sveltekit(),
+	svg({
+		type: 'component',
+		includePaths: ['./src/lib/assets/svg'],
+		svgoOptions: {
+			multipass: true,
+			plugins: [
+				{
+					name: 'preset-default',
+					params: { overrides: { removeViewBox: false } }
+				}
+			]
+		}
+	})
+];
+
+if (process.env.SENTRY_AUTH_TOKEN) {
+	plugins.push(
+		sentryVitePlugin({
+			authToken: process.env.SENTRY_AUTH_TOKEN,
+			org: process.env.SENTRY_ORG,
+			project: process.env.SENTRY_PROJECT ?? 'matchup-frontend'
+		})
+	);
+}
 
 export default defineConfig({
 	envDir: '../../',
@@ -28,29 +56,5 @@ export default defineConfig({
 			external: ['@capacitor/push-notifications']
 		}
 	},
-	plugins: [
-		tailwindcss(),
-		sveltekit(),
-		svg({
-			type: 'component',
-			includePaths: ['./src/lib/assets/svg'],
-			svgoOptions: {
-				multipass: true,
-				plugins: [
-					{
-						name: 'preset-default',
-						params: { overrides: { removeViewBox: false } }
-					}
-				]
-			}
-		}),
-		// Upload source maps to Sentry during CI builds only.
-		// Requires SENTRY_AUTH_TOKEN, SENTRY_ORG, SENTRY_PROJECT env vars.
-		process.env.SENTRY_AUTH_TOKEN &&
-			sentryVitePlugin({
-				authToken: process.env.SENTRY_AUTH_TOKEN,
-				org: process.env.SENTRY_ORG,
-				project: process.env.SENTRY_PROJECT ?? 'matchup-frontend'
-			})
-	].filter(Boolean)
+	plugins
 });

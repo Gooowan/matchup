@@ -343,37 +343,38 @@
 						<Pagination.Root
 							count={pagination.itemCount}
 							perPage={pagination.take}
-							page={pagination.page}
+							bind:page={pagination.page}
 							onPageChange={(page) => handlePageChange(page)}
-							let:pages
 						>
-							<Pagination.Content>
-								<Pagination.Item>
-									<Pagination.PrevButton>
-										<ChevronLeftIcon class="h-4 w-4" />
-										<span class="hidden sm:block">Previous</span>
-									</Pagination.PrevButton>
-								</Pagination.Item>
-								{#each pages as page (page.key)}
-									{#if page.type === 'ellipsis'}
-										<Pagination.Item>
-											<Pagination.Ellipsis />
-										</Pagination.Item>
-									{:else}
-										<Pagination.Item>
-											<Pagination.Link {page} isActive={pagination.page === page.value}>
-												{page.value}
-											</Pagination.Link>
-										</Pagination.Item>
-									{/if}
-								{/each}
-								<Pagination.Item>
-									<Pagination.NextButton>
-										<span class="hidden sm:block">Next</span>
-										<ChevronRightIcon class="h-4 w-4" />
-									</Pagination.NextButton>
-								</Pagination.Item>
-							</Pagination.Content>
+							{#snippet children({ pages, currentPage })}
+								<Pagination.Content>
+									<Pagination.Item>
+										<Pagination.PrevButton>
+											<ChevronLeftIcon class="h-4 w-4" />
+											<span class="hidden sm:block">Previous</span>
+										</Pagination.PrevButton>
+									</Pagination.Item>
+									{#each pages as page (page.key)}
+										{#if page.type === 'ellipsis'}
+											<Pagination.Item>
+												<Pagination.Ellipsis />
+											</Pagination.Item>
+										{:else}
+											<Pagination.Item>
+												<Pagination.Link {page} isActive={currentPage === page.value}>
+													{page.value}
+												</Pagination.Link>
+											</Pagination.Item>
+										{/if}
+									{/each}
+									<Pagination.Item>
+										<Pagination.NextButton>
+											<span class="hidden sm:block">Next</span>
+											<ChevronRightIcon class="h-4 w-4" />
+										</Pagination.NextButton>
+									</Pagination.Item>
+								</Pagination.Content>
+							{/snippet}
 						</Pagination.Root>
 					</div>
 				{/if}

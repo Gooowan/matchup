@@ -264,14 +264,20 @@
 				</div>
 			{/if}
 
-			<!-- Imported photos preview -->
-			{#if importedPhotos.length > 0}
-				<div class="flex gap-2 overflow-x-auto pb-1" style="-webkit-overflow-scrolling: touch;">
-					{#each importedPhotos as url}
-						<img src={url} alt="Фото клубу" loading="lazy" decoding="async" class="h-[72px] w-[72px] flex-shrink-0 rounded-[10px] object-cover" />
-					{/each}
-				</div>
-			{/if}
+		<!-- Imported photos preview -->
+		{#if importedPhotos.length > 0}
+			<div class="flex gap-2 overflow-x-auto pb-1" style="-webkit-overflow-scrolling: touch;">
+				{#each importedPhotos as photoUrl}
+					<img
+						src={photoUrl.startsWith('/') ? `${import.meta.env.VITE_API_URL}${photoUrl}` : photoUrl}
+						alt="Фото клубу"
+						loading="lazy"
+						decoding="async"
+						class="h-[72px] w-[72px] flex-shrink-0 rounded-[10px] object-cover"
+					/>
+				{/each}
+			</div>
+		{/if}
 
 			<!-- Name -->
 			<div class="flex flex-col gap-1.5">
@@ -409,23 +415,3 @@
 		</button>
 	{/snippet}
 </BottomSheet>
-
-<style>
-	.select-wrapper {
-		position: relative;
-		display: flex;
-		align-items: center;
-	}
-	.select-wrapper select {
-		-webkit-appearance: none;
-		appearance: none;
-		flex: 1;
-	}
-	.select-arrow {
-		position: absolute;
-		right: 14px;
-		font-size: 13px;
-		pointer-events: none;
-		line-height: 1;
-	}
-</style>

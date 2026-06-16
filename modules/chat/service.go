@@ -583,9 +583,17 @@ func normalizeAvatarInJSONB(pd types.JSONB) {
 	}
 }
 
-// normalizeURL rewrites legacy MinIO host prefixes to the current public endpoint.
+// normalizeURL rewrites legacy MinIO host prefixes to the current public endpoint,
+// and converts relative paths (e.g. /images/gphoto?ref=...) to absolute API URLs.
 func normalizeURL(url string) string {
 	if url == "" {
+		return url
+	}
+	// Relative path → prefix with APP_URL so clients can load it directly.
+	if strings.HasPrefix(url, "/") {
+		if appURL := os.Getenv("APP_URL"); appURL != "" {
+			return appURL + url
+		}
 		return url
 	}
 	pub := os.Getenv("MINIO_PUBLIC_ENDPOINT")

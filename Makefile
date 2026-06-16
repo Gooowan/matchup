@@ -1,4 +1,4 @@
-.PHONY: gen up down deps seed-profiles delete-user
+.PHONY: gen up down deps seed-profiles delete-user observability-up benchmark
 
 SHELL := /bin/sh
 
@@ -37,3 +37,14 @@ delete-user:
 	go run ./cmd/delete-user \
 		$(if $(EMAIL),--email=$(EMAIL),--id=$(ID)) \
 		$(if $(YES),--yes)
+
+observability-up:
+	chmod +x scripts/observability-up.sh
+	./scripts/observability-up.sh $(if $(PROD),--prod,)
+
+benchmark:
+	chmod +x scripts/benchmark.sh
+	@if [ -z "$(EMAIL)$(PASS)" ]; then \
+		echo "Usage: make benchmark EMAIL=user@example.com PASS=secret [API=https://...] [DURATION=2m]"; exit 1; \
+	fi
+	./scripts/benchmark.sh $(EMAIL) $(PASS) $(or $(API),http://localhost:8000) $(or $(DURATION),2m)

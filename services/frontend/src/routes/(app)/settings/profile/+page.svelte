@@ -532,6 +532,12 @@
 						bind:value={heightCm}
 						min="100"
 						max="250"
+						inputmode="numeric"
+						oninput={(e) => {
+							const el = e.currentTarget as HTMLInputElement;
+							if (el.value.length > 3) el.value = el.value.slice(0, 3);
+							if (el.value !== '' && Number(el.value) > 250) el.value = '250';
+						}}
 						class="w-[80px] bg-transparent text-right text-[14px] font-medium outline-none"
 						style="color: #8984da;"
 					/>

@@ -181,6 +181,57 @@
           "refId": "A"
         }
       ]
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": { "unit": "ms" },
+        "overrides": []
+      },
+      "gridPos": { "h": 6, "w": 24, "x": 0, "y": 22 },
+      "id": 10,
+      "title": "Feed Latency P95 (ms)",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(matchup_http_request_duration_seconds_bucket{route=\"/matchup/feed\"}[5m])) by (le)) * 1000",
+          "legendFormat": "feed P95",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "fieldConfig": {
+        "defaults": { "unit": "ms" },
+        "overrides": []
+      },
+      "gridPos": { "h": 6, "w": 24, "x": 0, "y": 28 },
+      "id": 11,
+      "title": "Key Routes P95 (ms)",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(matchup_http_request_duration_seconds_bucket{route=\"/matchup/feed\"}[5m])) by (le)) * 1000",
+          "legendFormat": "feed",
+          "refId": "A"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(matchup_http_request_duration_seconds_bucket{route=\"/user/profile\"}[5m])) by (le)) * 1000",
+          "legendFormat": "profile",
+          "refId": "B"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(matchup_http_request_duration_seconds_bucket{route=\"/chats\"}[5m])) by (le)) * 1000",
+          "legendFormat": "chats",
+          "refId": "C"
+        },
+        {
+          "expr": "histogram_quantile(0.95, sum(rate(matchup_http_request_duration_seconds_bucket{route=\"/map/nearby/count\"}[5m])) by (le)) * 1000",
+          "legendFormat": "map nearby",
+          "refId": "D"
+        }
+      ]
     }
   ],
   "refresh": "30s",

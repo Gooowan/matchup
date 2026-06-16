@@ -1,19 +1,28 @@
-# Docker Compose overlay for local observability stack.
-# Run alongside the main compose.yml:
-#   docker compose -f compose.yml -f compose.observability.yml up -d
+# Docker Compose overlay for observability (Prometheus, Grafana, Loki, Tempo, Promtail).
 #
-# Services:
-#   prometheus (172.71.0.20) — scrapes /metrics from API and cron
-#   grafana    (172.71.0.21) — dashboards at http://localhost:3001
-#   loki       (172.71.0.22) — log aggregation backend
-#   tempo      (172.71.0.23) — distributed tracing backend (OTLP HTTP :4318)
-#   promtail              — ships Docker container logs to Loki
+# Dev:
+#   ./scripts/observability-up.sh
+#
+# Prod:
+#   ./scripts/observability-up.sh --prod
+#
+# Services (static IPs on matchup-network):
+#   prometheus 172.71.0.24  — scrapes /metrics from api:8000 (bearer token file)
+#   grafana    172.71.0.21  — http://localhost:3001
+#   loki       172.71.0.22
+#   tempo      172.71.0.23  — OTLP HTTP :4318
+#   promtail   (dynamic)    — Docker logs → Loki
 
 services:
+  api:
+    environment:
+      OTEL_ENDPOINT: http://tempo:4318
+
   prometheus:
     image: prom/prometheus:v2.53.0
     volumes:
       - ./config/observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./secrets/metrics_token:/etc/prometheus/metrics_token:ro
       - prometheus_data:/prometheus
     command:
       - '--config.file=/etc/prometheus/prometheus.yml'
@@ -23,7 +32,7 @@ services:
     restart: unless-stopped
     networks:
       matchup-network:
-        ipv4_address: 172.71.0.20
+        ipv4_address: 172.71.0.24
 
   grafana:
     image: grafana/grafana:11.1.0

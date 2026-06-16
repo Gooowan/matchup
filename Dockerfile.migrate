@@ -1,4 +1,4 @@
-FROM golang:1.25.8-alpine AS schema-builder
+FROM golang:1.25.11-alpine AS schema-builder
 
 ENV GOMODCACHE=/go-cache/mod
 ENV GOCACHE=/go-cache/build

@@ -9,7 +9,10 @@
 
 	let { children } = $props();
 
-	let hideNav = $derived(/^\/chats\/[^/]+/.test(page.url.pathname));
+	let hideNav = $derived(
+		/^\/chats\/[^/]+/.test(page.url.pathname) ||
+		/^\/profiles\/[^/]+/.test(page.url.pathname)
+	);
 
 	// Routes that restricted (trainer/club) accounts are allowed to visit.
 	const RESTRICTED_ALLOWED_PREFIXES = ['/marketplace', '/chats', '/settings', '/business'];

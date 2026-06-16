@@ -1,0 +1,8 @@
+# Production overrides — replaces local build directives with pre-built GHCR images.
+# Usage: docker compose -f compose.yml -f compose.prod.yml <command>
+services:
+  api:
+    image: ghcr.io/gooowan/matchup/api:latest
+
+  migrate:
+    image: ghcr.io/gooowan/matchup/migrate:latest

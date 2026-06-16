@@ -79,6 +79,24 @@ else
 fi
 info "GRAFANA_PASSWORD written to $ENV_FILE"
 
+# ── 3b. Generate METRICS_TOKEN (required for /metrics + Prometheus scrape) ──
+if [[ -z "${METRICS_TOKEN:-}" ]] && [[ -f "$ENV_FILE" ]]; then
+    METRICS_TOKEN="$(grep -E '^METRICS_TOKEN=' "$ENV_FILE" 2>/dev/null | head -1 | cut -d= -f2- || true)"
+fi
+if [[ -z "${METRICS_TOKEN:-}" ]]; then
+    METRICS_TOKEN="$(openssl rand -hex 32)"
+    info "Generated METRICS_TOKEN"
+    if grep -q "^METRICS_TOKEN=" "$ENV_FILE" 2>/dev/null; then
+        sed -i "s/^METRICS_TOKEN=.*/METRICS_TOKEN=$METRICS_TOKEN/" "$ENV_FILE"
+    else
+        echo "METRICS_TOKEN=$METRICS_TOKEN" >> "$ENV_FILE"
+    fi
+fi
+mkdir -p "$REPO_DIR/secrets"
+printf '%s' "$METRICS_TOKEN" > "$REPO_DIR/secrets/metrics_token"
+chmod 644 "$REPO_DIR/secrets/metrics_token"
+info "METRICS_TOKEN written to $ENV_FILE and secrets/metrics_token"
+
 # ── 4. Ensure network exists ─────────────────────────────────
 if ! docker network inspect matchup-network &>/dev/null; then
     docker network create \
@@ -137,6 +155,12 @@ fi
 # ── 6. Create systemd service ────────────────────────────────
 info "Creating systemd service: matchup-observability..."
 
+COMPOSE_FLAGS="-f compose.yml"
+if [[ -f "$REPO_DIR/compose.prod.yml" ]]; then
+    COMPOSE_FLAGS="$COMPOSE_FLAGS -f compose.prod.yml"
+fi
+COMPOSE_FLAGS="$COMPOSE_FLAGS -f compose.observability.yml"
+
 cat > /etc/systemd/system/matchup-observability.service <<SYSTEMD
 [Unit]
 Description=MatchUp Observability Stack (Prometheus + Grafana + Loki + Tempo)
@@ -145,13 +169,12 @@ Requires=docker.service
 Wants=network-online.target
 
 [Service]
-Type=simple
+Type=oneshot
+RemainAfterExit=yes
 WorkingDirectory=$REPO_DIR
 EnvironmentFile=-$ENV_FILE
-ExecStart=/usr/bin/docker compose -f compose.yml -f compose.observability.yml up --remove-orphans
-ExecStop=/usr/bin/docker compose -f compose.yml -f compose.observability.yml down
-Restart=on-failure
-RestartSec=10
+ExecStart=$REPO_DIR/scripts/observability-up.sh --prod
+ExecStop=/usr/bin/docker compose $COMPOSE_FLAGS stop prometheus grafana loki tempo promtail
 StandardOutput=journal
 StandardError=journal
 
@@ -182,7 +205,10 @@ echo -e "  Start the stack:"
 echo -e "    ${YELLOW}systemctl start matchup-observability${NC}"
 echo ""
 echo -e "  Or manually:"
-echo -e "    ${YELLOW}cd $REPO_DIR && docker compose -f compose.yml -f compose.observability.yml up -d${NC}"
+echo -e "    ${YELLOW}cd $REPO_DIR && ./scripts/observability-up.sh --prod${NC}"
+echo ""
+echo -e "  Load test (before/after seed):"
+echo -e "    ${YELLOW}./scripts/benchmark.sh user@example.com password https://your-api-url 2m${NC}"
 echo ""
 echo -e "${GREEN}  IMPORTANT: Save the Grafana password shown above!${NC}"
 echo ""

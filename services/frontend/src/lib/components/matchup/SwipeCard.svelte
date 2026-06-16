@@ -9,6 +9,7 @@
 		name: string;
 		age: number;
 		photoUrl: string;
+		photos?: string[];    // all media photos; photoUrl is used as fallback
 		tags: string[];       // e.g. ["Ballroom", "Pro", "1.75 cm"]
 		location: string;
 		school?: string;
@@ -46,6 +47,23 @@
 	let startX = 0;
 	let startY = 0;
 	let cardEl: HTMLElement;
+
+	// Photo gallery
+	let activePhotoIndex = $state(0);
+	let allPhotos = $derived(
+		profile.photos && profile.photos.length > 0
+			? profile.photos
+			: profile.photoUrl
+				? [profile.photoUrl]
+				: []
+	);
+	let currentPhoto = $derived(allPhotos[activePhotoIndex] ?? profile.photoUrl ?? STOCK_AVATAR);
+
+	// Reset photo index when profile changes
+	$effect(() => {
+		profile.id;
+		activePhotoIndex = 0;
+	});
 
 	const SWIPE_THRESHOLD = 120;
 	const TAP_THRESHOLD = 8;
@@ -107,6 +125,18 @@
 	// Button-triggered swipes
 	export function swipeRight() { commitSwipe('right'); }
 	export function swipeLeft() { commitSwipe('left'); }
+
+	function prevPhoto(e: MouseEvent) {
+		e.stopPropagation();
+		if (didDrag) return;
+		activePhotoIndex = Math.max(0, activePhotoIndex - 1);
+	}
+
+	function nextPhoto(e: MouseEvent) {
+		e.stopPropagation();
+		if (didDrag) return;
+		activePhotoIndex = Math.min(allPhotos.length - 1, activePhotoIndex + 1);
+	}
 </script>
 
 <!-- Card wrapper with spring transform -->
@@ -135,7 +165,7 @@
 	<div class="relative h-full w-full overflow-hidden" style="border-radius: {fullScreen ? '0' : '20px'}">
 		<!-- Photo -->
 		<img
-			src={profile.photoUrl || STOCK_AVATAR}
+			src={currentPhoto}
 			alt={profile.name}
 			class="absolute inset-0 h-auto w-full object-cover"
 			style="min-height: 100%; object-position: center top;"
@@ -148,6 +178,18 @@
 			class="absolute top-0 right-0 left-0 h-[124px]"
 			style="background: linear-gradient(180deg, rgba(0,0,0,0.3) 0%, rgba(0,0,0,0) 100%);"
 		></div>
+
+		<!-- Photo progress indicators (only when >1 photo) -->
+		{#if allPhotos.length > 1}
+			<div class="absolute top-0 right-0 left-0 flex gap-1 px-2 pt-2" style="z-index: 2;">
+				{#each allPhotos as _, i}
+					<div
+						class="flex-1 rounded-full transition-all"
+						style="height: 3px; background: {i === activePhotoIndex ? 'rgba(255,255,255,0.95)' : 'rgba(255,255,255,0.35)'};"
+					></div>
+				{/each}
+			</div>
+		{/if}
 
 		<!-- Bottom gradient -->
 		<div
@@ -189,16 +231,26 @@
 			</div>
 		{/if}
 
-		<!-- Transparent tap zone over the photo area to open the full profile.
-		     pointer-events: none while dragging so the tap zone never swallows drag events. -->
+		<!-- Tap zones: left half = prev photo, right half = next photo.
+		     pointer-events: none while dragging so they never swallow drag events. -->
 		{#if isTop}
+			<!-- Left half → previous photo -->
 			<div
-				class="absolute left-0 right-0 top-0"
-				style="bottom: calc(max(env(safe-area-inset-bottom), 8px) + 160px); background: transparent; pointer-events: {dragging ? 'none' : 'auto'}; cursor: pointer;"
+				class="absolute left-0 top-0"
+				style="width: 45%; bottom: calc(max(env(safe-area-inset-bottom), 8px) + 160px); background: transparent; pointer-events: {dragging ? 'none' : 'auto'}; cursor: pointer;"
 				role="button"
 				tabindex="-1"
-				aria-label="View full profile"
-				onclick={(e) => { e.stopPropagation(); if (!didDrag) onviewprofile?.(profile.id); }}
+				aria-label="Previous photo"
+				onclick={prevPhoto}
+			></div>
+			<!-- Right half → next photo -->
+			<div
+				class="absolute right-0 top-0"
+				style="width: 55%; bottom: calc(max(env(safe-area-inset-bottom), 8px) + 160px); background: transparent; pointer-events: {dragging ? 'none' : 'auto'}; cursor: pointer;"
+				role="button"
+				tabindex="-1"
+				aria-label="Next photo"
+				onclick={nextPhoto}
 			></div>
 		{/if}
 

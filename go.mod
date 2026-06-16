@@ -1,6 +1,6 @@
 module github.com/Gooowan/matchup
 
-go 1.25.8
+go 1.25.11
 
 require (
 	github.com/JGLTechnologies/gin-rate-limit v1.5.6

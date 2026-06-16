@@ -50,7 +50,6 @@
 	<AppLayout
 		{navItems}
 		basePath="/admin"
-		showReferralLink={false}
 		showFooter={false}
 		showUserProfile={true}
 		{data}

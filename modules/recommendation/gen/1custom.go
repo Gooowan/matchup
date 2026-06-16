@@ -1,9 +1,81 @@
 package gen
 
 import (
+	"encoding/json"
+	"os"
+	"strings"
+
 	"github.com/Gooowan/matchup/modules/core/types"
 	"github.com/Gooowan/matchup/modules/core/utils"
 )
+
+// normalizeMinioURL rewrites legacy http://localhost:9000 or http://minio:9000
+// URLs to the current MINIO_PUBLIC_ENDPOINT, matching the pattern used for avatars.
+func normalizeMinioURL(url string) string {
+	if url == "" {
+		return url
+	}
+	pub := os.Getenv("MINIO_PUBLIC_ENDPOINT")
+	if pub == "" || strings.HasPrefix(url, pub) {
+		return url
+	}
+	for _, legacy := range []string{"http://localhost:9000", "http://minio:9000"} {
+		if strings.HasPrefix(url, legacy) {
+			return pub + url[len(legacy):]
+		}
+	}
+	return url
+}
+
+// normalizeMetadataURLs rewrites legacy MinIO URLs in-place inside a metadata
+// JSONB map. Touches "media_urls" ([]string) and "avatar" (string).
+func normalizeMetadataURLs(meta types.JSONB) types.JSONB {
+	if meta == nil {
+		return meta
+	}
+	changed := false
+
+	if raw, ok := meta["media_urls"]; ok {
+		b, _ := json.Marshal(raw)
+		var urls []string
+		if json.Unmarshal(b, &urls) == nil {
+			normalized := make([]string, len(urls))
+			for i, u := range urls {
+				normalized[i] = normalizeMinioURL(u)
+			}
+			// Only copy the map if something actually changed.
+			for i, u := range urls {
+				if normalized[i] != u {
+					changed = true
+					break
+				}
+			}
+			if changed {
+				out := make(types.JSONB, len(meta))
+				for k, v := range meta {
+					out[k] = v
+				}
+				out["media_urls"] = normalized
+				return out
+			}
+		}
+	}
+
+	if avatar, ok := meta["avatar"].(string); ok && avatar != "" {
+		if n := normalizeMinioURL(avatar); n != avatar {
+			if !changed {
+				out := make(types.JSONB, len(meta))
+				for k, v := range meta {
+					out[k] = v
+				}
+				out["avatar"] = n
+				return out
+			}
+		}
+	}
+
+	return meta
+}
 
 // ProfileToFeatures converts a Profile into a JSONB feature snapshot for
 // recommendation_likes_log. Only stores filterable fields needed by Tier 2/3.
@@ -67,7 +139,7 @@ func (p Profile) ToDTO() ProfileDTO {
 		Goal:        p.Goal,
 		Program:     p.Program,
 		Categories:  p.Categories,
-		Metadata:    p.Metadata,
+		Metadata:    normalizeMetadataURLs(p.Metadata),
 		CreatedAt:   p.CreatedAt.Time.UnixMilli(),
 		UpdatedAt:   p.UpdatedAt.Time.UnixMilli(),
 	}
@@ -193,7 +265,7 @@ func (p GetProfilePreviewRow) ToDTO() ProfilePreviewDTO {
 		Goal:        p.Goal,
 		Program:     p.Program,
 		Categories:  p.Categories,
-		Metadata:    p.Metadata,
+		Metadata:    normalizeMetadataURLs(p.Metadata),
 		ProfileData: p.ProfileData,
 	}
 	if p.BirthDate.Valid {
@@ -288,7 +360,7 @@ func (r FindNearbyVisibleProfilesRow) ToFeedDTO() FeedCandidateDTO {
 		Goal:        r.Goal,
 		Program:     r.Program,
 		Categories:  r.Categories,
-		Metadata:    r.Metadata,
+		Metadata:    normalizeMetadataURLs(r.Metadata),
 		ProfileData: r.ProfileData,
 		DistanceKm:  r.DistanceKm,
 	}

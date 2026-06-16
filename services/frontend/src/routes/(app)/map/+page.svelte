@@ -35,6 +35,7 @@
 		lat: number;
 		lng: number;
 		logoUrl?: string;
+		photos?: string[];
 		phone?: string;
 		website?: string;
 		address?: string;
@@ -106,6 +107,8 @@
 	let clubDetail = $state<ClubDetail | null>(null);
 	let isLoadingMembers = $state(false);
 	let showCaller = $state(false);
+	let activePhotoIndex = $state(0);
+	let photoScrollEl = $state<HTMLElement | null>(null);
 
 	// --- Events popup ---
 	function openEventsPopup() {
@@ -186,24 +189,30 @@
 							Number.isFinite(c.longitude) &&
 							!(c.latitude === 0 && c.longitude === 0)
 					)
-				.map((c: any) => {
-					const meta = c.metadata ?? {};
-					const logoUrl: string | undefined =
-						meta.logo_url ?? meta.logo ?? (Array.isArray(meta.photos) ? meta.photos[0] : undefined);
-					return {
-						type: 'clubs' as Category,
-						id: c.id ?? c.slug,
-						slug: c.slug,
-						name: c.name,
-						location: [c.city, c.country].filter(Boolean).join(', '),
-						lat: c.latitude,
-						lng: c.longitude,
-						address: c.address?.String ?? c.address ?? '',
-						phone: c.phone?.String ?? c.phone ?? '',
-						website: c.website?.String ?? c.website ?? '',
-						logoUrl
-					};
-				});
+			.map((c: any) => {
+				const meta = c.metadata ?? {};
+				const toAbsolute = (u: string) =>
+					u?.startsWith('/') ? `${import.meta.env.VITE_API_URL}${u}` : u;
+				const rawPhotos: string[] = Array.isArray(meta.photos) ? meta.photos : [];
+				const photos = rawPhotos.map(toAbsolute).filter(Boolean);
+				const rawLogoUrl: string | undefined =
+					meta.logo_url ?? meta.logo ?? rawPhotos[0];
+				const logoUrl: string | undefined = rawLogoUrl ? toAbsolute(rawLogoUrl) : undefined;
+				return {
+					type: 'clubs' as Category,
+					id: c.id ?? c.slug,
+					slug: c.slug,
+					name: c.name,
+					location: [c.city, c.country].filter(Boolean).join(', '),
+					lat: c.latitude,
+					lng: c.longitude,
+					address: c.address?.String ?? c.address ?? '',
+					phone: c.phone?.String ?? c.phone ?? '',
+					website: c.website?.String ?? c.website ?? '',
+					logoUrl,
+					photos
+				};
+			});
 				entities = clubEntities;
 			}
 		} catch {}
@@ -578,7 +587,7 @@
 {/if}
 
 <!-- Club bottom sheet -->
-<BottomSheet open={!!selectedEntity} onclose={() => { selectedEntity = null; clubMembers = []; clubTrainers = []; clubDetail = null; showCaller = false; }}>
+<BottomSheet open={!!selectedEntity} onclose={() => { selectedEntity = null; clubMembers = []; clubTrainers = []; clubDetail = null; showCaller = false; activePhotoIndex = 0; }}>
 	{#if selectedEntity}
 		<!-- Club header -->
 		<div class="mb-4 flex items-start gap-4">
@@ -600,6 +609,54 @@
 				{/if}
 			</div>
 		</div>
+
+		<!-- Photo gallery -->
+		{#if selectedEntity.photos && selectedEntity.photos.length > 0}
+			{@const photos = selectedEntity.photos}
+			<div class="mb-4 -mx-4">
+				<!-- Scrollable photo strip -->
+				<div
+					bind:this={photoScrollEl}
+					class="flex overflow-x-auto snap-x snap-mandatory"
+					style="scrollbar-width: none; -webkit-overflow-scrolling: touch; scroll-behavior: smooth;"
+					onscroll={(e) => {
+						const el = e.currentTarget as HTMLElement;
+						const idx = Math.round(el.scrollLeft / el.clientWidth);
+						activePhotoIndex = idx;
+					}}
+				>
+					{#each photos as photoUrl, i}
+						<div class="flex-shrink-0 snap-center" style="width: 100vw; max-width: 100%; aspect-ratio: 1;">
+							<img
+								src={photoUrl}
+								alt="{selectedEntity.name} фото {i + 1}"
+								loading={i === 0 ? 'eager' : 'lazy'}
+								decoding="async"
+								class="h-full w-full object-cover"
+							/>
+						</div>
+					{/each}
+				</div>
+				<!-- Dot indicators (only if >1 photo) -->
+				{#if photos.length > 1}
+					<div class="mt-2 flex justify-center gap-1.5">
+						{#each photos as _, i}
+							<button
+								aria-label="Фото {i + 1}"
+								onclick={() => {
+									activePhotoIndex = i;
+									if (photoScrollEl) {
+										photoScrollEl.scrollTo({ left: i * photoScrollEl.clientWidth, behavior: 'smooth' });
+									}
+								}}
+								class="rounded-full transition-all"
+								style="width: {activePhotoIndex === i ? '18px' : '6px'}; height: 6px; background: {activePhotoIndex === i ? '#8984da' : 'rgba(137,132,218,0.3)'};"
+							></button>
+						{/each}
+					</div>
+				{/if}
+			</div>
+		{/if}
 
 		<!-- Description -->
 		{#if clubDetail?.description}

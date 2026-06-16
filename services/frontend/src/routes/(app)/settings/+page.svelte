@@ -59,8 +59,11 @@
 	// Trainers can join/browse clubs like dancers; only club-type accounts
 	// manage entirely via the Business panel and skip this page.
 	let showMyClubs = $derived(accountType !== 'club');
-	// Show business panel for: club accounts (always), and anyone who owns at least one club.
-	let showBusinessPanel = $derived(accountType === 'club' || ownsClubs);
+	// Show business panel for club/trainer accounts and non-dancer club owners.
+	// Dancers never see the business panel even if they happen to own a club.
+	let showBusinessPanel = $derived(
+		accountType !== 'dancer' && (accountType === 'club' || accountType === 'trainer' || ownsClubs)
+	);
 	// Club accounts manage identity entirely in the Business panel; no dancer-style profile page.
 	let showEditProfile = $derived(accountType !== 'club');
 </script>
@@ -139,15 +142,28 @@
 				АКАУНТ
 			</p>
 			<div class="mu-divider flex flex-col" style="border-top-width: 1px; border-top-style: solid;">
-			{#if showEditProfile}
-				<a href="/settings/profile" class="flex items-center justify-between px-4 py-3">
+		{#if showEditProfile}
+			<a href="/settings/profile" class="flex items-center justify-between px-4 py-3">
+				<div class="flex items-center gap-3">
+					<i class="fi fi-rr-user-pen mu-text-primary" style="font-size: 18px;"></i>
+					<span class="mu-text-primary text-[14px] font-semibold">Редагувати профіль</span>
+				</div>
+				<i class="fi fi-rr-angle-right" style="font-size: 14px; color: #aeb4bc;"></i>
+			</a>
+			{#if user?.id}
+				<a
+					href="/profiles/{user.id}"
+					class="mu-divider flex items-center justify-between px-4 py-3"
+					style="border-top-width: 1px; border-top-style: solid;"
+				>
 					<div class="flex items-center gap-3">
-						<i class="fi fi-rr-user-pen mu-text-primary" style="font-size: 18px;"></i>
-						<span class="mu-text-primary text-[14px] font-semibold">Редагувати профіль</span>
+						<i class="fi fi-rr-eye mu-text-primary" style="font-size: 18px;"></i>
+						<span class="mu-text-primary text-[14px] font-semibold">Переглянути мій профіль</span>
 					</div>
 					<i class="fi fi-rr-angle-right" style="font-size: 14px; color: #aeb4bc;"></i>
 				</a>
 			{/if}
+		{/if}
 				{#if showMyClubs}
 					<a
 						href="/settings/clubs"

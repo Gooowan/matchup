@@ -18,14 +18,12 @@
 	let formData = $state({
 		email: '',
 		role: 'USER',
-		telegram_id: null as number | null,
 		profile_data: {
 			first_name: '',
 			last_name: '',
 			avatar: '',
 		},
 		metadata: {},
-		telegram_data: {},
 	});
 
 	let isLoading = $state(false);
@@ -36,14 +34,12 @@
 			formData = {
 				email: user.email,
 				role: user.role,
-				telegram_id: user.telegram_id || null,
 				profile_data: {
 					first_name: user.profile_data?.first_name || '',
 					last_name: user.profile_data?.last_name || '',
 					avatar: user.profile_data?.avatar || '',
 				},
 				metadata: user.metadata || {},
-				telegram_data: user.telegram_data || {},
 			};
 		}
 		error = null;
@@ -55,10 +51,9 @@
 		isLoading = true;
 		error = null;
 
-		const updateData: any = {
+		const updateData: Record<string, unknown> = {
 			email: formData.email !== user.email ? formData.email : undefined,
-			role: formData.role !== user.role ? formData.role : 'USER',
-			telegram_id: formData.telegram_id !== user.telegram_id ? formData.telegram_id : undefined,
+			role: formData.role !== user.role ? formData.role : undefined,
 			profile_data:
 				JSON.stringify(formData.profile_data) !== JSON.stringify(user.profile_data)
 					? formData.profile_data
@@ -188,17 +183,6 @@
 							<Select.Item value="ADMIN" label="ADMIN">ADMIN</Select.Item>
 						</Select.Content>
 					</Select.Root>
-				</div>
-
-				<div class="grid gap-2">
-					<Label for="telegram_id">Telegram ID</Label>
-					<Input
-						id="telegram_id"
-						type="number"
-						bind:value={formData.telegram_id}
-						placeholder="123456789"
-						disabled={isLoading}
-					/>
 				</div>
 
 				<div class="grid gap-2">

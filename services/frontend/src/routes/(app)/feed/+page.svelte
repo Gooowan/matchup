@@ -107,21 +107,29 @@
 	}
 
 	function mapCandidate(c: FeedCandidate): DancerProfile {
-		const pd = c.profile_data as Record<string, string> ?? {};
+		const pd = c.profile_data as Record<string, any> ?? {};
+		const meta = c.metadata as Record<string, any> ?? {};
 		const tags: string[] = [];
 		const style = (c.categories?.[0] ?? c.dance_styles?.[0] ?? '').trim();
 		if (style) tags.push(style);
 		if (c.program && c.program !== 'standard') tags.push(c.program);
 		if (c.height_cm) tags.push(`${c.height_cm} cm`);
+		const avatar = (pd.avatar as string) ?? '';
+		// Build photo list: avatar first, then any extra media photos
+		const mediaUrls: string[] = Array.isArray(meta.media_urls) ? meta.media_urls : [];
+		const photos = avatar
+			? [avatar, ...mediaUrls.filter((u: string) => u !== avatar)]
+			: mediaUrls;
 		return {
-		id: c.user_id,
-		name: pd.first_name ?? $t('feed.dancer_fallback'),
-		age: c.birth_date ? calcAge(c.birth_date) : 0,
-		photoUrl: (pd.avatar as string) ?? '',
-		tags,
-		location: [c.city, c.country].filter(Boolean).join(', '),
-		school: (pd.school as string) || (pd.club_name as string) || undefined,
-		goals: c.goal
+			id: c.user_id,
+			name: pd.first_name ?? $t('feed.dancer_fallback'),
+			age: c.birth_date ? calcAge(c.birth_date) : 0,
+			photoUrl: avatar,
+			photos,
+			tags,
+			location: [c.city, c.country].filter(Boolean).join(', '),
+			school: (pd.school as string) || (pd.club_name as string) || undefined,
+			goals: c.goal
 		};
 	}
 

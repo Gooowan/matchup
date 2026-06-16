@@ -1,4 +1,4 @@
-FROM golang:1.25.8-alpine AS builder
+FROM golang:1.25.11-alpine AS builder
 ARG SERVICE_NAME=api
 ARG ARCHITECTURE=arm64
 

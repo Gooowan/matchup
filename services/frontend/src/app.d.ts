@@ -54,6 +54,7 @@ declare global {
 	interface AdminUserDTO {
 		id: string;
 		email: string;
+		inviter_id: string;
 		metadata: Record<string, any>;
 		profile_data: Record<string, any>;
 		created_at: number;

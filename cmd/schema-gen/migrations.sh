@@ -24,13 +24,16 @@ if [ "$TABLE_COUNT" = "0" ]; then
   $PSQL -f /schema.sql
 
   # Mark all migration files as already applied (schema covers them)
-  for f in /migrations/*.sql; do
-    name=$(basename "$f")
-    $PSQL -c "INSERT INTO schema_migrations (filename) VALUES ('$name') ON CONFLICT DO NOTHING;"
-  done
+  if ls /migrations/*.sql >/dev/null 2>&1; then
+    for f in /migrations/*.sql; do
+      name=$(basename "$f")
+      $PSQL -c "INSERT INTO schema_migrations (filename) VALUES ('$name') ON CONFLICT DO NOTHING;"
+    done
+  fi
 else
   echo "existing database — applying pending migrations"
-  for f in $(ls /migrations/*.sql | sort); do
+  if ls /migrations/*.sql >/dev/null 2>&1; then
+    for f in $(ls /migrations/*.sql | sort); do
     name=$(basename "$f")
     already=$($PSQL -tAc "SELECT count(*) FROM schema_migrations WHERE filename = '$name';")
     if [ "$already" = "0" ]; then
@@ -40,7 +43,8 @@ else
     else
       echo "  skipping $name (already applied)"
     fi
-  done
+    done
+  fi
 fi
 
 if [ -f /views.sql ]; then

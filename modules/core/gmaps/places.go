@@ -164,6 +164,8 @@ func (c *GooglePlacesClient) LookupURL(ctx context.Context, rawURL string) (*Pla
 // rejected before the first outbound request and after every redirect hop.
 var allowedMapsHosts = []string{
 	"google.com",
+	"google.com.ua",
+	"www.google.com.ua",
 	"maps.google.com",
 	"www.google.com",
 	"maps.app.goo.gl",
@@ -173,7 +175,8 @@ var allowedMapsHosts = []string{
 }
 
 // isAllowedMapsHost returns true when host (with port stripped) matches an
-// entry in allowedMapsHosts exactly or is a subdomain of google.com.
+// entry in allowedMapsHosts or is a *.google.<tld> subdomain (e.g. consent.google.com,
+// consent.google.com.ua on EU/UA redirect chains).
 func isAllowedMapsHost(host string) bool {
 	// Strip port if present.
 	if h, _, found := strings.Cut(host, ":"); found {
@@ -183,9 +186,36 @@ func isAllowedMapsHost(host string) bool {
 		if host == allowed {
 			return true
 		}
-		// Allow any *.google.com subdomain (e.g. maps.google.com already listed,
-		// but future subdomains like lh3.googleusercontent.com are intentionally
-		// NOT included — keep the list explicit).
+	}
+	// Allow any subdomain of google.com or google.<cc-tld> (e.g. google.com.ua,
+	// google.co.uk) to cover consent redirect chains in various regions.
+	if isGoogleHost(host) {
+		return true
+	}
+	return false
+}
+
+// isGoogleHost reports whether host is google.com, a country TLD variant
+// (google.com.ua, google.co.uk, google.de, …), or any subdomain thereof.
+func isGoogleHost(host string) bool {
+	// Exact: google.com
+	if host == "google.com" {
+		return true
+	}
+	// Subdomain of google.com: *.google.com
+	if strings.HasSuffix(host, ".google.com") {
+		return true
+	}
+	// Country TLDs: google.XX or google.com.XX  →  ends with ".google." + something
+	// We match *.google.<tld> and google.<tld> where tld contains no dots after
+	// the google segment (handles .ua, .de, .fr) or one dot (handles .com.ua, .co.uk).
+	if idx := strings.Index(host, ".google."); idx != -1 {
+		// host is <subdomain>.google.<tld>  — always allow
+		return true
+	}
+	if strings.HasPrefix(host, "google.") {
+		// host is google.<tld>
+		return true
 	}
 	return false
 }

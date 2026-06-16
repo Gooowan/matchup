@@ -615,9 +615,20 @@ import { parseApiError } from '$lib/utils/parseApiError';
 			registerBody.latitude = 50.4501;
 			registerBody.longitude = 30.5234;
 		}
-			if (newClubPhotos.length > 0) {
-				registerBody.photos = newClubPhotos;
+		if (newClubPhotos.length > 0) {
+			registerBody.photos = newClubPhotos;
+		}
+		if (newClubWebsite.trim()) registerBody.website = newClubWebsite.trim();
+		if (newClubPhone.trim()) registerBody.phone = newClubPhone.trim();
+		const workingHoursObj: Record<string, { open: string; close: string } | null> = {};
+		let hasWorkingHours = false;
+		for (const day of newClubWorkingHoursDays) {
+			if (day.enabled) {
+				workingHoursObj[day.key] = { open: day.open, close: day.close };
+				hasWorkingHours = true;
 			}
+		}
+		if (hasWorkingHours) registerBody.working_hours = workingHoursObj;
 			const resp = await authFetch('/clubs/register', {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
@@ -654,6 +665,7 @@ import { parseApiError } from '$lib/utils/parseApiError';
 	function canAdvance(): boolean {
 		if (step === 1) return firstName.length >= 2 && lastName.length >= 2 && !!gender && !!birthDate && !ageError;
 		if (step === 2) return !!goal && !!danceProgram;
+		if (step === 3) return !showCreateForm; // must finish or cancel the create form first
 		return true;
 	}
 
@@ -691,18 +703,24 @@ import { parseApiError } from '$lib/utils/parseApiError';
 			});
 			if (!profileResp.ok) throw new Error('Не вдалось зберегти профіль');
 
-			captureOnboardingComplete();
-			sessionStorage.removeItem(STORAGE_KEY);
-			await authStore.checkAuth();
-			goto('/settings');
-		} catch (err) {
-			toast.error(err instanceof Error ? err.message : 'Щось пішло не так. Спробуй ще раз.');
-		} finally {
-			isSaving = false;
+		captureOnboardingComplete();
+		sessionStorage.removeItem(STORAGE_KEY);
+		await authStore.checkAuth();
+		if (authStore.user) {
+			authStore.user = {
+				...authStore.user,
+				profile_data: { ...(authStore.user.profile_data ?? {}), account_type: 'trainer' }
+			};
 		}
+		goto('/settings');
+	} catch (err) {
+		toast.error(err instanceof Error ? err.message : 'Щось пішло не так. Спробуй ще раз.');
+	} finally {
+		isSaving = false;
 	}
+}
 
-	async function handleFinishClub() {
+async function handleFinishClub() {
 		if (newClubName.trim().length < 2) {
 			toast.error('Введіть назву клубу');
 			return;
@@ -776,16 +794,22 @@ import { parseApiError } from '$lib/utils/parseApiError';
 				}
 			}
 
-			captureOnboardingComplete();
-			sessionStorage.removeItem(STORAGE_KEY);
-			await authStore.checkAuth();
-			goto('/settings');
-		} catch (err) {
-			toast.error(err instanceof Error ? err.message : 'Щось пішло не так. Спробуй ще раз.');
-		} finally {
-			isSaving = false;
+		captureOnboardingComplete();
+		sessionStorage.removeItem(STORAGE_KEY);
+		await authStore.checkAuth();
+		if (authStore.user) {
+			authStore.user = {
+				...authStore.user,
+				profile_data: { ...(authStore.user.profile_data ?? {}), account_type: 'club' }
+			};
 		}
+		goto('/settings');
+	} catch (err) {
+		toast.error(err instanceof Error ? err.message : 'Щось пішло не так. Спробуй ще раз.');
+	} finally {
+		isSaving = false;
 	}
+}
 
 	async function handleFinish() {
 		isSaving = true;
@@ -877,10 +901,19 @@ import { parseApiError } from '$lib/utils/parseApiError';
 				}
 			}
 
-			captureOnboardingComplete();
-			sessionStorage.removeItem(STORAGE_KEY);
-			await authStore.checkAuth();
-			goto('/feed');
+		captureOnboardingComplete();
+		sessionStorage.removeItem(STORAGE_KEY);
+		await authStore.checkAuth();
+		// account_type is stored in the profiles table, not users.profile_data,
+		// so GET /user/profile won't include it. Patch the store so the layout
+		// guard doesn't redirect back to onboarding before the next full reload.
+		if (authStore.user) {
+			authStore.user = {
+				...authStore.user,
+				profile_data: { ...(authStore.user.profile_data ?? {}), account_type: accountType }
+			};
+		}
+		goto('/feed');
 		} catch (err) {
 			toast.error(err instanceof Error ? err.message : 'Щось пішло не так. Спробуй ще раз.');
 		} finally {
@@ -1101,16 +1134,20 @@ import { parseApiError } from '$lib/utils/parseApiError';
 							</div>
 						</div>
 					{/if}
-					{#if newClubPhotos.length > 0}
-						<div class="flex gap-2 overflow-x-auto pb-1">
-							{#each newClubPhotos as url}
-								<img src={url} alt="Фото клубу" class="h-[64px] w-[64px] flex-shrink-0 rounded-[10px] object-cover" />
-							{/each}
-						</div>
-					{/if}
-				</div>
+				{#if newClubPhotos.length > 0}
+					<div class="flex gap-2 overflow-x-auto pb-1">
+						{#each newClubPhotos as url}
+							<img
+								src={url.startsWith('/') ? `${import.meta.env.VITE_API_URL}${url}` : url}
+								alt="Фото клубу"
+								class="h-[64px] w-[64px] flex-shrink-0 rounded-[10px] object-cover"
+							/>
+						{/each}
+					</div>
+				{/if}
+			</div>
 
-				<!-- Club: name -->
+			<!-- Club: name -->
 				<div class="rounded-[20px] ob-card p-4" style="background: white; display: flex; flex-direction: column; gap: 12px;">
 					<label class="text-[11px] font-semibold uppercase tracking-wider" style="color: #aeb4bc;">НАЗВА КЛУБУ <span style="color: #e05252;">*</span></label>
 					<input
@@ -1379,6 +1416,12 @@ import { parseApiError } from '$lib/utils/parseApiError';
 						bind:value={heightCm}
 						min="100"
 						max="250"
+						inputmode="numeric"
+						oninput={(e) => {
+							const el = e.currentTarget as HTMLInputElement;
+							if (el.value.length > 3) el.value = el.value.slice(0, 3);
+							if (el.value !== '' && Number(el.value) > 250) el.value = '250';
+						}}
 						class="w-[80px] bg-transparent text-right text-[14px] font-medium outline-none"
 						style="color: #8984da;"
 					/>
@@ -1604,7 +1647,11 @@ import { parseApiError } from '$lib/utils/parseApiError';
 						{#if newClubPhotos.length > 0}
 							<div class="flex gap-2 overflow-x-auto pb-1">
 								{#each newClubPhotos as url}
-									<img src={url} alt="Фото клубу" class="h-[64px] w-[64px] flex-shrink-0 rounded-[10px] object-cover" />
+									<img
+										src={url.startsWith('/') ? `${import.meta.env.VITE_API_URL}${url}` : url}
+										alt="Фото клубу"
+										class="h-[64px] w-[64px] flex-shrink-0 rounded-[10px] object-cover"
+									/>
 								{/each}
 							</div>
 						{/if}
@@ -1709,7 +1756,13 @@ import { parseApiError } from '$lib/utils/parseApiError';
 						placeholder="Від"
 						bind:value={heightMin}
 						min="100"
-						max="220"
+						max="250"
+						inputmode="numeric"
+						oninput={(e) => {
+							const el = e.currentTarget as HTMLInputElement;
+							if (el.value.length > 3) el.value = el.value.slice(0, 3);
+							if (el.value !== '' && Number(el.value) > 250) el.value = '250';
+						}}
 						class="flex-1 rounded-[12px] border px-3 py-2 text-[14px] font-semibold outline-none text-center"
 						style="color: #171717; border-color: #e0e0e0;"
 					/>
@@ -1719,7 +1772,13 @@ import { parseApiError } from '$lib/utils/parseApiError';
 						placeholder="До"
 						bind:value={heightMax}
 						min="100"
-						max="220"
+						max="250"
+						inputmode="numeric"
+						oninput={(e) => {
+							const el = e.currentTarget as HTMLInputElement;
+							if (el.value.length > 3) el.value = el.value.slice(0, 3);
+							if (el.value !== '' && Number(el.value) > 250) el.value = '250';
+						}}
 						class="flex-1 rounded-[12px] border px-3 py-2 text-[14px] font-semibold outline-none text-center"
 						style="color: #171717; border-color: #e0e0e0;"
 					/>

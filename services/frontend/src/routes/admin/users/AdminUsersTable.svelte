@@ -143,7 +143,7 @@
 			<div class="flex gap-2">
 				<Input
 					bind:value={searchTerm}
-					placeholder="Search by name, email, or referral ID..."
+					placeholder="Search by name or email..."
 					onkeydown={handleKeydown}
 					class="flex-1"
 				/>
@@ -170,7 +170,7 @@
 						<Table.Row>
 							<Table.Head class="min-w-[200px]">User</Table.Head>
 							<Table.Head class="hidden min-w-[200px] md:table-cell">Email</Table.Head>
-							<Table.Head class="hidden min-w-[120px] sm:table-cell">Referral ID</Table.Head>
+							<Table.Head class="hidden min-w-[120px] sm:table-cell">Inviter ID</Table.Head>
 							<Table.Head class="hidden min-w-[80px] lg:table-cell">Role</Table.Head>
 							<Table.Head class="hidden min-w-[100px] lg:table-cell">Joined</Table.Head>
 							<Table.Head
@@ -201,9 +201,11 @@
 												{user.email}
 											</div>
 											<div class="mt-1 flex gap-2 sm:hidden">
-												<Badge variant="outline" class="text-xs">
-													#{user.referral_id}
-												</Badge>
+												{#if user.inviter_id}
+													<Badge variant="outline" class="text-xs">
+														#{user.inviter_id.slice(0, 8)}
+													</Badge>
+												{/if}
 												<Badge variant={getRoleBadgeVariant(user.role)} class="text-xs lg:hidden">
 													{user.role}
 												</Badge>
@@ -215,9 +217,13 @@
 									<div class="truncate">{user.email}</div>
 								</Table.Cell>
 								<Table.Cell class="hidden min-w-[120px] sm:table-cell">
-									<Badge variant="outline">
-										#{user.referral_id}
-									</Badge>
+									{#if user.inviter_id}
+										<Badge variant="outline">
+											#{user.inviter_id.slice(0, 8)}
+										</Badge>
+									{:else}
+										<span class="text-muted-foreground">—</span>
+									{/if}
 								</Table.Cell>
 								<Table.Cell class="hidden min-w-[80px] lg:table-cell">
 									<Badge variant={getRoleBadgeVariant(user.role)}>

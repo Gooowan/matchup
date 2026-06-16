@@ -186,23 +186,37 @@
 		<div style="display: flex; flex-direction: column; gap: 10px;">
 			<label class="text-[11px] font-semibold uppercase tracking-wider" style="color: #aeb4bc;">{$t('filters.section_height')}</label>
 			<div class="flex items-center gap-3">
-			<input
-				type="number"
-				placeholder={$t('filters.from')}
-				bind:value={heightMin}
-				min="100" max="220"
-				class="flex-1 rounded-[12px] border px-3 py-2 text-[14px] font-semibold outline-none text-center"
-				style="color: {inputTextColor}; border-color: {inputBorderColor}; background: {inputBgColor};"
-			/>
-			<span class="text-[14px] font-medium" style="color: #aeb4bc;">—</span>
-			<input
-				type="number"
-				placeholder={$t('filters.to')}
-				bind:value={heightMax}
-				min="100" max="220"
-				class="flex-1 rounded-[12px] border px-3 py-2 text-[14px] font-semibold outline-none text-center"
-				style="color: {inputTextColor}; border-color: {inputBorderColor}; background: {inputBgColor};"
-			/>
+		<input
+			type="number"
+			placeholder={$t('filters.from')}
+			bind:value={heightMin}
+			min="100"
+			max="250"
+			inputmode="numeric"
+			oninput={(e) => {
+				const el = e.currentTarget as HTMLInputElement;
+				if (el.value.length > 3) el.value = el.value.slice(0, 3);
+				if (el.value !== '' && Number(el.value) > 250) el.value = '250';
+			}}
+			class="flex-1 rounded-[12px] border px-3 py-2 text-[14px] font-semibold outline-none text-center"
+			style="color: {inputTextColor}; border-color: {inputBorderColor}; background: {inputBgColor};"
+		/>
+		<span class="text-[14px] font-medium" style="color: #aeb4bc;">—</span>
+		<input
+			type="number"
+			placeholder={$t('filters.to')}
+			bind:value={heightMax}
+			min="100"
+			max="250"
+			inputmode="numeric"
+			oninput={(e) => {
+				const el = e.currentTarget as HTMLInputElement;
+				if (el.value.length > 3) el.value = el.value.slice(0, 3);
+				if (el.value !== '' && Number(el.value) > 250) el.value = '250';
+			}}
+			class="flex-1 rounded-[12px] border px-3 py-2 text-[14px] font-semibold outline-none text-center"
+			style="color: {inputTextColor}; border-color: {inputBorderColor}; background: {inputBgColor};"
+		/>
 			</div>
 		</div>
 
