@@ -84,3 +84,4 @@ Straightforward to add after Google. The architecture is essentially identical t
 | **Okta OIDC** | 3-5 days | Low-Medium | Enterprise/B2B customers who already use Okta for SSO |
 
 Both can be added with minimal disruption to existing auth since `user_identities` decouples identity providers from the user table. Google login (already implemented) should be validated first before adding either.
+
