@@ -67,6 +67,7 @@ services:
       context: .
       args:
         SERVICE_NAME: api
+    restart: on-failure
     env_file:
       - .env
     environment:
